@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "654285631870",
+    "firebase_url": "https://cart-pos-personal-default-rtdb.firebaseio.com",
+    "project_id": "cart-pos-personal",
+    "storage_bucket": "cart-pos-personal.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:654285631870:android:f7512d5808a5a8ee72832f",
+        "android_client_info": {
+          "package_name": "com.griller.zone"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "654285631870-k9bbgr4al5qav6uhk5h22js3m44o8re2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.griller.zone",
+            "certificate_hash": "0969d71b1a61cbda60d4e911aa2573598f225ee8"
+          }
+        },
+        {
+          "client_id": "654285631870-k04ef18g3g8536olbtpeh3ce51cjfvh3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCitg-aMm2WE-tROCvxpmOQ2-ZWEEOsGcg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "654285631870-k04ef18g3g8536olbtpeh3ce51cjfvh3.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "654285631870-edbvprqjgju7eago7la08ftn3uhupe5v.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.griller.zone.listMaker"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
