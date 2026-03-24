@@ -17,6 +17,10 @@ class ItemManagementScreen extends StatefulWidget {
 }
 
 class _ItemManagementScreenState extends State<ItemManagementScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+  bool _isSearching = false;
+
   @override
   void initState() {
     super.initState();
@@ -28,17 +32,44 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final itemProvider = Provider.of<ItemProvider>(context);
     final profileProvider = Provider.of<ProfileProvider>(context);
     final themeColor = profileProvider.themeColor;
-    final items = itemProvider.getItemsByCategory(widget.category);
+    
+    // Logic: Filter items based on category AND search query
+    final allItems = itemProvider.getItemsByCategory(widget.category);
+    final filteredItems = allItems.where((item) => 
+      item.name.toLowerCase().contains(_searchQuery.toLowerCase())
+    ).toList();
 
     return Scaffold(
       backgroundColor: profileProvider.scaffoldColor,
       appBar: AppBar(
-        title: Text('MANAGE ${widget.category.toUpperCase()}', 
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white)),
+        title: _isSearching 
+          ? TextField(
+              controller: _searchController,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              decoration: const InputDecoration(
+                hintText: "Search items...",
+                hintStyle: TextStyle(color: Colors.white70),
+                border: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                enabledBorder: InputBorder.none,
+              ),
+              onChanged: (value) {
+                setState(() => _searchQuery = value);
+              },
+            )
+          : Text('MANAGE ${widget.category.toUpperCase()}', 
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white)),
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -51,26 +82,51 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(_isSearching ? Icons.close : Icons.search),
+            onPressed: () {
+              setState(() {
+                if (_isSearching) {
+                  _isSearching = false;
+                  _searchQuery = "";
+                  _searchController.clear();
+                } else {
+                  _isSearching = true;
+                }
+              });
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
           Expanded(
-            child: items.isEmpty
+            child: filteredItems.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.inventory_2_outlined, size: 64, color: profileProvider.secondaryTextColor.withOpacity(0.2)),
+                        Icon(
+                          _searchQuery.isEmpty ? Icons.inventory_2_outlined : Icons.search_off_rounded, 
+                          size: 64, 
+                          color: profileProvider.secondaryTextColor.withOpacity(0.2)
+                        ),
                         const SizedBox(height: 16),
-                        Text('No items added yet in ${widget.category}', style: TextStyle(color: profileProvider.secondaryTextColor, fontWeight: FontWeight.bold)),
+                        Text(
+                          _searchQuery.isEmpty 
+                            ? 'No items added yet in ${widget.category}' 
+                            : 'No results found for "$_searchQuery"', 
+                          style: TextStyle(color: profileProvider.secondaryTextColor, fontWeight: FontWeight.bold)
+                        ),
                       ],
                     ),
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: items.length,
+                    itemCount: filteredItems.length,
                     itemBuilder: (context, index) {
-                      final item = items[index];
+                      final item = filteredItems[index];
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
@@ -342,7 +398,6 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                 ),
                 const SizedBox(height: 20),
                 
-                // Type Indicator
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(

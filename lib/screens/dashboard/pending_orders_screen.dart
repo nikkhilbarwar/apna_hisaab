@@ -4,9 +4,7 @@ import 'package:intl/intl.dart';
 import '../../providers/transaction_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/transaction_model.dart';
-import '../../models/cart_item.dart';
 import '../../providers/item_provider.dart';
-import '../../models/item_model.dart';
 import '../daily_entry/entry_screen.dart';
 
 class PendingOrdersScreen extends StatefulWidget {
@@ -126,21 +124,21 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
   }
 
   Widget _buildOrderCard(BuildContext context, TransactionModel order, ProfileProvider profile, bool isSelected) {
-    final themeColor = profile.themeColor ?? Colors.orange;
-    final textColor = profile.textColor ?? Colors.black;
-    final secondaryTextColor = profile.secondaryTextColor ?? Colors.grey;
-    final cardColor = profile.cardColor ?? Colors.white;
+    final themeColor = profile.themeColor;
+    final textColor = profile.textColor;
+    final secondaryTextColor = profile.secondaryTextColor;
+    final cardColor = profile.cardColor;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: isSelected ? Colors.red.withOpacity(0.05) : cardColor,
+        color: isSelected ? Colors.red.withValues(alpha: 0.05) : cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isSelected ? Colors.red : Colors.orange.withOpacity(0.3), 
+          color: isSelected ? Colors.red : Colors.orange.withValues(alpha: 0.3), 
           width: isSelected ? 2 : 1.5
         ),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
@@ -167,7 +165,7 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                            decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                             child: const Text('PENDING', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 10)),
                           ),
                           Text(DateFormat('dd MMM, hh:mm a').format(order.date), style: TextStyle(color: secondaryTextColor, fontSize: 11)),
@@ -180,12 +178,12 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Row(
                           children: [
-                            Icon(Icons.circle, size: 6, color: themeColor.withOpacity(0.5)),
+                            Icon(Icons.circle, size: 6, color: themeColor.withValues(alpha: 0.5)),
                             const SizedBox(width: 8),
                             Expanded(child: Text(item['display'] ?? '', style: TextStyle(color: secondaryTextColor, fontSize: 13))),
                           ],
                         ),
-                      )).toList(),
+                      )),
                       const Divider(height: 24),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -232,7 +230,7 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.pending_actions_rounded, size: 80, color: (profile.secondaryTextColor ?? Colors.grey).withOpacity(0.2)),
+            Icon(Icons.pending_actions_rounded, size: 80, color: profile.secondaryTextColor.withValues(alpha: 0.2)),
             const SizedBox(height: 16),
             Text('No pending orders', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold, fontSize: 16)),
           ],

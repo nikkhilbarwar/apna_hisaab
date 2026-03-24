@@ -5,7 +5,8 @@ class StaffModel {
   double advance;
   DateTime joinDate;
   String contact;
-  int totalLeaves; // New field for leaves
+  int totalLeaves;
+  int isSynced;
 
   StaffModel({
     this.id,
@@ -15,6 +16,7 @@ class StaffModel {
     required this.joinDate,
     this.contact = '',
     this.totalLeaves = 0,
+    this.isSynced = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -26,6 +28,7 @@ class StaffModel {
       'join_date': joinDate.toIso8601String(),
       'contact': contact,
       'total_leaves': totalLeaves,
+      'is_synced': isSynced,
     };
   }
 
@@ -38,10 +41,10 @@ class StaffModel {
       joinDate: DateTime.parse(map['join_date'] as String),
       contact: map['contact'] as String? ?? '',
       totalLeaves: map['total_leaves'] as int? ?? 0,
+      isSynced: map['is_synced'] as int? ?? 0,
     );
   }
 
-  // Logic for salary calculation after deducting leave and advance
   double calculateCurrentPayable() {
     double perDaySalary = monthlySalary / 30;
     double leaveDeduction = perDaySalary * totalLeaves;

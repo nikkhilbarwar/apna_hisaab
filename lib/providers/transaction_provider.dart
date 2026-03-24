@@ -25,13 +25,8 @@ class TransactionProvider with ChangeNotifier {
     return tx.isDeleted == 0 && (status == 'pending' || status == 'draft');
   }).toList();
 
-  bool get hasPendingTransactions => pendingTransactions.isNotEmpty;
-
   List<TransactionModel> get deletedTransactions =>
       _allTransactions.where((tx) => tx.isDeleted == 1).toList();
-
-  List<TransactionModel> get allRecentTransactions =>
-      _allTransactions.where((tx) => tx.isDeleted == 0).toList();
 
   TransactionProvider() {
     fetchTransactions();
@@ -80,16 +75,45 @@ class TransactionProvider with ChangeNotifier {
     }
   }
 
+  // --- Advanced Filtering for Reports ---
+  List<TransactionModel> getFilteredTransactions({
+    required String type, // 'sale' or 'purchase'
+    DateTimeRange? range,
+    String? category,
+    String? itemName,
+    String? status,
+  }) {
+    return _allTransactions.where((tx) {
+      bool matchType = type == 'sale' ? tx.type == 'sale' : (tx.type == 'purchase' || tx.type == 'expense');
+      bool matchDelete = tx.isDeleted == 0;
+      bool matchStatus = status == null || _normalizeStatus(tx.status) == _normalizeStatus(status);
+      
+      bool matchDate = true;
+      if (range != null) {
+        final start = DateTime(range.start.year, range.start.month, range.start.day);
+        final end = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
+        matchDate = tx.date.isAfter(start.subtract(const Duration(seconds: 1))) && 
+                    tx.date.isBefore(end);
+      }
+
+      bool matchCategory = category == null || category == 'All' || tx.category == category;
+      
+      bool matchItem = true;
+      if (itemName != null && itemName.isNotEmpty) {
+        matchItem = tx.parsedItems.any((i) => 
+          (i['name'] ?? '').toLowerCase().contains(itemName.toLowerCase()));
+      }
+
+      return matchType && matchDelete && matchStatus && matchDate && matchCategory && matchItem;
+    }).toList();
+  }
+
   Future<void> addTransaction(TransactionModel tx, ItemProvider itemProvider) async {
     try {
       tx.status = _normalizeStatus(tx.status).isEmpty ? 'completed' : _normalizeStatus(tx.status);
-      
       int id = await DatabaseHelper.instance.insertTransaction(tx);
       tx.id = id;
-
-      // Logic: Deduct stock even if pending (as per user request)
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
-
       await fetchTransactions();
       await _syncSingleTransaction(tx);
     } catch (e) {
@@ -101,17 +125,9 @@ class TransactionProvider with ChangeNotifier {
     try {
       tx.status = _normalizeStatus(tx.status).isEmpty ? 'completed' : _normalizeStatus(tx.status);
       tx.isSynced = 0;
-
-      // Revert old stock effect if updating
-      if (oldTx != null) {
-        await _applyStockEffect(oldTx, itemProvider, isAddingEffect: false);
-      }
-
+      if (oldTx != null) await _applyStockEffect(oldTx, itemProvider, isAddingEffect: false);
       await DatabaseHelper.instance.updateTransaction(tx);
-      
-      // Apply new stock effect
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
-
       await fetchTransactions();
       await _syncSingleTransaction(tx);
     } catch (e) {
@@ -123,10 +139,7 @@ class TransactionProvider with ChangeNotifier {
     try {
       final tx = _allTransactions.firstWhere((t) => t.id == id);
       await DatabaseHelper.instance.softDeleteTransaction(id);
-
-      // Restore stock when deleted
       await _applyStockEffect(tx, itemProvider, isAddingEffect: false);
-
       await fetchTransactions();
       await _syncSingleTransaction(tx);
     } catch (e) {
@@ -138,10 +151,7 @@ class TransactionProvider with ChangeNotifier {
     try {
       final tx = _allTransactions.firstWhere((t) => t.id == id);
       await DatabaseHelper.instance.restoreTransaction(id);
-
-      // Re-deduct stock when restored
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
-
       await fetchTransactions();
       await _syncSingleTransaction(tx);
     } catch (e) {
@@ -153,87 +163,40 @@ class TransactionProvider with ChangeNotifier {
     final items = tx.parsedItems;
     for (var itemMap in items) {
       try {
-        final itemIdStr = itemMap['id'];
         final name = itemMap['name']!;
         final qty = double.tryParse(itemMap['qty'] ?? '0') ?? 0;
         final extraQty = double.tryParse(itemMap['extra_qty'] ?? '0') ?? 0;
         final totalQty = qty + extraQty;
-
         if (totalQty == 0) continue;
 
-        int? targetId = int.tryParse(itemIdStr ?? '');
-        
-        // If ID not found, try finding by name (fallback)
-        if (targetId == null || targetId == -1) {
-          try {
-            targetId = itemProvider.items.firstWhere((i) => i.name == name).id;
-          } catch (_) {}
-        }
+        int? targetId;
+        try {
+          targetId = itemProvider.items.firstWhere((i) => i.name == name).id;
+        } catch (_) {}
 
         if (targetId != null) {
-          bool shouldIncrease;
-          if (tx.type == 'sale') {
-            // Sale normally decreases stock. If we are "Adding the effect", we decrease. If we are "Removing/Reverting", we increase.
-            shouldIncrease = !isAddingEffect;
-          } else {
-            // Purchase/Expense normally increases stock.
-            shouldIncrease = isAddingEffect;
-          }
+          bool shouldIncrease = (tx.type == 'sale') ? !isAddingEffect : isAddingEffect;
           await itemProvider.adjustStock(targetId, totalQty, shouldIncrease);
         }
       } catch (e) {
-        debugPrint("Stock adjustment failed for item: ${itemMap['name']}, error: $e");
+        debugPrint("Stock adjustment failed: $e");
       }
     }
   }
 
-  Future<void> settleCredit(int txId, double amountPaidNow) async {
-    try {
-      final tx = _allTransactions.firstWhere((t) => t.id == txId);
-      tx.paidAmount += amountPaidNow;
-      tx.isSynced = 0;
-      await DatabaseHelper.instance.updateTransaction(tx);
-      await fetchTransactions();
-      await _syncSingleTransaction(tx);
-    } catch (e) {
-      debugPrint("Settle Credit Error: $e");
-    }
-  }
-
-  Map<String, dynamic> getRangeStats(DateTimeRange range, double monthlyStaffSalary) {
-    final filtered = _allTransactions.where((tx) {
-      return tx.isDeleted == 0 &&
-          _normalizeStatus(tx.status) == 'completed' &&
-          tx.date.isAfter(range.start.subtract(const Duration(seconds: 1))) &&
-          tx.date.isBefore(range.end.add(const Duration(days: 1)));
-    }).toList();
-
-    double sales =
-    filtered.where((tx) => tx.type == 'sale').fold(0, (sum, tx) => sum + tx.amount);
-    double expenses = filtered
-        .where((tx) => tx.type == 'expense' || tx.type == 'purchase')
-        .fold(0, (sum, tx) => sum + tx.amount);
-
-    int days = range.duration.inDays + 1;
-    double staffCost = (monthlyStaffSalary / 30) * days;
-    double profit = sales - (expenses + staffCost);
-
-    return {
-      'sales': sales,
-      'expenses': expenses,
-      'staffCost': staffCost,
-      'profit': profit,
-      'transactions': filtered,
-    };
-  }
-
-  Future<void> deletePermanently(int id) async {
-    try {
-      await DatabaseHelper.instance.deleteTransactionPermanently(id);
-      await _firebaseService.deleteTransaction(id);
-      await fetchTransactions();
-    } catch (e) {
-      debugPrint("Error permanent deleting transaction: $e");
+  Future<void> syncAllUnsynced() async {
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult.any((result) => result != ConnectivityResult.none)) {
+      try {
+        final unsynced = await DatabaseHelper.instance.getUnsyncedTransactions();
+        for (var tx in unsynced) {
+          await _firebaseService.syncTransaction(tx);
+          await DatabaseHelper.instance.updateTransactionSyncStatus(tx.id!, 1);
+        }
+        await fetchTransactions();
+      } catch (e) {
+        debugPrint("Batch sync error: $e");
+      }
     }
   }
 
@@ -245,103 +208,40 @@ class TransactionProvider with ChangeNotifier {
         await DatabaseHelper.instance.updateTransactionSyncStatus(tx.id!, 1);
         await fetchTransactions();
       } catch (e) {
-        debugPrint("Sync failed: $e");
+        debugPrint("Single sync failed: $e");
       }
     }
   }
 
-  Future<void> syncAllUnsynced() async {
-    final connectivityResult = await Connectivity().checkConnectivity();
-    if (connectivityResult.any((result) => result != ConnectivityResult.none)) {
-      try {
-        final unsynced = await DatabaseHelper.instance.getUnsyncedTransactions();
-        if (unsynced.isEmpty) return;
+  // --- Dashboard Stats ---
+  double get todaySales => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale').fold(0.0, (sum, tx) => sum + tx.amount);
+  double get yesterdaySales => _activeDayTransactions(DateTime.now().subtract(const Duration(days: 1))).where((tx) => tx.type == 'sale').fold(0.0, (sum, tx) => sum + tx.amount);
+  
+  double get cashSalesToday => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale' && (tx.paymentMode == 'Cash' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.cashAmount : tx.amount));
+  double get upiSalesToday => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale' && (tx.paymentMode == 'UPI' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.upiAmount : tx.amount));
+  double get creditSalesToday => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale' && tx.paymentMode == 'Credit').fold(0.0, (sum, tx) => sum + (tx.amount - tx.paidAmount));
 
-        for (var tx in unsynced) {
-          try {
-            await _firebaseService.syncTransaction(tx);
-            await DatabaseHelper.instance.updateTransactionSyncStatus(tx.id!, 1);
-          } catch (e) {
-            debugPrint("Failed to sync transaction ${tx.id}: $e");
-          }
-        }
-        await fetchTransactions();
-      } catch (e) {
-        debugPrint("Error during batch sync: $e");
-      }
-    }
+  double get salesGrowth {
+    if (yesterdaySales == 0) return todaySales > 0 ? 100.0 : 0.0;
+    return ((todaySales - yesterdaySales) / yesterdaySales) * 100;
   }
-
-  double get todaySales => _activeTodayTransactions
-      .where((tx) => tx.type == 'sale' && _normalizeStatus(tx.status) == 'completed')
-      .fold(0.0, (sum, tx) => sum + tx.amount);
-
-  double get yesterdaySales {
-    final yesterday = DateTime.now().subtract(const Duration(days: 1));
-    return _allTransactions.where((tx) {
-      return tx.isDeleted == 0 &&
-          tx.type == 'sale' &&
-          _normalizeStatus(tx.status) == 'completed' &&
-          tx.date.year == yesterday.year &&
-          tx.date.month == yesterday.month &&
-          tx.date.day == yesterday.day;
-    }).fold(0.0, (sum, tx) => sum + tx.amount);
-  }
-
-  double get salesGrowth =>
-      yesterdaySales == 0 ? (todaySales > 0 ? 100 : 0) : ((todaySales - yesterdaySales) / yesterdaySales) * 100;
 
   double get avgOrderValue {
-    final sales = _activeTodayTransactions
-        .where((tx) => tx.type == 'sale' && _normalizeStatus(tx.status) == 'completed')
-        .toList();
-    return sales.isEmpty ? 0 : todaySales / sales.length;
+    final todayTxs = _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale').toList();
+    if (todayTxs.isEmpty) return 0.0;
+    return todaySales / todayTxs.length;
   }
 
-  double get todayExpenses => _activeTodayTransactions
-      .where((tx) =>
-  (tx.type == 'expense' || tx.type == 'purchase') &&
-      _normalizeStatus(tx.status) == 'completed')
-      .fold(0.0, (sum, tx) => sum + tx.amount);
-
-  double get profitToday => todaySales - todayExpenses;
-
-  double get cashSalesToday {
-    double total = 0;
-    for (var tx in _activeTodayTransactions.where(
-          (t) => t.type == 'sale' && _normalizeStatus(t.status) == 'completed',
-    )) {
-      if (tx.paymentMode == 'Cash') total += tx.amount;
-      else if (tx.paymentMode == 'Split') total += tx.cashAmount;
-    }
-    return total;
+  double get profitToday {
+    // Basic profit calculation (can be refined if cost price is tracked)
+    return todaySales * 0.2; // Assuming 20% margin if cost not specified
   }
 
-  double get upiSalesToday {
-    double total = 0;
-    for (var tx in _activeTodayTransactions.where(
-          (t) => t.type == 'sale' && _normalizeStatus(t.status) == 'completed',
-    )) {
-      if (tx.paymentMode == 'UPI') total += tx.amount;
-      else if (tx.paymentMode == 'Split') total += tx.upiAmount;
-    }
-    return total;
-  }
-
-  double get creditSalesToday => _activeTodayTransactions
-      .where((tx) =>
-  tx.type == 'sale' &&
-      tx.paymentMode == 'Credit' &&
-      _normalizeStatus(tx.status) == 'completed')
-      .fold(0.0, (sum, tx) => sum + tx.amount);
-
-  List<TransactionModel> get _activeTodayTransactions {
-    final now = DateTime.now();
-    return _allTransactions.where((tx) {
-      return tx.isDeleted == 0 &&
-          tx.date.year == now.year &&
-          tx.date.month == now.month &&
-          tx.date.day == now.day;
-    }).toList();
+  List<TransactionModel> _activeDayTransactions(DateTime day) {
+    return _allTransactions.where((tx) => 
+      tx.isDeleted == 0 && 
+      _normalizeStatus(tx.status) == 'completed' &&
+      tx.date.year == day.year && tx.date.month == day.month && tx.date.day == day.day
+    ).toList();
   }
 }

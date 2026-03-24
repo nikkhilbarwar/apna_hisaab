@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/transaction_model.dart';
 import '../../models/item_model.dart';
 import '../../models/supplier_model.dart';
@@ -9,13 +10,31 @@ import '../../models/category_model.dart';
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
+  static String? _currentUserId;
 
   DatabaseHelper._init();
 
   Future<Database> get database async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception("User not logged in");
+
+    // Agar user badal gaya hai, toh purana connection close karke naya kholna hoga
+    if (_currentUserId != user.uid) {
+      await closeDatabase();
+      _currentUserId = user.uid;
+      _database = await _initDB('food_cart_${user.uid}.db');
+    }
+
     if (_database != null) return _database!;
-    _database = await _initDB('food_cart.db');
+    _database = await _initDB('food_cart_${user.uid}.db');
     return _database!;
+  }
+
+  Future<void> closeDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
   }
 
   Future<Database> _initDB(String filePath) async {
@@ -24,7 +43,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path, 
-      version: 16, // Incremented version for status and staff leave
+      version: 17, 
       onCreate: _createDB, 
       onUpgrade: _onUpgrade
     );
@@ -74,6 +93,12 @@ class DatabaseHelper {
     if (oldVersion < 16) {
       try { await db.execute('ALTER TABLE staff ADD COLUMN total_leaves INTEGER DEFAULT 0'); } catch(_) {}
     }
+    if (oldVersion < 17) {
+      try { await db.execute('ALTER TABLE items ADD COLUMN is_synced INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE staff ADD COLUMN is_synced INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE categories ADD COLUMN is_synced INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE suppliers ADD COLUMN is_synced INTEGER DEFAULT 0'); } catch(_) {}
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -91,7 +116,7 @@ class DatabaseHelper {
         rate REAL,
         payment_mode TEXT,
         date TEXT,
-        is_synced INTEGER,
+        is_synced INTEGER DEFAULT 0,
         cash_amount REAL DEFAULT 0,
         upi_amount REAL DEFAULT 0,
         is_deleted INTEGER DEFAULT 0,
@@ -115,7 +140,8 @@ class DatabaseHelper {
         half_unit TEXT,
         full_qty REAL,
         half_qty REAL,
-        item_type TEXT DEFAULT "selling"
+        item_type TEXT DEFAULT "selling",
+        is_synced INTEGER DEFAULT 0
       )
     ''');
 
@@ -125,7 +151,8 @@ class DatabaseHelper {
         name TEXT,
         contact TEXT,
         items_supplied TEXT,
-        notes TEXT
+        notes TEXT,
+        is_synced INTEGER DEFAULT 0
       )
     ''');
 
@@ -137,7 +164,8 @@ class DatabaseHelper {
         advance REAL,
         join_date TEXT,
         contact TEXT,
-        total_leaves INTEGER DEFAULT 0
+        total_leaves INTEGER DEFAULT 0,
+        is_synced INTEGER DEFAULT 0
       )
     ''');
 
@@ -146,12 +174,34 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         icon_name TEXT,
-        type TEXT DEFAULT "selling"
+        type TEXT DEFAULT "selling",
+        is_synced INTEGER DEFAULT 0
       )
     ''');
   }
 
-  // Transaction Methods
+  // --- Clear Data ---
+  Future<void> clearAllData() async {
+    final db = await instance.database;
+    await db.delete('transactions');
+    await db.delete('items');
+    await db.delete('categories');
+    await db.delete('staff');
+    await db.delete('suppliers');
+  }
+
+  // --- Sync Helpers ---
+  Future<int> updateSyncStatus(String table, int id, int status) async {
+    final db = await instance.database;
+    return await db.update(table, {'is_synced': status}, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getUnsyncedData(String table) async {
+    final db = await instance.database;
+    return await db.query(table, where: 'is_synced = ?', whereArgs: [0]);
+  }
+
+  // --- Transaction Methods ---
   Future<int> insertTransaction(TransactionModel tx) async {
     final db = await instance.database;
     return await db.insert('transactions', tx.toMap());
@@ -160,45 +210,40 @@ class DatabaseHelper {
     final db = await instance.database;
     return await db.update('transactions', tx.toMap(), where: 'id = ?', whereArgs: [tx.id]);
   }
-  
   Future<int> softDeleteTransaction(int id) async {
     final db = await instance.database;
     return await db.update('transactions', {
       'is_deleted': 1,
-      'deleted_at': DateTime.now().toIso8601String()
+      'deleted_at': DateTime.now().toIso8601String(),
+      'is_synced': 0
     }, where: 'id = ?', whereArgs: [id]);
   }
-
   Future<int> restoreTransaction(int id) async {
     final db = await instance.database;
     return await db.update('transactions', {
       'is_deleted': 0,
-      'deleted_at': null
+      'deleted_at': null,
+      'is_synced': 0
     }, where: 'id = ?', whereArgs: [id]);
   }
-
   Future<int> deleteTransactionPermanently(int id) async {
     final db = await instance.database;
     return await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
   }
-
   Future<List<TransactionModel>> getAllTransactions() async {
     final db = await instance.database;
     final result = await db.query('transactions', orderBy: 'date DESC');
     return result.map((json) => TransactionModel.fromMap(json)).toList();
   }
-
   Future<int> updateTransactionSyncStatus(int id, int status) async {
-    final db = await instance.database;
-    return await db.update('transactions', {'is_synced': status}, where: 'id = ?', whereArgs: [id]);
+    return await updateSyncStatus('transactions', id, status);
   }
   Future<List<TransactionModel>> getUnsyncedTransactions() async {
-    final db = await instance.database;
-    final result = await db.query('transactions', where: 'is_synced = ?', whereArgs: [0]);
+    final result = await getUnsyncedData('transactions');
     return result.map((json) => TransactionModel.fromMap(json)).toList();
   }
 
-  // Item Methods
+  // --- Item Methods ---
   Future<int> insertItem(ItemModel item) async {
     final db = await instance.database;
     return await db.insert('items', item.toMap());
@@ -210,18 +255,34 @@ class DatabaseHelper {
   }
   Future<int> updateItem(ItemModel item) async {
     final db = await instance.database;
+    item.isSynced = 0;
     return await db.update('items', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
   }
   Future<int> updateItemStock(int id, double newStock) async {
     final db = await instance.database;
-    return await db.update('items', {'current_stock': newStock}, where: 'id = ?', whereArgs: [id]);
+    return await db.update('items', {'current_stock': newStock, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
   }
   Future<int> deleteItem(int id) async {
     final db = await instance.database;
     return await db.delete('items', where: 'id = ?', whereArgs: [id]);
   }
 
-  // Staff Methods
+  // --- Category Methods ---
+  Future<int> insertCategory(CategoryModel category) async {
+    final db = await instance.database;
+    return await db.insert('categories', category.toMap());
+  }
+  Future<List<CategoryModel>> getAllCategories() async {
+    final db = await instance.database;
+    final result = await db.query('categories');
+    return result.map((json) => CategoryModel.fromMap(json)).toList();
+  }
+  Future<int> deleteCategory(int id) async {
+    final db = await instance.database;
+    return await db.delete('categories', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // --- Staff Methods ---
   Future<int> insertStaff(StaffModel staff) async {
     final db = await instance.database;
     return await db.insert('staff', staff.toMap());
@@ -233,6 +294,7 @@ class DatabaseHelper {
   }
   Future<int> updateStaff(StaffModel staff) async {
     final db = await instance.database;
+    staff.isSynced = 0;
     return await db.update('staff', staff.toMap(), where: 'id = ?', whereArgs: [staff.id]);
   }
   Future<int> deleteStaff(int id) async {
@@ -240,7 +302,7 @@ class DatabaseHelper {
     return await db.delete('staff', where: 'id = ?', whereArgs: [id]);
   }
 
-  // Supplier Methods
+  // --- Supplier Methods ---
   Future<int> insertSupplier(SupplierModel supplier) async {
     final db = await instance.database;
     return await db.insert('suppliers', supplier.toMap());
@@ -256,6 +318,6 @@ class DatabaseHelper {
   }
   Future<int> deleteSupplier(int id) async {
     final db = await instance.database;
-    return await db.delete('categories', where: 'id = ?', whereArgs: [id]);
+    return await db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
   }
 }

@@ -1,7 +1,7 @@
 name: apna_hisaab
 description: "Professional Cart Sale Management App"
 publish_to: 'none'
-version: 0.10.0+11
+version: 0.10.2+13
 
 environment:
   sdk: ^3.11.1

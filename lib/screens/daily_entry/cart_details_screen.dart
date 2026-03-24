@@ -6,9 +6,7 @@ import '../../providers/transaction_provider.dart';
 import '../../providers/item_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/cart_item.dart';
-import '../../utils/app_strings.dart';
 import '../../services/notification_service.dart';
-import '../../utils/app_formatter.dart';
 
 class CartDetailsScreen extends StatefulWidget {
   final List<CartItem> cart;
@@ -97,10 +95,11 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     final isSale = widget.type == 'sale';
     final isPurchase = widget.type == 'purchase';
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return;
         Navigator.pop(context, widget.cart.isEmpty);
-        return false;
       },
       child: Theme(
         data: Theme.of(context).copyWith(
@@ -205,7 +204,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [profile.themeColor, profile.themeColor.withOpacity(0.85)],
+          colors: [profile.themeColor, profile.themeColor.withValues(alpha: 0.85)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -214,14 +213,14 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       ),
       child: Column(
         children: [
-          _summaryRow('Subtotal', '${profile.currencySymbol}${subtotal.toStringAsFixed(0)}', Colors.white.withOpacity(0.9)),
+          _summaryRow('Subtotal', '${profile.currencySymbol}${subtotal.toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
           if (profile.taxPercentage > 0)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
-              child: _summaryRow('Tax (${profile.taxPercentage}%)', '${profile.currencySymbol}${taxAmount.toStringAsFixed(0)}', Colors.white.withOpacity(0.9)),
+              child: _summaryRow('Tax (${profile.taxPercentage}%)', '${profile.currencySymbol}${taxAmount.toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
             ),
           const SizedBox(height: 8),
-          _summaryRow('Discount', '- ${profile.currencySymbol}${_discountController.text}', Colors.white.withOpacity(0.9)),
+          _summaryRow('Discount', '- ${profile.currencySymbol}${_discountController.text}', Colors.white.withValues(alpha: 0.9)),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Divider(color: Colors.white24, height: 1),
@@ -255,7 +254,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
           decoration: BoxDecoration(
             color: profile.cardColor,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
             border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
           ),
           child: Column(
@@ -272,8 +271,11 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     ),
                   ),
                   _qtyBtn(Icons.remove, profile, () => setState(() {
-                    if (c.quantity > 1) c.quantity--;
-                    else widget.cart.removeAt(index);
+                    if (c.quantity > 1) {
+                      c.quantity--;
+                    } else {
+                      widget.cart.removeAt(index);
+                    }
                     _calculateTotal();
                   })),
                   Padding(
@@ -324,6 +326,16 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                   ),
                 ],
               ),
+              if (widget.type == 'sale') ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    _servingCheckbox(c, 'Dine-in', profile),
+                    const SizedBox(width: 24),
+                    _servingCheckbox(c, 'Takeaway', profile),
+                  ],
+                ),
+              ],
             ],
           ),
         );
@@ -331,23 +343,55 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     );
   }
 
+  Widget _servingCheckbox(CartItem item, String method, ProfileProvider profile) {
+    bool isSelected = item.servingMethod == method;
+    return InkWell(
+      onTap: () => setState(() => item.servingMethod = method),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? profile.themeColor : profile.secondaryTextColor.withValues(alpha: 0.5),
+                  width: 2,
+                ),
+                color: isSelected ? profile.themeColor : Colors.transparent,
+              ),
+              child: isSelected 
+                ? const Icon(Icons.check, size: 14, color: Colors.white) 
+                : null,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              method, 
+              style: TextStyle(
+                fontSize: 13, 
+                fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600, 
+                color: isSelected ? profile.themeColor : profile.secondaryTextColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _smallEntryField(String hint, ProfileProvider profile, Function(String) onChange, {String? initial}) {
     return TextFormField(
       initialValue: initial,
       keyboardType: TextInputType.number,
-      onTap: () {
-        // Logic: Clear field if value is 0 or 0.0
-        if (initial == '0' || initial == '0.0' || initial == '') {
-          // This requires a controller to clear, but since we use initialValue, 
-          // a better way in this specific widget is using a focus listener or controller.
-          // For now, applying to the main fields.
-        }
-      },
       onChanged: onChange,
       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.textColor),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: profile.secondaryTextColor.withOpacity(0.5)),
+        hintStyle: TextStyle(color: profile.secondaryTextColor.withValues(alpha: 0.5)),
         isDense: true,
         contentPadding: const EdgeInsets.all(8),
         fillColor: profile.scaffoldColor,
@@ -449,7 +493,6 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       keyboardType: type,
       onChanged: onChanged,
       onTap: () {
-        // Logic: Clear field if value is 0 or 0.0
         if (controller.text == '0' || controller.text == '0.0') {
           controller.clear();
         }
@@ -478,7 +521,6 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       final txProvider = Provider.of<TransactionProvider>(context, listen: false);
       final itemProvider = Provider.of<ItemProvider>(context, listen: false);
       
-      // JSON format for robust item storage
       String description = jsonEncode(widget.cart.map((e) => {
         'id': e.item.id,
         'name': e.item.name,
@@ -487,6 +529,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         'price': e.price,
         'extra_qty': e.extraPieces,
         'extra_price': e.extraPrice,
+        'serving_method': e.servingMethod,
       }).toList());
       
       double paidAmt = totalAmt;

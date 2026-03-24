@@ -56,6 +56,7 @@ class TransactionModel {
               final String q = (item['qty'] ?? '0').toString();
               final String n = (item['name'] ?? 'Item').toString();
               final String v = (item['variant'] ?? '').toString();
+              final String sm = (item['serving_method'] ?? '').toString();
               
               items.add({
                 'id': (item['id'] ?? '').toString(),
@@ -65,7 +66,8 @@ class TransactionModel {
                 'price': (item['price'] ?? '0').toString(),
                 'extra_qty': (item['extra_qty'] ?? '0').toString(),
                 'extra_price': (item['extra_price'] ?? '0').toString(),
-                'display': '$q x $n ${v.isNotEmpty ? '($v)' : ''}'
+                'serving_method': sm,
+                'display': '$q x $n ${v.isNotEmpty ? '($v)' : ''}${sm.isNotEmpty ? ' [$sm]' : ''}'
               });
             }
           }

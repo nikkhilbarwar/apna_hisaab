@@ -15,11 +15,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "654285631870-k9bbgr4al5qav6uhk5h22js3m44o8re2.apps.googleusercontent.com",
+          "client_id": "654285631870-1hkpn0iqqn6kcsb88sben7ah99j3icpo.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.griller.zone",
-            "certificate_hash": "0969d71b1a61cbda60d4e911aa2573598f225ee8"
+            "certificate_hash": "3efe1b05ed96d09ffee0193950c3437138f01cff"
           }
         },
         {

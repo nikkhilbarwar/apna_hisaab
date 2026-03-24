@@ -2,34 +2,114 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:workmanager/workmanager.dart';
+import 'firebase_options.dart'; // Import generated options
 import 'providers/transaction_provider.dart';
 import 'providers/item_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/category_provider.dart';
 import 'providers/staff_provider.dart';
 import 'screens/splash_screen.dart';
+import 'services/export_service.dart';
 
 // logic: Global key to show Snackbars safely after async/await
 final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    if (task == "dailyBackupTask") {
+      try {
+        // Initialize Firebase if needed inside task
+        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+        await ExportService().createAutoBackup();
+        return Future.value(true);
+      } catch (e) {
+        return Future.value(false);
+      }
+    }
+    return Future.value(true);
+  });
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  
+  // Update: Pass DefaultFirebaseOptions to ensure correct project connection
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Initialize Workmanager for daily 4 AM backup
+  Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+  Workmanager().registerPeriodicTask(
+    "1",
+    "dailyBackupTask",
+    frequency: const Duration(hours: 24),
+    initialDelay: _calculateInitialDelayFor4AM(),
+    constraints: Constraints(
+      networkType: NetworkType.connected,
+      requiresBatteryNotLow: true,
+      requiresStorageNotLow: true,
+    ),
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+  );
   
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => TransactionProvider()..fetchTransactions()),
-        ChangeNotifierProvider(create: (_) => ItemProvider()..fetchItems()),
-        ChangeNotifierProvider(create: (_) => ProfileProvider()),
-        ChangeNotifierProvider(create: (_) => CategoryProvider()..fetchCategories()),
-        ChangeNotifierProvider(create: (_) => StaffProvider()..fetchStaff()),
-      ],
-      child: const MyApp(),
+    RestartWidget(
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => TransactionProvider()..fetchTransactions()),
+          ChangeNotifierProvider(create: (_) => ItemProvider()..fetchItems()),
+          ChangeNotifierProvider(create: (_) => ProfileProvider()),
+          ChangeNotifierProvider(create: (_) => CategoryProvider()..fetchCategories()),
+          ChangeNotifierProvider(create: (_) => StaffProvider()..fetchStaff()),
+        ],
+        child: const MyApp(),
+      ),
     ),
   );
+}
+
+Duration _calculateInitialDelayFor4AM() {
+  final now = DateTime.now();
+  var scheduledTime = DateTime(now.year, now.month, now.day, 4, 0);
+  if (scheduledTime.isBefore(now)) {
+    scheduledTime = scheduledTime.add(const Duration(days: 1));
+  }
+  return scheduledTime.difference(now);
+}
+
+class RestartWidget extends StatefulWidget {
+  const RestartWidget({super.key, required this.child});
+  final Widget child;
+
+  static void restartApp(BuildContext context) {
+    context.findAncestorStateOfType<_RestartWidgetState>()?.restartApp();
+  }
+
+  @override
+  State<RestartWidget> createState() => _RestartWidgetState();
+}
+
+class _RestartWidgetState extends State<RestartWidget> {
+  Key key = UniqueKey();
+
+  void restartApp() {
+    setState(() {
+      key = UniqueKey();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyedSubtree(
+      key: key,
+      child: widget.child,
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -85,7 +165,7 @@ class MyApp extends StatelessWidget {
                 borderSide: BorderSide(color: primaryColor, width: 2),
               ),
               labelStyle: TextStyle(color: profile.secondaryTextColor),
-              hintStyle: TextStyle(color: profile.secondaryTextColor.withOpacity(0.5)),
+              hintStyle: TextStyle(color: profile.secondaryTextColor.withValues(alpha: 0.5)),
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             elevatedButtonTheme: ElevatedButtonThemeData(

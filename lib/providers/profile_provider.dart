@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/license_service.dart';
-import 'dart:io';
 
 class ProfileProvider with ChangeNotifier {
   String _businessName = 'My Business';
@@ -62,9 +61,9 @@ class ProfileProvider with ChangeNotifier {
 
   List<BoxShadow> get themeShadow {
     if (_isDarkMode) {
-      return [BoxShadow(color: const Color(0xDDFF9F00).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 4))];
+      return [BoxShadow(color: const Color(0xDDFF9F00).withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 4))];
     }
-    return [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2))];
+    return [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2))];
   }
 
   int get remainingDays {
@@ -79,28 +78,37 @@ class ProfileProvider with ChangeNotifier {
   }
 
   ProfileProvider() {
-    _loadProfile();
+    loadProfile();
   }
 
-  Future<void> _loadProfile() async {
+  String _getUKey(String key) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    return "${key}_$uid";
+  }
+
+  Future<void> loadProfile() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final uid = user.uid;
+
     try {
       final prefs = await SharedPreferences.getInstance();
-      _businessName = prefs.getString('business_name') ?? 'My Business';
-      _ownerName = prefs.getString('owner_name') ?? '';
-      _contact = prefs.getString('contact') ?? '';
-      _address = prefs.getString('address') ?? '';
-      _logoPath = prefs.getString('logo_path') ?? '';
-      _isCloudSyncEnabled = prefs.getBool('cloud_sync') ?? true;
-      _currencySymbol = prefs.getString('currency') ?? '₹';
-      _themeColorValue = prefs.getInt('theme_color') ?? 0xFF5E35B1;
-      _taxPercentage = prefs.getDouble('tax_percentage') ?? 0.0;
-      _isDarkMode = prefs.getBool('is_dark_mode') ?? false;
+      _businessName = prefs.getString('business_name_$uid') ?? 'My Business';
+      _ownerName = prefs.getString('owner_name_$uid') ?? '';
+      _contact = prefs.getString('contact_$uid') ?? '';
+      _address = prefs.getString('address_$uid') ?? '';
+      _logoPath = prefs.getString('logo_path_$uid') ?? '';
+      _isCloudSyncEnabled = prefs.getBool('cloud_sync_$uid') ?? true;
+      _currencySymbol = prefs.getString('currency_$uid') ?? '₹';
+      _themeColorValue = prefs.getInt('theme_color_$uid') ?? 0xFF5E35B1;
+      _taxPercentage = prefs.getDouble('tax_percentage_$uid') ?? 0.0;
+      _isDarkMode = prefs.getBool('is_dark_mode_$uid') ?? false;
 
-      _licenseKey = prefs.getString('license_key') ?? '';
-      _isActivated = prefs.getBool('is_app_activated') ?? false;
-      _isLifetime = prefs.getBool('is_lifetime') ?? false;
+      _licenseKey = prefs.getString('license_key_$uid') ?? '';
+      _isActivated = prefs.getBool('is_app_activated_$uid') ?? false;
+      _isLifetime = prefs.getBool('is_lifetime_$uid') ?? false;
       
-      String? expiryStr = prefs.getString('expiry_date');
+      String? expiryStr = prefs.getString('expiry_date_$uid');
       if (expiryStr != null && expiryStr.isNotEmpty) {
         _expiryDate = DateTime.tryParse(expiryStr);
       }
@@ -139,7 +147,7 @@ class ProfileProvider with ChangeNotifier {
           if (_isActivated != newActivated) {
             _isActivated = newActivated;
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('is_app_activated', _isActivated);
+            await prefs.setBool(_getUKey('is_app_activated'), _isActivated);
             notifyListeners();
           }
         }
@@ -152,15 +160,15 @@ class ProfileProvider with ChangeNotifier {
   Future<bool> activateLicense(String key) async {
     _licenseKey = key;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('license_key', key);
+    await prefs.setString(_getUKey('license_key'), key);
     listenToLicenseRealTime();
     return _isActivated;
   }
 
   Future<void> updateThemeColor(Color color) async {
     final prefs = await SharedPreferences.getInstance();
-    _themeColorValue = color.value;
-    await prefs.setInt('theme_color', color.value);
+    _themeColorValue = color.toARGB32();
+    await prefs.setInt(_getUKey('theme_color'), color.toARGB32());
     notifyListeners();
     if (_isCloudSyncEnabled) _syncToFirebase();
   }
@@ -168,21 +176,21 @@ class ProfileProvider with ChangeNotifier {
   Future<void> toggleDarkMode(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     _isDarkMode = value;
-    await prefs.setBool('is_dark_mode', value);
+    await prefs.setBool(_getUKey('is_dark_mode'), value);
     notifyListeners();
     if (_isCloudSyncEnabled) _syncToFirebase();
   }
 
   Future<void> updateProfile({String? businessName, String? ownerName, String? contact, String? address, String? logoPath, bool? isCloudSyncEnabled, String? currencySymbol, double? taxPercentage}) async {
     final prefs = await SharedPreferences.getInstance();
-    if (businessName != null) { _businessName = businessName; await prefs.setString('business_name', businessName); }
-    if (ownerName != null) { _ownerName = ownerName; await prefs.setString('owner_name', ownerName); }
-    if (contact != null) { _contact = contact; await prefs.setString('contact', contact); }
-    if (address != null) { _address = address; await prefs.setString('address', address); }
-    if (logoPath != null) { _logoPath = logoPath; await prefs.setString('logo_path', logoPath); }
-    if (isCloudSyncEnabled != null) { _isCloudSyncEnabled = isCloudSyncEnabled; await prefs.setBool('cloud_sync', isCloudSyncEnabled); }
-    if (currencySymbol != null) { _currencySymbol = currencySymbol; await prefs.setString('currency', currencySymbol); }
-    if (taxPercentage != null) { _taxPercentage = taxPercentage; await prefs.setDouble('tax_percentage', taxPercentage); }
+    if (businessName != null) { _businessName = businessName; await prefs.setString(_getUKey('business_name'), businessName); }
+    if (ownerName != null) { _ownerName = ownerName; await prefs.setString(_getUKey('owner_name'), ownerName); }
+    if (contact != null) { _contact = contact; await prefs.setString(_getUKey('contact'), contact); }
+    if (address != null) { _address = address; await prefs.setString(_getUKey('address'), address); }
+    if (logoPath != null) { _logoPath = logoPath; await prefs.setString(_getUKey('logo_path'), logoPath); }
+    if (isCloudSyncEnabled != null) { _isCloudSyncEnabled = isCloudSyncEnabled; await prefs.setBool(_getUKey('cloud_sync'), isCloudSyncEnabled); }
+    if (currencySymbol != null) { _currencySymbol = currencySymbol; await prefs.setString(_getUKey('currency'), currencySymbol); }
+    if (taxPercentage != null) { _taxPercentage = taxPercentage; await prefs.setDouble(_getUKey('tax_percentage'), taxPercentage); }
     notifyListeners();
     if (_isCloudSyncEnabled) _syncToFirebase();
   }

@@ -81,6 +81,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final txProvider = Provider.of<TransactionProvider>(context);
     final profileProvider = Provider.of<ProfileProvider>(context);
+    final itemProvider = Provider.of<ItemProvider>(context);
     final themeColor = profileProvider.themeColor;
     final isSelectionMode = _selectedIds.isNotEmpty;
 
@@ -92,9 +93,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _activeFilter = 'Completed';
     }
 
+    final lowStockItems = itemProvider.items.where((i) => i.currentStock <= i.minStock).toList();
+
     return Scaffold(
       backgroundColor: profileProvider.scaffoldColor,
-      // Dynamic AppBar for Dashboard
       appBar: isSelectionMode ? AppBar(
         backgroundColor: Colors.red.shade700,
         foregroundColor: Colors.white,
@@ -114,6 +116,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               if (!isSelectionMode) _buildMainStatsCard(txProvider, profileProvider),
               const SizedBox(height: 12),
+              
+              if (!isSelectionMode && lowStockItems.isNotEmpty) ...[
+                _buildLowStockSection(lowStockItems, profileProvider),
+                const SizedBox(height: 16),
+              ],
+
               Text('Payment Overview', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: profileProvider.textColor)),
               const SizedBox(height: 8),
               _buildPaymentModeRow(txProvider, profileProvider),
@@ -160,6 +168,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildLowStockSection(List<ItemModel> items, ProfileProvider profile) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.red.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
+              const SizedBox(width: 8),
+              Text('Low Stock Alerts (${items.length})', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontSize: 13)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 35,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: items.length,
+              itemBuilder: (context, index) => Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(color: Colors.red.shade400, borderRadius: BorderRadius.circular(8)),
+                alignment: Alignment.center,
+                child: Text('${items[index].name}: ${items[index].currentStock.toInt()}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _filterChip(String label, int count) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     bool isSelected = _activeFilter == label;
@@ -169,7 +215,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onTap: () {
         setState(() {
           _activeFilter = label;
-          _selectedIds.clear(); // Clear selection when switching tabs
+          _selectedIds.clear(); 
         });
       },
       child: Container(
@@ -326,7 +372,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         border: Border.all(color: isSelected ? Colors.red : (isPending ? Colors.orange.withOpacity(0.5) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)), width: isSelected ? 2 : 1),
       ),
       child: ListTile(
-        onLongPress: () => _toggleSelection(tx.id!), // Enable Selection
+        onLongPress: () => _toggleSelection(tx.id!),
         onTap: () {
           if (_selectedIds.isNotEmpty) {
             _toggleSelection(tx.id!);
@@ -394,7 +440,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(item['name'] ?? 'Item', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
-                        Text('${item['qty']} x ${profile.currencySymbol}${item['price']}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 11)),
+                        Text('${item['qty']} x ${profile.currencySymbol}${item['price']}${item['serving_method'] != null && item['serving_method'] != '' ? ' [${item['serving_method']}]' : ''}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 11)),
                       ],
                     ),
                   ),

@@ -8,6 +8,7 @@ class CartItem {
   String unit;
   double extraPieces; 
   double extraPrice; 
+  String servingMethod; // Dine-in or Takeaway
 
   CartItem({
     required this.item,
@@ -17,5 +18,6 @@ class CartItem {
     required this.unit,
     this.extraPieces = 0,
     this.extraPrice = 0,
+    this.servingMethod = 'Dine-in',
   });
 }

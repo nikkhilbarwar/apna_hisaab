@@ -4,6 +4,7 @@ class SupplierModel {
   String contact;
   String itemsSupplied;
   String notes;
+  int isSynced;
 
   SupplierModel({
     this.id,
@@ -11,6 +12,7 @@ class SupplierModel {
     this.contact = '',
     this.itemsSupplied = '',
     this.notes = '',
+    this.isSynced = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -20,6 +22,7 @@ class SupplierModel {
       'contact': contact,
       'items_supplied': itemsSupplied,
       'notes': notes,
+      'is_synced': isSynced,
     };
   }
 
@@ -30,6 +33,7 @@ class SupplierModel {
       contact: map['contact'] ?? '',
       itemsSupplied: map['items_supplied'] ?? '',
       notes: map['notes'] ?? '',
+      isSynced: map['is_synced'] ?? 0,
     );
   }
 }

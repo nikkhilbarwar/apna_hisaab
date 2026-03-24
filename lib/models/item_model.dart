@@ -5,13 +5,14 @@ class ItemModel {
   String unit;
   double minStock;
   double currentStock;
-  double? price; // Selling price for Full/Normal
-  double? halfPrice; // Selling price for Half
-  String? fullUnit; // e.g., '10 pc'
-  String? halfUnit; // e.g., '5 pc'
-  double? fullQty; // Numeric value for stock deduction (e.g., 10)
-  double? halfQty; // Numeric value for stock deduction (e.g., 5)
-  String itemType; // 'selling' or 'purchase'
+  double? price; 
+  double? halfPrice; 
+  String? fullUnit; 
+  String? halfUnit; 
+  double? fullQty; 
+  double? halfQty; 
+  String itemType; 
+  int isSynced; // 0 for no, 1 for yes
 
   ItemModel({
     this.id,
@@ -27,6 +28,7 @@ class ItemModel {
     this.fullQty,
     this.halfQty,
     this.itemType = 'selling',
+    this.isSynced = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -44,6 +46,7 @@ class ItemModel {
       'full_qty': fullQty,
       'half_qty': halfQty,
       'item_type': itemType,
+      'is_synced': isSynced,
     };
   }
 
@@ -62,6 +65,7 @@ class ItemModel {
       fullQty: map['full_qty'] != null ? (map['full_qty'] as num).toDouble() : null,
       halfQty: map['half_qty'] != null ? (map['half_qty'] as num).toDouble() : null,
       itemType: map['item_type'] ?? 'selling',
+      isSynced: map['is_synced'] ?? 0,
     );
   }
 }

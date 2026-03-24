@@ -153,18 +153,25 @@ class FirebaseService {
     }
   }
 
-  // Batch sync for offline data
-  Future<void> syncAllUnsynced(List<TransactionModel> unsynced) async {
+  // --- Master Restore Function ---
+  Future<Map<String, List<dynamic>>> fetchAllUserData() async {
     try {
-      final batch = _firestore.batch();
-      final userDoc = _firestore.collection('users').doc(_uid);
-      for (var tx in unsynced) {
-        final docRef = userDoc.collection('transactions').doc(tx.id?.toString());
-        batch.set(docRef, tx.toMap());
-      }
-      await batch.commit();
+      final transactions = await fetchAllTransactions();
+      final items = await fetchAllItems();
+      final categories = await fetchAllCategories();
+      final staff = await fetchAllStaff();
+      final suppliers = await fetchAllSuppliers();
+
+      return {
+        'transactions': transactions,
+        'items': items,
+        'categories': categories,
+        'staff': staff,
+        'suppliers': suppliers,
+      };
     } catch (e) {
-      print("Error in batch sync: $e");
+      print("Restore fetch error: $e");
+      rethrow;
     }
   }
 }
