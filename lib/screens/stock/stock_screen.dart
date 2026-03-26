@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter/rendering.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/item_provider.dart';
 import '../../providers/category_provider.dart';
@@ -17,26 +16,7 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
-  final ScrollController _scrollController = ScrollController();
-  bool _isBottomNavVisible = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(() {
-      if (_scrollController.position.userScrollDirection == ScrollDirection.reverse) {
-        if (_isBottomNavVisible) setState(() => _isBottomNavVisible = false);
-      } else if (_scrollController.position.userScrollDirection == ScrollDirection.forward) {
-        if (!_isBottomNavVisible) setState(() => _isBottomNavVisible = true);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
+  String? _selectedCategory;
 
   @override
   Widget build(BuildContext context) {
@@ -45,123 +25,296 @@ class _StockScreenState extends State<StockScreen> {
     final profileProvider = Provider.of<ProfileProvider>(context);
     final themeColor = profileProvider.themeColor;
 
-    // Logic: Items are already sorted A-Z from ItemProvider getter
-    final sortedItems = itemProvider.items;
-
-    return Scaffold(
-      backgroundColor: profileProvider.scaffoldColor,
-      appBar: AppBar(
-        title: const Text('INVENTORY & STOCK', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white)),
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [themeColor.withOpacity(0.8), themeColor],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+    return PopScope(
+      canPop: _selectedCategory == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _selectedCategory != null) {
+          setState(() => _selectedCategory = null);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: profileProvider.scaffoldColor,
+        appBar: AppBar(
+          title: Text(_selectedCategory == null ? 'INVENTORY & STOCK' : _selectedCategory!.toUpperCase(), 
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.white)),
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [themeColor.withOpacity(0.8), themeColor],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
           ),
+          leading: _selectedCategory != null ? IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => setState(() => _selectedCategory = null),
+          ) : null,
+          centerTitle: true,
+          actions: [
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white),
+              onSelected: (value) {
+                if (value == 'manage_categories') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoryManagementScreen()));
+                } else if (value == 'low_stock_settings') {
+                  _showLowStockSettings(context, itemProvider, catProvider, profileProvider);
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'manage_categories', child: Text('Manage Categories')),
+                const PopupMenuItem(value: 'low_stock_settings', child: Text('Low Stock Alerts')),
+              ],
+            ),
+          ],
+          elevation: 0,
+          iconTheme: const IconThemeData(color: Colors.white),
         ),
-        centerTitle: true,
-        actions: [
+        body: Column(
+          children: [
+            Expanded(
+              child: _selectedCategory == null 
+                ? _buildCategoryList(catProvider, itemProvider, profileProvider)
+                : _buildItemList(itemProvider, profileProvider),
+            ),
+            _buildBottomActionBar(profileProvider, catProvider),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomActionBar(ProfileProvider profile, CategoryProvider catProvider) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+      decoration: BoxDecoration(
+        color: profile.cardColor,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _showCategoryPicker(context, catProvider, profile),
+              icon: const Icon(Icons.add_circle_outline, size: 16),
+              label: const Text('ADD NEW ITEM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: profile.themeColor,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 42),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
           IconButton(
-            icon: const Icon(Icons.settings_suggest, color: Colors.white),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoryManagementScreen())),
-            tooltip: 'Manage Categories',
+            icon: Icon(Icons.settings_suggest_rounded, color: profile.themeColor, size: 20),
+            style: IconButton.styleFrom(
+              backgroundColor: profile.themeColor.withOpacity(0.1),
+              padding: const EdgeInsets.all(10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
           ),
         ],
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: sortedItems.isEmpty
-          ? _buildEmptyState(context, profileProvider)
-          : ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: sortedItems.length,
-              itemBuilder: (context, index) {
-                final item = sortedItems[index];
-                final isLow = item.currentStock <= item.minStock;
-                
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: profileProvider.cardColor,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
-                    border: Border.all(color: isLow ? Colors.red.withOpacity(0.5) : (profileProvider.isDarkMode ? Colors.white10 : Colors.grey.shade100)),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    title: Text(item.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: profileProvider.textColor)),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.category, style: TextStyle(fontSize: 12, color: profileProvider.secondaryTextColor)),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isLow ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                isLow ? 'LOW STOCK' : 'IN STOCK',
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isLow ? Colors.red : Colors.green),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text('Min: ${item.minStock} ${item.unit}', style: TextStyle(fontSize: 11, color: profileProvider.secondaryTextColor)),
-                          ],
-                        ),
-                      ],
-                    ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text('${item.currentStock}', 
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isLow ? Colors.red : profileProvider.textColor)),
-                        Text(item.unit, style: TextStyle(fontSize: 12, color: profileProvider.secondaryTextColor)),
-                      ],
-                    ),
-                    onTap: () => _showItemActions(context, itemProvider, item, profileProvider),
-                  ),
-                );
-              },
-            ),
-      bottomNavigationBar: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        height: _isBottomNavVisible ? 95 : 0,
-        child: _isBottomNavVisible ? Container(
-          padding: const EdgeInsets.all(20),
+    );
+  }
+
+  Widget _buildCategoryList(CategoryProvider catProvider, ItemProvider itemProvider, ProfileProvider profile) {
+    if (catProvider.categories.isEmpty) return _buildEmptyState(context, profile);
+
+    final sortedCats = List.from(catProvider.categories);
+    sortedCats.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: sortedCats.length,
+      itemBuilder: (context, index) {
+        final cat = sortedCats[index];
+        final items = itemProvider.getItemsByCategory(cat.name);
+        final lowStockCount = items.where((i) => i.lowStockAlert == 1 && i.currentStock <= i.minStock).length;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: profileProvider.cardColor,
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            color: profile.cardColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+            border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
           ),
-          child: SafeArea(
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: themeColor,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 55),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                elevation: 0,
-              ),
-              onPressed: () => _showCategoryPicker(context, catProvider, profileProvider),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add_circle_outline),
-                  SizedBox(width: 10),
-                  Text('ADD NEW ITEM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                ],
-              ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            leading: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
+              child: Icon(Icons.folder_rounded, color: profile.themeColor, size: 24),
             ),
+            title: Text(cat.name, style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 15)),
+            subtitle: Text('${items.length} Items Total', style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (lowStockCount > 0)
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    child: Text('$lowStockCount LOW', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10)),
+                  ),
+                Icon(Icons.chevron_right, color: profile.secondaryTextColor.withOpacity(0.5)),
+              ],
+            ),
+            onTap: () => setState(() => _selectedCategory = cat.name),
           ),
-        ) : const SizedBox.shrink(),
+        );
+      },
+    );
+  }
+
+  Widget _buildItemList(ItemProvider itemProvider, ProfileProvider profile) {
+    final sortedItems = itemProvider.getItemsByCategory(_selectedCategory!);
+    if (sortedItems.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inventory_2_outlined, size: 60, color: profile.secondaryTextColor.withOpacity(0.3)),
+            const SizedBox(height: 16),
+            Text('No items in this category', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: sortedItems.length,
+      itemBuilder: (context, index) {
+        final item = sortedItems[index];
+        final isLow = item.lowStockAlert == 1 && item.currentStock <= item.minStock;
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: profile.cardColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+            border: Border.all(color: isLow ? Colors.red.withOpacity(0.5) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            title: Text(item.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: profile.textColor)),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isLow ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        isLow ? 'LOW STOCK' : 'IN STOCK',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isLow ? Colors.red : Colors.green),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text('Min: ${item.minStock} ${item.unit}', style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
+                  ],
+                ),
+              ],
+            ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('${item.currentStock % 1 == 0 ? item.currentStock.toInt() : item.currentStock}', 
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isLow ? Colors.red : profile.textColor)),
+                Text(item.unit, style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
+              ],
+            ),
+            onTap: () => _showItemActions(context, itemProvider, item, profile),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showLowStockSettings(BuildContext context, ItemProvider itemProvider, CategoryProvider catProvider, ProfileProvider profile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          height: MediaQuery.of(context).size.height * 0.75,
+          decoration: BoxDecoration(
+            color: profile.cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              Text('LOW STOCK ALERTS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor, letterSpacing: 1)),
+              const SizedBox(height: 8),
+              Text('Toggle alerts for entire categories or specific items.', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
+              const SizedBox(height: 24),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: catProvider.categories.length,
+                  itemBuilder: (context, index) {
+                    final cat = catProvider.categories[index];
+                    final catItems = itemProvider.getItemsByCategory(cat.name);
+                    final allOn = catItems.isNotEmpty && catItems.every((i) => i.lowStockAlert == 1);
+
+                    return Theme(
+                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        title: Text(cat.name, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
+                        subtitle: Text('${catItems.length} items', style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
+                        trailing: Switch(
+                          value: allOn,
+                          activeColor: profile.themeColor,
+                          onChanged: (val) async {
+                            await itemProvider.toggleCategoryAlerts(cat.name, val);
+                            setModalState(() {});
+                          },
+                        ),
+                        children: catItems.map((item) => ListTile(
+                          contentPadding: const EdgeInsets.only(left: 16),
+                          title: Text(item.name, style: TextStyle(fontSize: 14, color: profile.textColor)),
+                          subtitle: Text('Current: ${item.currentStock % 1 == 0 ? item.currentStock.toInt() : item.currentStock} ${item.unit}', style: const TextStyle(fontSize: 11)),
+                          trailing: Switch(
+                            value: item.lowStockAlert == 1,
+                            activeColor: profile.themeColor,
+                            onChanged: (val) async {
+                              await itemProvider.toggleLowStockAlert(item.id!, val);
+                              setModalState(() {});
+                            },
+                          ),
+                        )).toList(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -190,7 +343,6 @@ class _StockScreenState extends State<StockScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: profile.cardColor,
@@ -212,6 +364,12 @@ class _StockScreenState extends State<StockScreen> {
             _actionTile(Icons.edit_note, 'Quick Stock Update', Colors.blue, profile, () {
               Navigator.pop(context);
               _showUpdateStockBottomSheet(context, provider, item, profile);
+            }),
+            _actionTile(item.lowStockAlert == 1 ? Icons.notifications_off_outlined : Icons.notifications_active_outlined, 
+              item.lowStockAlert == 1 ? 'Disable Low Stock Alert' : 'Enable Low Stock Alert', 
+              Colors.purple, profile, () {
+              provider.toggleLowStockAlert(item.id!, item.lowStockAlert == 0);
+              Navigator.pop(context);
             }),
             _actionTile(Icons.edit, 'Edit Item Details', Colors.orange, profile, () {
               Navigator.pop(context);
@@ -312,7 +470,7 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   void _showUpdateStockBottomSheet(BuildContext context, ItemProvider provider, ItemModel item, ProfileProvider profile) {
-    final stockController = TextEditingController(text: item.currentStock.toString());
+    final stockController = TextEditingController();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -338,15 +496,11 @@ class _StockScreenState extends State<StockScreen> {
             const SizedBox(height: 24),
             TextField(
               controller: stockController,
-              inputFormatters: [AppFormatter.capitalizeWordsFormatter],
               style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
-              onTap: () {
-                if (stockController.text == '0' || stockController.text == '0.0') {
-                  stockController.clear();
-                }
-              },
               decoration: InputDecoration(
-                labelText: 'Update Quantity / Name', 
+                labelText: 'Update Quantity', 
+                hintText: 'Current: ${item.currentStock % 1 == 0 ? item.currentStock.toInt() : item.currentStock}',
+                hintStyle: TextStyle(color: profile.secondaryTextColor.withOpacity(0.4)),
                 labelStyle: TextStyle(color: profile.secondaryTextColor),
                 prefixIcon: Icon(Icons.inventory_2_outlined, color: profile.themeColor),
                 filled: true,
@@ -355,12 +509,16 @@ class _StockScreenState extends State<StockScreen> {
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: profile.themeColor, width: 2)),
               ),
-              keyboardType: TextInputType.text, // Changed to text to support capitalization testing if needed, or keep as number
+              keyboardType: TextInputType.number,
               autofocus: true,
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
+                if (stockController.text.isEmpty) {
+                  Navigator.pop(context);
+                  return;
+                }
                 final newVal = double.tryParse(stockController.text) ?? item.currentStock;
                 provider.updateStock(item.id!, newVal);
                 Navigator.pop(context);

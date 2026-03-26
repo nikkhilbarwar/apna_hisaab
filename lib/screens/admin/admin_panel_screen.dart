@@ -95,6 +95,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         'validTillFormatted': expiry == null ? 'Lifetime' : DateFormat('dd/MM/yyyy').format(expiry),
         'activated': false,
         'activeDeviceId': null,
+        'isReminderEnabled': true,
+        'saleBlocked': false,
+        'expenseBlocked': false,
       });
 
       setState(() {
@@ -109,101 +112,160 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   void _showLicenseDetails(Map<String, dynamic> data, ProfileProvider profile) {
-    final bool isActive = data['status'] == 'active';
-    final bool isRegistered = data['activated'] == true;
+    bool isActive = data['status'] == 'active';
+    bool isRegistered = data['activated'] == true;
+    bool isReminderEnabled = data['isReminderEnabled'] ?? true;
+    bool saleBlocked = data['saleBlocked'] ?? false;
+    bool expenseBlocked = data['expenseBlocked'] ?? false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: profile.cardColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40, height: 4,
-                margin: const EdgeInsets.only(bottom: 24),
-                decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          decoration: BoxDecoration(
+            color: profile.cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(data['restaurantName'] ?? "License Info", 
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: profile.textColor)),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isActive ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    isActive ? "ACTIVE" : "BLOCKED",
-                    style: TextStyle(color: isActive ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+                Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    margin: const EdgeInsets.only(bottom: 24),
+                    decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            _detailRow("Owner", data['ownerName'] ?? "N/A", Icons.person, profile),
-            _detailRow("Phone/Email", data['phone'] ?? "N/A", Icons.phone, profile),
-            _detailRow("License Key", data['licenseKey'] ?? "N/A", Icons.vpn_key, profile, isSelectable: true),
-            _detailRow("Plan", data['planType']?.toString().toUpperCase() ?? "N/A", Icons.card_membership, profile),
-            _detailRow("Validity", data['validTillFormatted'] ?? "N/A", Icons.calendar_today, profile),
-            _detailRow("Mobile Active", isRegistered ? "YES" : "NO", Icons.phone_android, profile, 
-              valueColor: isRegistered ? Colors.blue : profile.secondaryTextColor),
-            if (isRegistered) _detailRow("Device ID", data['activeDeviceId'] ?? "N/A", Icons.devices, profile, isSelectable: true),
-            
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(data['restaurantName'] ?? "License Info", 
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: profile.textColor)),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isActive ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        isActive ? "ACTIVE" : "BLOCKED",
+                        style: TextStyle(color: isActive ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _detailRow("License Key", data['licenseKey'] ?? "N/A", Icons.vpn_key, profile, isSelectable: true),
+                _detailRow("Validity", data['validTillFormatted'] ?? "N/A", Icons.calendar_today, profile),
+                
+                const Divider(height: 32),
+                Text("USER PERMISSIONS & CONTROLS", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: profile.secondaryTextColor, letterSpacing: 1)),
+                const SizedBox(height: 16),
+                
+                _toggleTile("Payment Reminder", "Show daily payment alerts to user", isReminderEnabled, Icons.notifications_active_rounded, profile, (val) async {
+                  await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({'isReminderEnabled': val});
+                  setModalState(() => isReminderEnabled = val);
+                }),
+                _toggleTile("Block Sales", "Prevent user from creating new sales", saleBlocked, Icons.block_flipped, profile, (val) async {
+                  await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({'saleBlocked': val});
+                  setModalState(() => saleBlocked = val);
+                }),
+                _toggleTile("Block Expenses/Purchase", "Prevent user from adding purchases", expenseBlocked, Icons.shopping_bag_outlined, profile, (val) async {
+                  await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({'expenseBlocked': val});
+                  setModalState(() => expenseBlocked = val);
+                }),
+                
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _editExpiryDate(data, profile),
+                        icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                        label: const Text("EDIT EXPIRY"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({
+                            'status': isActive ? 'blocked' : 'active'
+                          });
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(isActive ? "License Blocked!" : "License Unblocked!"),
+                            backgroundColor: isActive ? Colors.red : Colors.green,
+                          ));
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isActive ? Colors.red : Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: Text(isActive ? "BLOCK APP" : "ACTIVATE APP", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: TextButton.icon(
                     onPressed: () => Share.share("Restaurant: ${data['restaurantName']}\nLicense: ${data['licenseKey']}\nDownload App: $_driveLink"),
-                    icon: const Icon(Icons.share, size: 18),
-                    label: const Text("SHARE"),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({
-                        'status': isActive ? 'blocked' : 'active'
-                      });
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(isActive ? "License Blocked!" : "License Unblocked!"),
-                        backgroundColor: isActive ? Colors.red : Colors.green,
-                      ));
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isActive ? Colors.red : Colors.green,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: Text(isActive ? "BLOCK" : "ACTIVATE", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.share),
+                    label: const Text("SHARE LICENSE KEY"),
                   ),
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  Widget _toggleTile(String title, String sub, bool value, IconData icon, ProfileProvider profile, Function(bool) onChanged) {
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      secondary: Icon(icon, color: value ? profile.themeColor : profile.secondaryTextColor),
+      title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
+      subtitle: Text(sub, style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
+      activeColor: profile.themeColor,
+      contentPadding: EdgeInsets.zero,
+    );
+  }
+
+  void _editExpiryDate(Map<String, dynamic> data, ProfileProvider profile) async {
+    DateTime initial = data['validTill'] != null ? DateTime.parse(data['validTill']) : DateTime.now();
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+
+    if (picked != null) {
+      await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({
+        'validTill': picked.toIso8601String(),
+        'validTillFormatted': DateFormat('dd/MM/yyyy').format(picked),
+        'isLifetime': false,
+      });
+      if (mounted) Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Expiry Date Updated!")));
+    }
   }
 
   Widget _detailRow(String label, String value, IconData icon, ProfileProvider profile, {bool isSelectable = false, Color? valueColor}) {

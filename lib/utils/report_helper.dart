@@ -9,6 +9,19 @@ import '../models/transaction_model.dart';
 import 'package:intl/intl.dart';
 
 class ReportHelper {
+  static Map<String, double> calculateStats(List<TransactionModel> transactions) {
+    double income = 0;
+    double expense = 0;
+    for (var tx in transactions) {
+      if (tx.type == 'sale') {
+        income += tx.amount;
+      } else {
+        expense += tx.amount;
+      }
+    }
+    return {'income': income, 'expense': expense};
+  }
+
   static Future<void> generatePDF(BuildContext context, List<TransactionModel> transactions) async {
     try {
       final pdf = pw.Document();

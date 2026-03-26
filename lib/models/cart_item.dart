@@ -9,6 +9,7 @@ class CartItem {
   double extraPieces; 
   double extraPrice; 
   String servingMethod; // Dine-in or Takeaway
+  String tableNumber;
 
   CartItem({
     required this.item,
@@ -19,5 +20,6 @@ class CartItem {
     this.extraPieces = 0,
     this.extraPrice = 0,
     this.servingMethod = 'Dine-in',
+    this.tableNumber = '1',
   });
 }

@@ -88,6 +88,57 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     }
   }
 
+  void _showManualQuantityDialog(CartItem cartItem) {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final controller = TextEditingController(text: cartItem.quantity.toInt().toString());
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Enter Quantity', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'Quantity',
+            fillColor: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100,
+          ),
+          style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () {
+              final newQty = double.tryParse(controller.text) ?? 0;
+              setState(() {
+                if (newQty > 0) {
+                  cartItem.quantity = newQty;
+                } else {
+                  widget.cart.remove(cartItem);
+                }
+                _calculateTotal();
+              });
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: profile.themeColor, foregroundColor: Colors.white),
+            child: const Text('UPDATE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _setAllServingMethod(String method) {
+    setState(() {
+      for (var item in widget.cart) {
+        item.servingMethod = method;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final profileProvider = Provider.of<ProfileProvider>(context);
@@ -171,6 +222,12 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                         ),
                       const SizedBox(height: 16),
                       _entryField(_discountController, 'Add Discount (₹)', Icons.local_offer_rounded, themeColor, profileProvider, onChanged: (_) => _calculateTotal()),
+                      
+                      if (isSale) ...[
+                        const SizedBox(height: 16),
+                        _buildMasterServingToggle(profileProvider),
+                      ],
+                      
                       const SizedBox(height: 140),
                     ],
                   ),
@@ -179,6 +236,57 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
             ],
           ),
           bottomSheet: _buildBottomActionArea(profileProvider, isSale, isPurchase),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMasterServingToggle(ProfileProvider profile) {
+    bool isAllDineIn = widget.cart.every((item) => item.servingMethod == 'Dine-in');
+    bool isAllTakeaway = widget.cart.every((item) => item.servingMethod == 'Takeaway');
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: profile.cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('SET ALL ITEMS SERVING METHOD', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 0.5)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _servingRadioButton('Dine-in', Icons.restaurant, isAllDineIn, profile)),
+              const SizedBox(width: 12),
+              Expanded(child: _servingRadioButton('Takeaway', Icons.shopping_bag, isAllTakeaway, profile)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _servingRadioButton(String method, IconData icon, bool isSelected, ProfileProvider profile) {
+    return InkWell(
+      onTap: () => _setAllServingMethod(method),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? profile.themeColor : profile.themeColor.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? profile.themeColor : profile.themeColor.withOpacity(0.2)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: isSelected ? Colors.white : profile.themeColor),
+            const SizedBox(width: 8),
+            Text(method, style: TextStyle(color: isSelected ? Colors.white : profile.themeColor, fontWeight: FontWeight.bold, fontSize: 13)),
+          ],
         ),
       ),
     );
@@ -250,10 +358,10 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         final c = widget.cart[index];
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: profile.cardColor,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(18),
             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
             border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
           ),
@@ -265,8 +373,8 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(c.item.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: profile.textColor)),
-                        Text('${c.variant} | ${c.item.category}', style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
+                        Text(c.item.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: profile.textColor)),
+                        Text('${c.variant} | ${c.item.category}', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
                       ],
                     ),
                   ),
@@ -279,11 +387,11 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     _calculateTotal();
                   })),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Column(
                       children: [
-                        Text('${c.quantity.toInt()}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
-                        Text(c.unit, style: TextStyle(fontSize: 9, color: profile.secondaryTextColor)),
+                        Text('${c.quantity.toInt()}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13)),
+                        Text(c.unit, style: TextStyle(fontSize: 8, color: profile.secondaryTextColor)),
                       ],
                     ),
                   ),
@@ -291,33 +399,33 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     c.quantity++;
                     _calculateTotal();
                   })),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Text('${profile.currencySymbol}${(c.price * c.quantity + c.extraPrice).toStringAsFixed(0)}', 
-                    style: TextStyle(fontWeight: FontWeight.w900, color: profile.themeColor, fontSize: 14)),
+                    style: TextStyle(fontWeight: FontWeight.w900, color: profile.themeColor, fontSize: 13)),
                 ],
               ),
-              const Divider(height: 24),
+              const Divider(height: 16),
               Row(
                 children: [
                   Expanded(
-                    child: _smallEntryField('Price/Unit', profile, (val) {
+                    child: _smallEntryField('Price', profile, (val) {
                       setState(() {
                         c.price = double.tryParse(val) ?? c.price;
                         _calculateTotal();
                       });
                     }, initial: c.price.toStringAsFixed(0)),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
-                    child: _smallEntryField('Extra ${c.unit}', profile, (val) {
+                    child: _smallEntryField('Ex Qty', profile, (val) {
                       setState(() {
                         c.extraPieces = double.tryParse(val) ?? 0;
                       });
                     }, initial: c.extraPieces > 0 ? c.extraPieces.toInt().toString() : ''),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
-                    child: _smallEntryField('Extra Rs', profile, (val) {
+                    child: _smallEntryField('Ex Rs', profile, (val) {
                       setState(() {
                         c.extraPrice = double.tryParse(val) ?? 0;
                         _calculateTotal();
@@ -327,11 +435,11 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                 ],
               ),
               if (widget.type == 'sale') ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     _servingCheckbox(c, 'Dine-in', profile),
-                    const SizedBox(width: 24),
+                    const SizedBox(width: 20),
                     _servingCheckbox(c, 'Takeaway', profile),
                   ],
                 ),
@@ -349,13 +457,13 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       onTap: () => setState(() => item.servingMethod = method),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 22,
-              height: 22,
+              width: 18,
+              height: 18,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
@@ -365,14 +473,14 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                 color: isSelected ? profile.themeColor : Colors.transparent,
               ),
               child: isSelected 
-                ? const Icon(Icons.check, size: 14, color: Colors.white) 
+                ? const Icon(Icons.check, size: 10, color: Colors.white) 
                 : null,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Text(
               method, 
               style: TextStyle(
-                fontSize: 13, 
+                fontSize: 11, 
                 fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600, 
                 color: isSelected ? profile.themeColor : profile.secondaryTextColor,
               ),
@@ -388,16 +496,16 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       initialValue: initial,
       keyboardType: TextInputType.number,
       onChanged: onChange,
-      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.textColor),
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: profile.textColor),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: profile.secondaryTextColor.withValues(alpha: 0.5)),
         isDense: true,
-        contentPadding: const EdgeInsets.all(8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         fillColor: profile.scaffoldColor,
         filled: true,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200)),
       ),
     );
   }
@@ -443,43 +551,50 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   }
 
   Widget _buildBottomActionArea(ProfileProvider profile, bool isSale, bool isPurchase) {
+    bool canShowPending = isSale && (widget.existingTransaction == null || widget.existingTransaction?.status == 'pending');
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       decoration: BoxDecoration(
-        color: profile.scaffoldColor,
+        color: profile.cardColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))],
       ),
       child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Row(
           children: [
-            if (isSale && (widget.existingTransaction == null || widget.existingTransaction?.status == 'pending'))
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+            if (canShowPending) ...[
+              Expanded(
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : () => _handleSave(isPending: true),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueGrey.shade600,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    backgroundColor: Colors.blueGrey.shade100,
+                    foregroundColor: Colors.blueGrey.shade800,
+                    minimumSize: const Size(double.infinity, 54),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     elevation: 0,
                   ),
-                  child: const Text('SAVE AS PENDING', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.white)),
+                  child: const Text('PENDING', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
                 ),
               ),
-            ElevatedButton(
-              onPressed: _isLoading ? null : () => _handleSave(isPending: false),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isSale ? Colors.green.shade600 : (isPurchase ? Colors.orange.shade700 : Colors.red.shade600),
-                minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                elevation: 0,
-                side: BorderSide.none,
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              flex: 2,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : () => _handleSave(isPending: false),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isSale ? Colors.green.shade600 : (isPurchase ? Colors.orange.shade700 : Colors.red.shade600),
+                  minimumSize: const Size(double.infinity, 54),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 4,
+                  shadowColor: (isSale ? Colors.green : Colors.orange).withOpacity(0.3),
+                ),
+                child: _isLoading 
+                  ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
+                  : Text(widget.existingTransaction?.status == 'pending' ? 'COMPLETE BILL' : 'CONFIRM BILL', 
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Colors.white, letterSpacing: 1)),
               ),
-              child: _isLoading 
-                ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
-                : Text(widget.existingTransaction?.status == 'pending' ? 'COMPLETE & SAVE BILL' : 'CONFIRM & SAVE BILL', 
-                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.white)),
             ),
           ],
         ),
@@ -521,6 +636,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       final txProvider = Provider.of<TransactionProvider>(context, listen: false);
       final itemProvider = Provider.of<ItemProvider>(context, listen: false);
       
+      // logic: Include table number and serving method in description
       String description = jsonEncode(widget.cart.map((e) => {
         'id': e.item.id,
         'name': e.item.name,
@@ -530,6 +646,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         'extra_qty': e.extraPieces,
         'extra_price': e.extraPrice,
         'serving_method': e.servingMethod,
+        'table_number': e.tableNumber,
       }).toList());
       
       double paidAmt = totalAmt;
@@ -539,7 +656,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
 
       final txData = TransactionModel(
         id: widget.existingTransaction?.id,
-        type: widget.type, 
+        type: widget.existingTransaction?.type ?? widget.type, 
         category: widget.selectedCategory, 
         amount: totalAmt, 
         paidAmount: paidAmt, 
@@ -554,16 +671,25 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
 
       if (widget.existingTransaction == null) {
         await txProvider.addTransaction(txData, itemProvider);
-        if (isPending) {
-           NotificationService().showNotification(
-             id: txData.id ?? 999,
-             title: 'Pending Order Reminder',
-             body: 'You have a pending order of ₹${totalAmt.toStringAsFixed(0)}. Don\'t forget to complete it!',
-             payload: 'pending_order',
-           );
+        if (isPending && txData.id != null) {
+          await NotificationService().scheduleRepeatingReminder(
+            txData.id!,
+            'Pending Order Reminder',
+            'Order for ${txData.customerContact.isNotEmpty ? txData.customerContact : "Customer"} (₹${totalAmt.toStringAsFixed(0)}) is still pending.',
+          );
         }
       } else {
         await txProvider.updateTransaction(txData, itemProvider, oldTx: widget.existingTransaction);
+        if (!isPending && txData.id != null) {
+          await NotificationService().cancelOrderReminders(txData.id!);
+        } else if (isPending && txData.id != null) {
+           await NotificationService().cancelOrderReminders(txData.id!);
+           await NotificationService().scheduleRepeatingReminder(
+            txData.id!,
+            'Pending Order Reminder',
+            'Order for ${txData.customerContact.isNotEmpty ? txData.customerContact : "Customer"} (₹${totalAmt.toStringAsFixed(0)}) is still pending.',
+          );
+        }
       }
 
       if (mounted) {
@@ -573,12 +699,11 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
           Navigator.pop(context, true);
           Navigator.pop(context);
         }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isPending ? 'Order Saved as Pending!' : 'Saved Successfully!')));
       }
     } catch (e) { 
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'))); 
     } finally {
-      if (mounted) setState(() => _isLoading = false); 
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 }

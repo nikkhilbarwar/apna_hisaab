@@ -13,6 +13,7 @@ class ItemModel {
   double? halfQty; 
   String itemType; 
   int isSynced; // 0 for no, 1 for yes
+  int lowStockAlert; // 0 for off, 1 for on
 
   ItemModel({
     this.id,
@@ -29,6 +30,7 @@ class ItemModel {
     this.halfQty,
     this.itemType = 'selling',
     this.isSynced = 0,
+    this.lowStockAlert = 1, // Default ON
   });
 
   Map<String, dynamic> toMap() {
@@ -47,6 +49,7 @@ class ItemModel {
       'half_qty': halfQty,
       'item_type': itemType,
       'is_synced': isSynced,
+      'low_stock_alert': lowStockAlert,
     };
   }
 
@@ -66,6 +69,7 @@ class ItemModel {
       halfQty: map['half_qty'] != null ? (map['half_qty'] as num).toDouble() : null,
       itemType: map['item_type'] ?? 'selling',
       isSynced: map['is_synced'] ?? 0,
+      lowStockAlert: map['low_stock_alert'] ?? 1,
     );
   }
 }

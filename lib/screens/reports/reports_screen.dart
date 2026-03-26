@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../providers/transaction_provider.dart';
-import '../../providers/staff_provider.dart';
-import '../../providers/profile_provider.dart';
-import '../../providers/category_provider.dart';
 import '../../models/transaction_model.dart';
-import '../../models/staff_model.dart';
+import '../../providers/transaction_provider.dart';
+import '../../providers/category_provider.dart';
+import '../../providers/profile_provider.dart';
+import '../../providers/staff_provider.dart';
 import '../../services/export_service.dart';
-import '../history/history_screen.dart';
+import '../../services/notification_service.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -17,26 +16,14 @@ class ReportsScreen extends StatefulWidget {
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _ReportsScreenState extends State<ReportsScreen> {
+  int _currentIndex = 0;
   DateTimeRange _selectedRange = DateTimeRange(
-    start: DateTime.now(),
+    start: DateTime.now().subtract(const Duration(days: 7)),
     end: DateTime.now(),
   );
   String _selectedCategory = 'All';
   String _searchItem = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +33,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     return Scaffold(
       backgroundColor: profile.scaffoldColor,
       appBar: AppBar(
-        title: const Text('BUSINESS REPORTS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 1, color: Colors.white)),
+        title: const Text('BUSINESS REPORTS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1, color: Colors.white)),
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [themeColor.withOpacity(0.8), themeColor]),
@@ -54,28 +41,18 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.file_download_outlined, color: Colors.white),
+            tooltip: 'Download Report',
+            icon: const Icon(Icons.file_download_outlined, color: Colors.white, size: 26),
             onPressed: () => _showExportOptions(context),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(text: 'Sales'),
-            Tab(text: 'Purchases'),
-            Tab(text: 'Staff'),
-          ],
-        ),
       ),
       body: Column(
         children: [
           _buildFilters(context, profile),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
+            child: IndexedStack(
+              index: _currentIndex,
               children: [
                 _ReportList(type: 'sale', range: _selectedRange, category: _selectedCategory, item: _searchItem),
                 _ReportList(type: 'purchase', range: _selectedRange, category: _selectedCategory, item: _searchItem),
@@ -85,6 +62,26 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
           ),
         ],
       ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -5))],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          selectedItemColor: themeColor,
+          unselectedItemColor: profile.secondaryTextColor,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: profile.cardColor,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.auto_graph_rounded), label: 'SALES'),
+            BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'EXPENSES'),
+            BottomNavigationBarItem(icon: Icon(Icons.people_alt_rounded), label: 'STAFF'),
+          ],
+        ),
+      ),
     );
   }
 
@@ -92,7 +89,10 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     final catProvider = Provider.of<CategoryProvider>(context);
     return Container(
       padding: const EdgeInsets.all(16),
-      color: profile.cardColor,
+      decoration: BoxDecoration(
+        color: profile.cardColor,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]
+      ),
       child: Column(
         children: [
           Row(
@@ -117,8 +117,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                     decoration: BoxDecoration(
-                      border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+                      color: profile.scaffoldColor,
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -129,7 +130,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                           DateFormat('dd MMM').format(_selectedRange.start) == DateFormat('dd MMM').format(_selectedRange.end)
                             ? DateFormat('dd MMM yyyy').format(_selectedRange.start)
                             : '${DateFormat('dd MMM').format(_selectedRange.start)} - ${DateFormat('dd MMM').format(_selectedRange.end)}',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: profile.textColor),
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: profile.textColor),
                         ),
                       ],
                     ),
@@ -141,13 +142,15 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+                    color: profile.scaffoldColor,
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: _selectedCategory,
                       isExpanded: true,
+                      dropdownColor: profile.cardColor,
                       style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold, fontSize: 13),
                       items: ['All', ...catProvider.categories.map((c) => c.name)].map((String value) {
                         return DropdownMenuItem<String>(value: value, child: Text(value));
@@ -159,18 +162,19 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'Search by item name...',
-              prefixIcon: const Icon(Icons.search, size: 20),
-              contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              filled: true,
-              fillColor: profile.scaffoldColor,
+          if (_currentIndex != 2) ...[
+            const SizedBox(height: 12),
+            TextField(
+              style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Search items in this period...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                fillColor: profile.scaffoldColor,
+              ),
+              onChanged: (val) => setState(() => _searchItem = val),
             ),
-            onChanged: (val) => setState(() => _searchItem = val),
-          ),
+          ],
         ],
       ),
     );
@@ -190,31 +194,34 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('EXPORT REPORT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor)),
+            Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2))),
+            Text('DOWNLOAD REPORT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor, letterSpacing: 1)),
             const SizedBox(height: 24),
-            _exportTile(Icons.table_view_rounded, 'Export as Excel (XLSX)', Colors.green, () {
+            _exportTile(Icons.table_view_rounded, 'Download as Excel Sheet', Colors.green, () async {
               final txs = txProvider.getFilteredTransactions(
-                type: _tabController.index == 0 ? 'sale' : 'purchase',
+                type: _currentIndex == 0 ? 'sale' : 'purchase',
                 range: _selectedRange,
                 category: _selectedCategory,
                 itemName: _searchItem,
+                status: 'completed'
               );
-              final String reportTitle = "${_tabController.index == 0 ? 'Sales' : 'Purchase'}_Report";
-              exportService.exportToExcel(txs, reportTitle);
               Navigator.pop(context);
-            }),
+              await exportService.exportToExcel(txs, "${_currentIndex == 0 ? 'Sales' : 'Expense'}_Report");
+              NotificationService().showNotification(id: 888, title: "Report Downloaded", body: "Excel report saved in Documents folder.");
+            }, profile),
             const SizedBox(height: 12),
-            _exportTile(Icons.picture_as_pdf_rounded, 'Export as PDF', Colors.red, () {
+            _exportTile(Icons.picture_as_pdf_rounded, 'Download as PDF Report', Colors.red, () async {
               final txs = txProvider.getFilteredTransactions(
-                type: _tabController.index == 0 ? 'sale' : 'purchase',
+                type: _currentIndex == 0 ? 'sale' : 'purchase',
                 range: _selectedRange,
                 category: _selectedCategory,
                 itemName: _searchItem,
+                status: 'completed'
               );
-              final String reportTitle = "${_tabController.index == 0 ? 'Sales' : 'Purchase'}_Report";
-              exportService.exportToPdf(txs, reportTitle);
               Navigator.pop(context);
-            }),
+              await exportService.exportToPdf(txs, "${_currentIndex == 0 ? 'Sales' : 'Expense'}_Report");
+              NotificationService().showNotification(id: 889, title: "Report Downloaded", body: "PDF report saved in Documents folder.");
+            }, profile),
             const SizedBox(height: 20),
           ],
         ),
@@ -222,13 +229,14 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     );
   }
 
-  Widget _exportTile(IconData icon, String title, Color color, VoidCallback onTap) {
+  Widget _exportTile(IconData icon, String title, Color color, VoidCallback onTap, ProfileProvider profile) {
     return ListTile(
       onTap: onTap,
-      leading: Icon(icon, color: color),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
+      title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
+      trailing: const Icon(Icons.file_download_outlined, size: 18),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      tileColor: color.withOpacity(0.05),
+      tileColor: profile.scaffoldColor,
     );
   }
 }
@@ -245,10 +253,24 @@ class _ReportList extends StatelessWidget {
   Widget build(BuildContext context) {
     final txProvider = Provider.of<TransactionProvider>(context);
     final profile = Provider.of<ProfileProvider>(context);
-    final filtered = txProvider.getFilteredTransactions(type: type, range: range, category: category, itemName: item);
+    
+    final filtered = txProvider.getFilteredTransactions(
+      type: type, 
+      range: range, 
+      category: category == 'All' ? null : category, 
+      itemName: item,
+      status: 'completed'
+    );
 
     if (filtered.isEmpty) {
-      return Center(child: Text('No records found for this period', style: TextStyle(color: profile.secondaryTextColor)));
+      return Center(child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.analytics_outlined, size: 64, color: profile.secondaryTextColor.withOpacity(0.1)),
+          const SizedBox(height: 16),
+          Text('No records found for this period', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+        ],
+      ));
     }
 
     double total = filtered.fold(0, (sum, tx) => sum + tx.amount);
@@ -257,11 +279,14 @@ class _ReportList extends StatelessWidget {
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          color: profile.themeColor.withOpacity(0.1),
+          decoration: BoxDecoration(
+            color: profile.themeColor.withOpacity(0.05),
+            border: Border(bottom: BorderSide(color: profile.themeColor.withOpacity(0.1)))
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${filtered.length} TRANSACTIONS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.themeColor)),
+              Text('${filtered.length} TRANSACTIONS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: profile.themeColor, letterSpacing: 0.5)),
               Text('TOTAL: ${profile.currencySymbol}${total.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.themeColor)),
             ],
           ),
@@ -272,14 +297,26 @@ class _ReportList extends StatelessWidget {
             itemCount: filtered.length,
             itemBuilder: (context, index) {
               final tx = filtered[index];
-              return Card(
+              return Container(
                 margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                decoration: BoxDecoration(
+                  color: profile.cardColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
+                ),
                 child: ListTile(
                   onTap: () => _showDetails(context, tx, profile),
-                  title: Text(tx.type == 'sale' ? (tx.parsedItems.isNotEmpty ? tx.parsedItems[0]['name'] ?? 'Sale' : 'Sale') : tx.category, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(DateFormat('dd MMM, hh:mm a').format(tx.date), style: const TextStyle(fontSize: 11)),
-                  trailing: Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, color: type == 'sale' ? Colors.green : Colors.red)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: (type == 'sale' ? Colors.green : Colors.red).withOpacity(0.1), shape: BoxShape.circle),
+                    child: Icon(type == 'sale' ? Icons.south_west_rounded : Icons.north_east_rounded, color: type == 'sale' ? Colors.green : Colors.red, size: 18),
+                  ),
+                  // logic: Show item name with its variant to avoid confusion
+                  title: Text(tx.type == 'sale' ? (tx.parsedItems.isNotEmpty ? "${tx.parsedItems[0]['name']}${tx.parsedItems[0]['variant'] != '' ? ' (${tx.parsedItems[0]['variant']})' : ''}" : 'Sale') : tx.category, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
+                  subtitle: Text(DateFormat('dd MMM, hh:mm a').format(tx.date), style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
+                  trailing: Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, color: type == 'sale' ? Colors.green.shade700 : Colors.red.shade700, fontSize: 15)),
                 ),
               );
             },
@@ -294,7 +331,71 @@ class _ReportList extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _TransactionDetailSheet(tx: tx, profile: profile),
+      builder: (context) => Container(
+        decoration: BoxDecoration(color: profile.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
+            Text('TRANSACTION DETAILS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.secondaryTextColor, letterSpacing: 1.5)),
+            const SizedBox(height: 20),
+            _detailRow('Date/Time', DateFormat('dd MMM yyyy, hh:mm a').format(tx.date), profile),
+            _detailRow('Category', tx.category, profile),
+            _detailRow('Payment Mode', tx.paymentMode, profile),
+            const Divider(height: 40),
+            Text('ITEMS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)),
+            const SizedBox(height: 12),
+            ...tx.parsedItems.map((i) => Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // logic: Include variant in detail view too
+                  Text('${i['name']}${i['variant'] != '' ? ' (${i['variant']})' : ''} x ${i['qty']}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
+                  Text('${profile.currencySymbol}${i['price']}', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            )),
+            const Divider(height: 40),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('TOTAL AMOUNT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.textColor)),
+                Text('${profile.currencySymbol}${tx.amount}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: profile.themeColor)),
+              ],
+            ),
+            const SizedBox(height: 32),
+            if (tx.type == 'sale')
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final exportService = ExportService();
+                  await exportService.saveBillAsPdf(tx, profile.businessName);
+                  Navigator.pop(context);
+                },
+                icon: const Icon(Icons.print_rounded),
+                label: const Text('REPRINT BILL', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: profile.themeColor,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 56),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(String l, String v, ProfileProvider profile) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(l, style: TextStyle(color: profile.secondaryTextColor, fontSize: 13)),
+        Text(v, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13))
+      ]),
     );
   }
 }
@@ -309,7 +410,16 @@ class _StaffReportList extends StatelessWidget {
     final profile = Provider.of<ProfileProvider>(context);
     final staffList = staffProvider.staffList;
 
-    if (staffList.isEmpty) return Center(child: Text('No staff records found', style: TextStyle(color: profile.secondaryTextColor)));
+    if (staffList.isEmpty) {
+      return Center(child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.people_outline, size: 64, color: profile.secondaryTextColor.withOpacity(0.1)),
+          const SizedBox(height: 16),
+          Text('No staff records found', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+        ],
+      ));
+    }
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -317,23 +427,30 @@ class _StaffReportList extends StatelessWidget {
       itemBuilder: (context, index) {
         final staff = staffList[index];
         final payable = staffProvider.calculatePayable(staff);
-        return Card(
+        return Container(
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(
+            color: profile.cardColor,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+          ),
           child: ExpansionTile(
-            leading: CircleAvatar(backgroundColor: profile.themeColor.withOpacity(0.1), child: const Icon(Icons.person_outline)),
-            title: Text(staff.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('Contact: ${staff.contact}'),
+            shape: const RoundedRectangleBorder(side: BorderSide.none),
+            collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
+            leading: CircleAvatar(backgroundColor: profile.themeColor.withOpacity(0.1), child: Icon(Icons.person_outline, color: profile.themeColor, size: 20)),
+            title: Text(staff.name, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
+            subtitle: Text('Contact: ${staff.contact}', style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: Column(
                   children: [
-                    _row('Monthly Salary', '${profile.currencySymbol}${staff.monthlySalary}'),
-                    _row('Advance Taken', '${profile.currencySymbol}${staff.advance}'),
-                    _row('Leaves', '${staff.totalLeaves} days'),
                     const Divider(),
-                    _row('Net Payable', '${profile.currencySymbol}${payable}', isBold: true),
+                    _row('Monthly Salary', '${profile.currencySymbol}${staff.monthlySalary}', profile),
+                    _row('Advance Taken', '${profile.currencySymbol}${staff.advance}', profile, color: Colors.red),
+                    _row('Leaves Taken', '${staff.totalLeaves} days', profile),
+                    const Divider(),
+                    _row('NET PAYABLE', '${profile.currencySymbol}${payable}', profile, isBold: true, color: profile.themeColor),
                   ],
                 ),
               )
@@ -344,82 +461,13 @@ class _StaffReportList extends StatelessWidget {
     );
   }
 
-  Widget _row(String l, String v, {bool isBold = false}) {
+  Widget _row(String l, String v, ProfileProvider profile, {bool isBold = false, Color? color}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l), Text(v, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal))]),
-    );
-  }
-}
-
-class _TransactionDetailSheet extends StatelessWidget {
-  final TransactionModel tx;
-  final ProfileProvider profile;
-  const _TransactionDetailSheet({required this.tx, required this.profile});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: profile.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('TRANSACTION DETAILS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor)),
-          const SizedBox(height: 24),
-          _detailRow('Date/Time', DateFormat('dd MMM yyyy, hh:mm a').format(tx.date)),
-          _detailRow('Type', tx.type.toUpperCase()),
-          _detailRow('Category', tx.category),
-          _detailRow('Payment', tx.paymentMode),
-          const Divider(height: 32),
-          ...tx.parsedItems.map((i) => Column(
-            children: [
-              _detailRow(i['name'] ?? '', '${i['qty']} x ${i['price']}'),
-              if (i['serving_method'] != null && i['serving_method'] != '')
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const SizedBox(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                        child: Text(i['serving_method']!, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: profile.themeColor)),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          )),
-          const Divider(height: 32),
-          _detailRow('Total Amount', '${profile.currencySymbol}${tx.amount}', isBold: true),
-          const SizedBox(height: 32),
-          if (tx.type == 'sale')
-            ElevatedButton.icon(
-              onPressed: () async {
-                final exportService = ExportService();
-                final path = await exportService.saveBillAsPdf(tx, "Apna Hisaab");
-                if (path != null && context.mounted) {
-                   Navigator.pop(context);
-                   ScaffoldMessenger.of(context).showSnackBar(
-                     SnackBar(content: Text("Bill saved at: $path"), backgroundColor: Colors.green),
-                   );
-                }
-              },
-              icon: const Icon(Icons.print_rounded),
-              label: const Text('REPRINT / SAVE BILL'),
-              style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 54)),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailRow(String l, String v, {bool isBold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(l), Text(v, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal))]),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(l, style: TextStyle(color: profile.secondaryTextColor, fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+        Text(v, style: TextStyle(fontWeight: isBold ? FontWeight.w900 : FontWeight.bold, color: color ?? profile.textColor, fontSize: isBold ? 14 : 12))
+      ]),
     );
   }
 }

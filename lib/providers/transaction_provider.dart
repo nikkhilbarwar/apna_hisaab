@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/transaction_model.dart';
 import '../core/database/database_helper.dart';
 import '../services/firebase_service.dart';
+import '../services/notification_service.dart';
 import 'item_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
@@ -11,6 +12,9 @@ class TransactionProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
   Timer? _syncTimer;
   bool _syncRequired = false;
+  bool _isSyncing = false;
+
+  bool get isSyncing => _isSyncing;
 
   String _normalizeStatus(String? status) {
     return (status ?? '').trim().toLowerCase();
@@ -29,9 +33,46 @@ class TransactionProvider with ChangeNotifier {
       _allTransactions.where((tx) => tx.isDeleted == 1).toList();
 
   TransactionProvider() {
-    fetchTransactions();
+    _initializeData();
     _setupConnectivityListener();
     _startScheduledSync();
+  }
+
+  Future<void> _initializeData() async {
+    await fetchTransactions();
+    await syncAllUnsynced();
+    if (_allTransactions.isEmpty) {
+      await restoreFromCloud();
+    }
+  }
+
+  Future<void> restoreFromCloud() async {
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult.any((result) => result != ConnectivityResult.none)) {
+      _isSyncing = true;
+      notifyListeners();
+      try {
+        final cloudData = await _firebaseService.fetchAllTransactions();
+        if (cloudData.isNotEmpty) {
+          for (var tx in cloudData) {
+            bool exists = await _checkIfTransactionExistsLocally(tx.id!);
+            if (!exists) {
+              await DatabaseHelper.instance.insertTransaction(tx);
+            }
+          }
+          await fetchTransactions();
+        }
+      } catch (e) {
+        debugPrint("Restore error: $e");
+      } finally {
+        _isSyncing = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> _checkIfTransactionExistsLocally(int id) async {
+    return _allTransactions.any((t) => t.id == id);
   }
 
   void _setupConnectivityListener() {
@@ -75,19 +116,17 @@ class TransactionProvider with ChangeNotifier {
     }
   }
 
-  // --- Advanced Filtering for Reports ---
   List<TransactionModel> getFilteredTransactions({
-    required String type, // 'sale' or 'purchase'
+    required String type, 
     DateTimeRange? range,
     String? category,
     String? itemName,
     String? status,
   }) {
     return _allTransactions.where((tx) {
-      bool matchType = type == 'sale' ? tx.type == 'sale' : (tx.type == 'purchase' || tx.type == 'expense');
+      bool matchType = type == 'all' || tx.type == type;
       bool matchDelete = tx.isDeleted == 0;
       bool matchStatus = status == null || _normalizeStatus(tx.status) == _normalizeStatus(status);
-      
       bool matchDate = true;
       if (range != null) {
         final start = DateTime(range.start.year, range.start.month, range.start.day);
@@ -95,14 +134,9 @@ class TransactionProvider with ChangeNotifier {
         matchDate = tx.date.isAfter(start.subtract(const Duration(seconds: 1))) && 
                     tx.date.isBefore(end);
       }
-
       bool matchCategory = category == null || category == 'All' || tx.category == category;
-      
-      bool matchItem = true;
-      if (itemName != null && itemName.isNotEmpty) {
-        matchItem = tx.parsedItems.any((i) => 
+      bool matchItem = itemName == null || itemName.isEmpty || tx.parsedItems.any((i) => 
           (i['name'] ?? '').toLowerCase().contains(itemName.toLowerCase()));
-      }
 
       return matchType && matchDelete && matchStatus && matchDate && matchCategory && matchItem;
     }).toList();
@@ -115,7 +149,7 @@ class TransactionProvider with ChangeNotifier {
       tx.id = id;
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
       await fetchTransactions();
-      await _syncSingleTransaction(tx);
+      _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error adding transaction: $e");
     }
@@ -128,8 +162,14 @@ class TransactionProvider with ChangeNotifier {
       if (oldTx != null) await _applyStockEffect(oldTx, itemProvider, isAddingEffect: false);
       await DatabaseHelper.instance.updateTransaction(tx);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
+      
+      // If completed, cancel reminders
+      if (tx.status == 'completed' && tx.id != null) {
+        await NotificationService().cancelOrderReminders(tx.id!);
+      }
+
       await fetchTransactions();
-      await _syncSingleTransaction(tx);
+      _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error updating transaction: $e");
     }
@@ -140,8 +180,15 @@ class TransactionProvider with ChangeNotifier {
       final tx = _allTransactions.firstWhere((t) => t.id == id);
       await DatabaseHelper.instance.softDeleteTransaction(id);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: false);
+      
+      // Cancel notifications upon delete
+      await NotificationService().cancelOrderReminders(id);
+      
+      tx.isDeleted = 1;
+      tx.deletedAt = DateTime.now();
+      
       await fetchTransactions();
-      await _syncSingleTransaction(tx);
+      _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error soft deleting transaction: $e");
     }
@@ -152,8 +199,12 @@ class TransactionProvider with ChangeNotifier {
       final tx = _allTransactions.firstWhere((t) => t.id == id);
       await DatabaseHelper.instance.restoreTransaction(id);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
+      
+      tx.isDeleted = 0;
+      tx.deletedAt = null;
+      
       await fetchTransactions();
-      await _syncSingleTransaction(tx);
+      _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error restoring transaction: $e");
     }
@@ -170,9 +221,7 @@ class TransactionProvider with ChangeNotifier {
         if (totalQty == 0) continue;
 
         int? targetId;
-        try {
-          targetId = itemProvider.items.firstWhere((i) => i.name == name).id;
-        } catch (_) {}
+        try { targetId = itemProvider.items.firstWhere((i) => i.name == name).id; } catch (_) {}
 
         if (targetId != null) {
           bool shouldIncrease = (tx.type == 'sale') ? !isAddingEffect : isAddingEffect;
@@ -187,6 +236,8 @@ class TransactionProvider with ChangeNotifier {
   Future<void> syncAllUnsynced() async {
     final connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult.any((result) => result != ConnectivityResult.none)) {
+      _isSyncing = true;
+      notifyListeners();
       try {
         final unsynced = await DatabaseHelper.instance.getUnsyncedTransactions();
         for (var tx in unsynced) {
@@ -196,6 +247,9 @@ class TransactionProvider with ChangeNotifier {
         await fetchTransactions();
       } catch (e) {
         debugPrint("Batch sync error: $e");
+      } finally {
+        _isSyncing = false;
+        notifyListeners();
       }
     }
   }
@@ -203,18 +257,22 @@ class TransactionProvider with ChangeNotifier {
   Future<void> _syncSingleTransaction(TransactionModel tx) async {
     final connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult.any((result) => result != ConnectivityResult.none)) {
+      _isSyncing = true;
+      notifyListeners();
       try {
         await _firebaseService.syncTransaction(tx);
         await DatabaseHelper.instance.updateTransactionSyncStatus(tx.id!, 1);
-        await fetchTransactions();
       } catch (e) {
         debugPrint("Single sync failed: $e");
+      } finally {
+        _isSyncing = false;
+        notifyListeners();
       }
     }
   }
 
-  // --- Dashboard Stats ---
   double get todaySales => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale').fold(0.0, (sum, tx) => sum + tx.amount);
+  double get todayPurchases => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'purchase' || tx.type == 'expense').fold(0.0, (sum, tx) => sum + tx.amount);
   double get yesterdaySales => _activeDayTransactions(DateTime.now().subtract(const Duration(days: 1))).where((tx) => tx.type == 'sale').fold(0.0, (sum, tx) => sum + tx.amount);
   
   double get cashSalesToday => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale' && (tx.paymentMode == 'Cash' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.cashAmount : tx.amount));
@@ -232,10 +290,7 @@ class TransactionProvider with ChangeNotifier {
     return todaySales / todayTxs.length;
   }
 
-  double get profitToday {
-    // Basic profit calculation (can be refined if cost price is tracked)
-    return todaySales * 0.2; // Assuming 20% margin if cost not specified
-  }
+  double get profitToday => todaySales - todayPurchases;
 
   List<TransactionModel> _activeDayTransactions(DateTime day) {
     return _allTransactions.where((tx) => 

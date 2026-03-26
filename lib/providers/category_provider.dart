@@ -11,14 +11,8 @@ class CategoryProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
   
   List<CategoryModel> get categories {
-    List<CategoryModel> sorted = List.from(_categories);
-    sorted.sort((a, b) {
-      if (a.type == b.type) {
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      }
-      return a.type == 'selling' ? -1 : 1;
-    });
-    return sorted;
+    // Already sorted by display_order in fetchCategories (SQL)
+    return _categories;
   }
 
   Future<void> fetchCategories() async {
@@ -33,10 +27,10 @@ class CategoryProvider with ChangeNotifier {
 
   Future<void> _insertDefaultCategories() async {
     List<CategoryModel> defaults = [
-      CategoryModel(name: 'Sales', iconName: 'point_of_sale', type: 'selling'),
-      CategoryModel(name: 'Raw Material', iconName: 'inventory_2', type: 'purchase'),
-      CategoryModel(name: 'Utility', iconName: 'bolt', type: 'purchase'),
-      CategoryModel(name: 'General', iconName: 'category', type: 'selling'),
+      CategoryModel(name: 'Sales', iconName: 'point_of_sale', type: 'selling', displayOrder: 0),
+      CategoryModel(name: 'Raw Material', iconName: 'inventory_2', type: 'purchase', displayOrder: 1),
+      CategoryModel(name: 'Utility', iconName: 'bolt', type: 'purchase', displayOrder: 2),
+      CategoryModel(name: 'General', iconName: 'category', type: 'selling', displayOrder: 3),
     ];
 
     for (var cat in defaults) {
@@ -52,21 +46,38 @@ class CategoryProvider with ChangeNotifier {
   Future<bool> addCategory(CategoryModel category) async {
     if (isCategoryExists(category.name)) return false;
 
+    // Set display order to end of list
+    category.displayOrder = _categories.length;
+    
     int id = await DatabaseHelper.instance.insertCategory(category);
     category.id = id;
     _categories.add(category);
     
-    // Sync to Firebase
     _firebaseService.syncCategory(category).catchError((e) => debugPrint("Category Sync Error: $e"));
     
     notifyListeners();
     return true;
   }
 
+  Future<void> reorderCategories(int oldIndex, int newIndex) async {
+    if (newIndex > oldIndex) newIndex -= 1;
+    
+    final CategoryModel item = _categories.removeAt(oldIndex);
+    _categories.insert(newIndex, item);
+
+    // Update display orders for all categories
+    for (int i = 0; i < _categories.length; i++) {
+      _categories[i].displayOrder = i;
+      await DatabaseHelper.instance.updateCategory(_categories[i]);
+      _firebaseService.syncCategory(_categories[i]);
+    }
+    
+    notifyListeners();
+  }
+
   Future<void> deleteCategory(int id, String name) async {
     if (name == 'General') return;
 
-    // Update related items and transactions locally
     final db = await DatabaseHelper.instance.database;
     await db.update('items', {'category': 'General'}, where: 'category = ?', whereArgs: [name]);
     await db.update('transactions', {'category': 'General'}, where: 'category = ?', whereArgs: [name]);
@@ -74,9 +85,7 @@ class CategoryProvider with ChangeNotifier {
     await DatabaseHelper.instance.deleteCategory(id);
     _categories.removeWhere((cat) => cat.id == id);
     
-    // Delete from Firebase
     _firebaseService.deleteCategory(id);
-    
     notifyListeners();
   }
   
@@ -84,7 +93,7 @@ class CategoryProvider with ChangeNotifier {
     if (isCategoryExists(category.name, excludeId: category.id)) return false;
 
     final db = await DatabaseHelper.instance.database;
-    await db.update('categories', category.toMap(), where: 'id = ?', whereArgs: [category.id]);
+    await DatabaseHelper.instance.updateCategory(category);
     
     await db.update('items', {'category': category.name}, where: 'category = ?', whereArgs: [oldName]);
     await db.update('transactions', {'category': category.name}, where: 'category = ?', whereArgs: [oldName]);
@@ -98,39 +107,23 @@ class CategoryProvider with ChangeNotifier {
     return true;
   }
 
-  // --- Restore Logic ---
   Future<void> restoreFromCloud() async {
     try {
       final cloudData = await _firebaseService.fetchAllUserData();
-      
-      // Clear Local DB
       await DatabaseHelper.instance.clearAllData();
       
-      // Insert Items
       final items = cloudData['items'] as List<ItemModel>;
-      for (var item in items) {
-        await DatabaseHelper.instance.insertItem(item);
-      }
+      for (var item in items) await DatabaseHelper.instance.insertItem(item);
       
-      // Insert Categories
       final categories = cloudData['categories'] as List<CategoryModel>;
-      for (var cat in categories) {
-        await DatabaseHelper.instance.insertCategory(cat);
-      }
+      for (var cat in categories) await DatabaseHelper.instance.insertCategory(cat);
 
-      // Insert Transactions
       final txs = cloudData['transactions'] as List<TransactionModel>;
-      for (var tx in txs) {
-        await DatabaseHelper.instance.insertTransaction(tx);
-      }
+      for (var tx in txs) await DatabaseHelper.instance.insertTransaction(tx);
       
-      // Insert Staff
       final staffList = cloudData['staff'] as List<StaffModel>;
-      for (var s in staffList) {
-        await DatabaseHelper.instance.insertStaff(s);
-      }
+      for (var s in staffList) await DatabaseHelper.instance.insertStaff(s);
       
-      // Refresh local state
       await fetchCategories();
     } catch (e) {
       debugPrint("Full Restore Error: $e");

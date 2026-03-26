@@ -223,6 +223,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final c = TextEditingController(text: profile.contact);
     final a = TextEditingController(text: profile.address);
     final t = TextEditingController(text: profile.taxPercentage.toString());
+    final tbl = TextEditingController(text: profile.totalTables.toString());
 
     showModalBottomSheet(
       context: context,
@@ -253,7 +254,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildField(n, AppStrings.businessName, Icons.business, profile),
                 _buildField(o, AppStrings.ownerName, Icons.person_outline, profile),
                 _buildField(c, AppStrings.contactNumber, Icons.phone_outlined, profile, keyboard: TextInputType.phone),
-                _buildField(t, AppStrings.taxPercentage, Icons.percent, profile, keyboard: TextInputType.number, suffix: '%'),
+                Row(
+                  children: [
+                    Expanded(child: _buildField(t, AppStrings.taxPercentage, Icons.percent, profile, keyboard: TextInputType.number, suffix: '%')),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildField(tbl, 'Total Tables', Icons.table_restaurant, profile, keyboard: TextInputType.number)),
+                  ],
+                ),
                 _buildField(a, AppStrings.address, Icons.location_on_outlined, profile, maxLines: 2),
                 const SizedBox(height: 24),
                 ElevatedButton(
@@ -265,6 +272,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         contact: c.text.trim(),
                         address: a.text.trim(),
                         taxPercentage: double.tryParse(t.text) ?? 0.0,
+                        totalTables: int.tryParse(tbl.text) ?? 20,
                       );
                       Navigator.pop(ctx);
                     }
@@ -481,105 +489,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
             backgroundColor: themeColor,
             elevation: 0,
             iconTheme: const IconThemeData(color: Colors.white),
-            title: LayoutBuilder(
+            flexibleSpace: LayoutBuilder(
               builder: (ctx, constraints) {
                 final settings = ctx.dependOnInheritedWidgetOfExactType<FlexibleSpaceBarSettings>();
-                if (settings == null) return const SizedBox.shrink();
-                
-                final deltaExtent = settings.maxExtent - settings.minExtent;
+                final deltaExtent = settings!.maxExtent - settings.minExtent;
                 final t = (1.0 - (settings.currentExtent - settings.minExtent) / deltaExtent).clamp(0.0, 1.0);
                 
-                return Opacity(
-                  opacity: t > 0.7 ? 1.0 : 0.0,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.white,
-                        backgroundImage: profile.logoPath.isNotEmpty && File(profile.logoPath).existsSync()
-                            ? FileImage(File(profile.logoPath))
-                            : (user?.photoURL != null ? NetworkImage(user!.photoURL!) : null) as ImageProvider?,
-                        child: (profile.logoPath.isEmpty || !File(profile.logoPath).existsSync()) && user?.photoURL == null
-                            ? Icon(Icons.business, size: 16, color: themeColor)
-                            : null,
+                return FlexibleSpaceBar(
+                  centerTitle: true,
+                  title: Opacity(
+                    opacity: t > 0.7 ? 1.0 : 0.0,
+                    child: Text(
+                      profile.businessName,
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  background: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [themeColor, themeColor.withOpacity(0.8)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ),
-                      const SizedBox(width: 12),
-                      Text(
-                        profile.businessName,
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                    ),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          right: -50,
+                          top: -50,
+                          child: CircleAvatar(radius: 100, backgroundColor: Colors.white.withOpacity(0.05)),
+                        ),
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(height: 40),
+                              GestureDetector(
+                                onTap: () => _pickAndCropImage(profile),
+                                child: Stack(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                      child: CircleAvatar(
+                                        radius: 50,
+                                        backgroundColor: profile.cardColor,
+                                        backgroundImage: profile.logoPath.isNotEmpty && File(profile.logoPath).existsSync()
+                                            ? FileImage(File(profile.logoPath))
+                                            : (user?.photoURL != null ? NetworkImage(user!.photoURL!) : null) as ImageProvider?,
+                                        child: (profile.logoPath.isEmpty || !File(profile.logoPath).existsSync()) && user?.photoURL == null
+                                            ? Icon(Icons.business, size: 40, color: themeColor)
+                                            : null,
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                        child: Icon(Icons.edit, size: 16, color: themeColor),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                profile.businessName,
+                                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                profile.ownerName.isEmpty ? (user?.displayName ?? "") : profile.ownerName,
+                                style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [themeColor, themeColor.withOpacity(0.8)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      right: -50,
-                      top: -50,
-                      child: CircleAvatar(radius: 100, backgroundColor: Colors.white.withOpacity(0.05)),
-                    ),
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 40),
-                          GestureDetector(
-                            onTap: () => _pickAndCropImage(profile),
-                            child: Stack(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                                  child: CircleAvatar(
-                                    radius: 50,
-                                    backgroundColor: profile.cardColor,
-                                    backgroundImage: profile.logoPath.isNotEmpty && File(profile.logoPath).existsSync()
-                                        ? FileImage(File(profile.logoPath))
-                                        : (user?.photoURL != null ? NetworkImage(user!.photoURL!) : null) as ImageProvider?,
-                                    child: (profile.logoPath.isEmpty || !File(profile.logoPath).existsSync()) && user?.photoURL == null
-                                        ? Icon(Icons.business, size: 40, color: themeColor)
-                                        : null,
-                                  ),
-                                ),
-                                Positioned(
-                                  bottom: 0,
-                                  right: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                                    child: Icon(Icons.edit, size: 16, color: themeColor),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            profile.businessName,
-                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            profile.ownerName.isEmpty ? (user?.displayName ?? "") : profile.ownerName,
-                            style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ),
           ),
           SliverToBoxAdapter(

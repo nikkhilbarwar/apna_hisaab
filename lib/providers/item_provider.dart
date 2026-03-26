@@ -16,7 +16,7 @@ class ItemProvider with ChangeNotifier {
   }
 
   List<ItemModel> get lowStockItems =>
-      _items.where((item) => item.currentStock <= item.minStock).toList();
+      _items.where((item) => item.lowStockAlert == 1 && item.currentStock <= item.minStock).toList();
 
   List<ItemModel> getItemsByCategory(String category) {
     return items.where((item) => item.category == category).toList();
@@ -110,6 +110,29 @@ class ItemProvider with ChangeNotifier {
     } catch (e) {
       debugPrint("Error updating item: $e");
       return false;
+    }
+  }
+
+  Future<void> toggleLowStockAlert(int id, bool value) async {
+    try {
+      final item = _items.firstWhere((i) => i.id == id);
+      item.lowStockAlert = value ? 1 : 0;
+      await updateItem(item);
+    } catch (e) {
+      debugPrint("Error toggling alert: $e");
+    }
+  }
+
+  Future<void> toggleCategoryAlerts(String category, bool value) async {
+    try {
+      final categoryItems = _items.where((i) => i.category == category).toList();
+      for (var item in categoryItems) {
+        item.lowStockAlert = value ? 1 : 0;
+        await DatabaseHelper.instance.updateItem(item);
+      }
+      await fetchItems();
+    } catch (e) {
+      debugPrint("Error toggling category alerts: $e");
     }
   }
 

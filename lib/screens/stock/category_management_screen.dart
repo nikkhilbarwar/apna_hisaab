@@ -3,21 +3,40 @@ import 'package:provider/provider.dart';
 import '../../providers/category_provider.dart';
 import '../../models/category_model.dart';
 import '../../providers/profile_provider.dart';
+import '../../providers/unit_provider.dart';
 import '../../utils/app_formatter.dart';
 
-class CategoryManagementScreen extends StatelessWidget {
+class CategoryManagementScreen extends StatefulWidget {
   const CategoryManagementScreen({super.key});
 
   @override
+  State<CategoryManagementScreen> createState() => _CategoryManagementScreenState();
+}
+
+class _CategoryManagementScreenState extends State<CategoryManagementScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final catProvider = Provider.of<CategoryProvider>(context);
     final profile = Provider.of<ProfileProvider>(context);
     final themeColor = profile.themeColor;
 
     return Scaffold(
       backgroundColor: profile.scaffoldColor,
       appBar: AppBar(
-        title: const Text('MANAGE CATEGORIES', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white)),
+        title: const Text('MANAGE STORE', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white)),
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -27,108 +46,251 @@ class CategoryManagementScreen extends StatelessWidget {
             ),
           ),
         ),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          indicatorWeight: 4,
+          labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          tabs: const [
+            Tab(text: 'CATEGORIES'),
+            Tab(text: 'UNITS'),
+          ],
+        ),
         elevation: 0,
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Column(
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.orange.withOpacity(0.1)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.info_outline, color: Colors.orange, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Set Category Type to avoid selection popups when adding items. Deleting moves items to "General".',
-                    style: TextStyle(fontSize: 12, color: profile.secondaryTextColor, height: 1.4),
+          _buildCategoryTab(context),
+          _buildUnitTab(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryTab(BuildContext context) {
+    final catProvider = Provider.of<CategoryProvider>(context);
+    final profile = Provider.of<ProfileProvider>(context);
+    final themeColor = profile.themeColor;
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.blue.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.blue.withOpacity(0.1)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.drag_indicator, color: Colors.blue, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Drag and drop categories to reorder them. This order will be used throughout the app.',
+                  style: TextStyle(fontSize: 12, color: profile.secondaryTextColor, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ReorderableListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: catProvider.categories.length,
+            onReorder: (oldIndex, newIndex) => catProvider.reorderCategories(oldIndex, newIndex),
+            itemBuilder: (context, index) {
+              final cat = catProvider.categories[index];
+              final isDefault = cat.name == 'General';
+
+              return Container(
+                key: ValueKey(cat.id),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: profile.cardColor,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                  border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.drag_handle, color: profile.secondaryTextColor.withOpacity(0.3), size: 20),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: (cat.type == 'selling' ? Colors.green : Colors.orange).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(_getIconData(cat.iconName), color: cat.type == 'selling' ? Colors.green : Colors.orange, size: 22),
+                      ),
+                    ],
+                  ),
+                  title: Text(cat.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: profile.textColor)),
+                  subtitle: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (cat.type == 'selling' ? Colors.green : Colors.orange).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          cat.type == 'selling' ? 'Selling' : 'Purchase',
+                          style: TextStyle(fontSize: 10, color: cat.type == 'selling' ? Colors.green : Colors.orange, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blue),
+                        onPressed: () => _showCategoryBottomSheet(context, catProvider, profile, category: cat),
+                      ),
+                      if (!isDefault)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                          onPressed: () => _showDeleteWarning(context, catProvider, profile, cat),
+                        ),
+                    ],
                   ),
                 ),
-              ],
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: ElevatedButton.icon(
+            onPressed: () => _showCategoryBottomSheet(context, catProvider, profile),
+            icon: const Icon(Icons.add_circle_outline),
+            label: const Text('ADD NEW CATEGORY', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: themeColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 60),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              elevation: 0,
             ),
           ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: catProvider.categories.length,
-              itemBuilder: (context, index) {
-                final cat = catProvider.categories[index];
-                final isDefault = cat.name == 'General';
+        ),
+      ],
+    );
+  }
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: profile.cardColor,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
-                    border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+  Widget _buildUnitTab(BuildContext context) {
+    final unitProvider = Provider.of<UnitProvider>(context);
+    final profile = Provider.of<ProfileProvider>(context);
+    final themeColor = profile.themeColor;
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.orange.withOpacity(0.1)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.straighten, color: Colors.orange, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Add custom units like gm, kg, bori, liter, etc. These will appear in your item forms.',
+                  style: TextStyle(fontSize: 12, color: profile.secondaryTextColor, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: unitProvider.units.length,
+            itemBuilder: (context, index) {
+              final unit = unitProvider.units[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: profile.cardColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+                ),
+                child: ListTile(
+                  title: Text(unit.name, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                    onPressed: () => unitProvider.deleteUnit(unit.id!),
                   ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    leading: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: (cat.type == 'selling' ? Colors.green : Colors.orange).withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(_getIconData(cat.iconName), color: cat.type == 'selling' ? Colors.green : Colors.orange, size: 22),
-                    ),
-                    title: Text(cat.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: profile.textColor)),
-                    subtitle: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: (cat.type == 'selling' ? Colors.green : Colors.orange).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            cat.type == 'selling' ? 'Selling' : 'Purchase',
-                            style: TextStyle(fontSize: 10, color: cat.type == 'selling' ? Colors.green : Colors.orange, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blue),
-                          onPressed: () => _showCategoryBottomSheet(context, catProvider, profile, category: cat),
-                        ),
-                        if (!isDefault)
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                            onPressed: () => _showDeleteWarning(context, catProvider, profile, cat),
-                          ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+                ),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: ElevatedButton.icon(
+            onPressed: () => _showUnitDialog(context, unitProvider, profile),
+            icon: const Icon(Icons.add_circle_outline),
+            label: const Text('ADD NEW UNIT', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: themeColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 60),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              elevation: 0,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: ElevatedButton.icon(
-              onPressed: () => _showCategoryBottomSheet(context, catProvider, profile),
-              icon: const Icon(Icons.add_circle_outline),
-              label: const Text('ADD NEW CATEGORY', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: themeColor,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 60),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                elevation: 0,
-              ),
-            ),
+        ),
+      ],
+    );
+  }
+
+  void _showUnitDialog(BuildContext context, UnitProvider provider, ProfileProvider profile) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Add New Unit', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: TextStyle(color: profile.textColor),
+          decoration: InputDecoration(
+            hintText: 'e.g. kg, gm, liter',
+            fillColor: profile.scaffoldColor,
+            filled: true,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                provider.addUnit(controller.text);
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: profile.themeColor),
+            child: const Text('ADD', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -329,6 +491,7 @@ class CategoryManagementScreen extends StatelessWidget {
                         name: nameController.text, 
                         iconName: selectedIcon,
                         type: selectedType,
+                        displayOrder: category?.displayOrder ?? 0,
                       );
                       
                       bool success;

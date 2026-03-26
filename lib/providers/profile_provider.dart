@@ -16,12 +16,16 @@ class ProfileProvider with ChangeNotifier {
   int _themeColorValue = 0xFF5E35B1;
   double _taxPercentage = 0.0;
   bool _isDarkMode = false;
+  int _totalTables = 20;
 
   // License Logic Fields
   bool _isActivated = false;
   DateTime? _expiryDate;
   String _licenseKey = '';
   bool _isLifetime = false;
+  bool _isReminderEnabled = true;
+  bool _saleBlocked = false;
+  bool _expenseBlocked = false;
   
   // Real-time listener subscription
   StreamSubscription? _licenseSub;
@@ -33,6 +37,7 @@ class ProfileProvider with ChangeNotifier {
   String get logoPath => _logoPath;
   bool get isCloudSyncEnabled => _isCloudSyncEnabled;
   String get currencySymbol => _currencySymbol;
+  int get totalTables => _totalTables;
   
   Color get themeColor {
     try {
@@ -49,6 +54,9 @@ class ProfileProvider with ChangeNotifier {
   String get licenseKey => _licenseKey;
   bool get isLifetime => _isLifetime;
   bool get isDarkMode => _isDarkMode;
+  bool get isReminderEnabled => _isReminderEnabled;
+  bool get saleBlocked => _saleBlocked;
+  bool get expenseBlocked => _expenseBlocked;
 
   Color get scaffoldColor => _isDarkMode ? const Color(0xFF10142A) : const Color(0xFFF8F9FE);
   Color get cardColor => _isDarkMode ? const Color(0xFF1B263B) : Colors.white;
@@ -103,6 +111,7 @@ class ProfileProvider with ChangeNotifier {
       _themeColorValue = prefs.getInt('theme_color_$uid') ?? 0xFF5E35B1;
       _taxPercentage = prefs.getDouble('tax_percentage_$uid') ?? 0.0;
       _isDarkMode = prefs.getBool('is_dark_mode_$uid') ?? false;
+      _totalTables = prefs.getInt('total_tables_$uid') ?? 20;
 
       _licenseKey = prefs.getString('license_key_$uid') ?? '';
       _isActivated = prefs.getBool('is_app_activated_$uid') ?? false;
@@ -144,6 +153,10 @@ class ProfileProvider with ChangeNotifier {
             }
           }
 
+          _isReminderEnabled = data['isReminderEnabled'] ?? true;
+          _saleBlocked = data['saleBlocked'] ?? false;
+          _expenseBlocked = data['expenseBlocked'] ?? false;
+
           if (_isActivated != newActivated) {
             _isActivated = newActivated;
             final prefs = await SharedPreferences.getInstance();
@@ -181,7 +194,7 @@ class ProfileProvider with ChangeNotifier {
     if (_isCloudSyncEnabled) _syncToFirebase();
   }
 
-  Future<void> updateProfile({String? businessName, String? ownerName, String? contact, String? address, String? logoPath, bool? isCloudSyncEnabled, String? currencySymbol, double? taxPercentage}) async {
+  Future<void> updateProfile({String? businessName, String? ownerName, String? contact, String? address, String? logoPath, bool? isCloudSyncEnabled, String? currencySymbol, double? taxPercentage, int? totalTables}) async {
     final prefs = await SharedPreferences.getInstance();
     if (businessName != null) { _businessName = businessName; await prefs.setString(_getUKey('business_name'), businessName); }
     if (ownerName != null) { _ownerName = ownerName; await prefs.setString(_getUKey('owner_name'), ownerName); }
@@ -191,6 +204,7 @@ class ProfileProvider with ChangeNotifier {
     if (isCloudSyncEnabled != null) { _isCloudSyncEnabled = isCloudSyncEnabled; await prefs.setBool(_getUKey('cloud_sync'), isCloudSyncEnabled); }
     if (currencySymbol != null) { _currencySymbol = currencySymbol; await prefs.setString(_getUKey('currency'), currencySymbol); }
     if (taxPercentage != null) { _taxPercentage = taxPercentage; await prefs.setDouble(_getUKey('tax_percentage'), taxPercentage); }
+    if (totalTables != null) { _totalTables = totalTables; await prefs.setInt(_getUKey('total_tables'), totalTables); }
     notifyListeners();
     if (_isCloudSyncEnabled) _syncToFirebase();
   }
@@ -202,7 +216,7 @@ class ProfileProvider with ChangeNotifier {
       await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('profile').doc('business_info').set({
         'business_name': _businessName, 'owner_name': _ownerName, 'contact': _contact, 'address': _address,
         'currency': _currencySymbol, 'theme_color': _themeColorValue, 'expiry_date': _expiryDate?.toIso8601String(), 
-        'tax_percentage': _taxPercentage, 'is_dark_mode': _isDarkMode, 'last_updated': FieldValue.serverTimestamp(),
+        'tax_percentage': _taxPercentage, 'is_dark_mode': _isDarkMode, 'total_tables': _totalTables, 'last_updated': FieldValue.serverTimestamp(),
       });
     } catch (e) { debugPrint("Error syncing profile: $e"); }
   }

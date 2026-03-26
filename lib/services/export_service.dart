@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:printing/printing.dart';
 import '../core/database/database_helper.dart';
 import '../models/transaction_model.dart';
 
@@ -133,7 +134,15 @@ class ExportService {
       final fileName = "${title}_${DateTime.now().millisecondsSinceEpoch}.pdf";
       final path = "${dir.path}/$fileName";
       final file = File(path);
-      await file.writeAsBytes(await pdf.save());
+      final pdfBytes = await pdf.save();
+      await file.writeAsBytes(pdfBytes);
+      
+      // Show print layout/preview
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        name: title,
+      );
+      
       await Share.shareXFiles([XFile(path)], text: '$title Report PDF');
     } catch (e) {
       print("PDF Export Error: $e");
@@ -143,6 +152,17 @@ class ExportService {
   /// Save Bill as PDF and return path
   Future<String?> saveBillAsPdf(TransactionModel tx, String businessName) async {
     final pdf = pw.Document();
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    final prefs = await SharedPreferences.getInstance();
+    
+    final logoPath = prefs.getString('logo_path_$uid') ?? "";
+    final address = prefs.getString('address_$uid') ?? "";
+    final contact = prefs.getString('contact_$uid') ?? "";
+
+    pw.MemoryImage? logoImage;
+    if (logoPath.isNotEmpty && File(logoPath).existsSync()) {
+      logoImage = pw.MemoryImage(File(logoPath).readAsBytesSync());
+    }
 
     pdf.addPage(
       pw.Page(
@@ -150,36 +170,91 @@ class ExportService {
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Center(child: pw.Text(businessName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16))),
-            pw.Center(child: pw.Text("TAX INVOICE", style: const pw.TextStyle(fontSize: 10))),
-            pw.Divider(),
-            pw.Text("Bill No: ${tx.id}", style: const pw.TextStyle(fontSize: 8)),
-            pw.Text("Date: ${DateFormat('dd-MM-yyyy HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 8)),
-            if (tx.customerContact.isNotEmpty) pw.Text("Contact: ${tx.customerContact}", style: const pw.TextStyle(fontSize: 8)),
-            pw.Divider(),
+            // Header with Logo and Business Details centered
+            pw.Center(
+              child: pw.Column(
+                children: [
+                  if (logoImage != null)
+                    pw.Container(
+                      width: 50, height: 50,
+                      margin: const pw.EdgeInsets.only(bottom: 5),
+                      child: pw.Image(logoImage),
+                    ),
+                  pw.Text(businessName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                  if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
+                  if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7)),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 5),
+            pw.Center(child: pw.Text("TAX INVOICE", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1))),
+            pw.Divider(thickness: 0.5),
+            
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                pw.Text("Item", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-                pw.Text("Qty", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-                pw.Text("Total", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                pw.Text("Bill No: ${tx.id}", style: const pw.TextStyle(fontSize: 8)),
+                pw.Text("Date: ${DateFormat('dd-MM-yyyy HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 8)),
               ],
             ),
-            ...tx.parsedItems.map((item) => pw.Row(
+            if (tx.customerContact.isNotEmpty) pw.Text("Cust Contact: ${tx.customerContact}", style: const pw.TextStyle(fontSize: 8)),
+            pw.Divider(thickness: 0.5),
+            
+            pw.Row(
+              children: [
+                pw.Expanded(flex: 4, child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                pw.Expanded(flex: 1, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
+                pw.Expanded(flex: 2, child: pw.Text("TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+              ],
+            ),
+            pw.SizedBox(height: 4),
+            ...tx.parsedItems.map((item) {
+              final double qty = double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
+              final double price = double.tryParse(item['price']?.toString() ?? '0') ?? 0.0;
+              final double lineTotal = qty * price;
+              return pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Expanded(
+                      flex: 4, 
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(item['name']?.toString() ?? '', style: const pw.TextStyle(fontSize: 8)),
+                          pw.Text("@ ${price.toStringAsFixed(0)}", style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
+                          if (item['table_number'] != null && item['table_number'] != '')
+                            pw.Text("Table: ${item['table_number']}", style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
+                        ],
+                      ),
+                    ),
+                    pw.Expanded(flex: 1, child: pw.Text("${qty.toStringAsFixed(0)}", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                    pw.Expanded(flex: 2, child: pw.Text(lineTotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                  ],
+                ),
+              );
+            }),
+            pw.Divider(thickness: 1, indent: 20),
+            pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                pw.Expanded(child: pw.Text(item['name'] ?? '', style: const pw.TextStyle(fontSize: 8))),
-                pw.Text(item['qty'] ?? '', style: const pw.TextStyle(fontSize: 8)),
-                pw.Text(item['price'] ?? '', style: const pw.TextStyle(fontSize: 8)),
+                pw.Text("ITEM COUNT: ${tx.parsedItems.length}", style: const pw.TextStyle(fontSize: 8)),
+                pw.Text("GRAND TOTAL: ${tx.amount.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
               ],
-            )),
-            pw.Divider(),
-            pw.Align(
-              alignment: pw.Alignment.centerRight,
-              child: pw.Text("GRAND TOTAL: ${tx.amount}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
             ),
+            pw.Divider(thickness: 0.5),
             pw.SizedBox(height: 10),
-            pw.Center(child: pw.Text("Thank You! Visit Again", style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic))),
+            
+            pw.Center(child: pw.Text("Thank You! Visit Again", style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic))),
+            pw.SizedBox(height: 15),
+            
+            // Hardcoded footer details
+            pw.Divider(thickness: 0.5),
+            pw.Center(child: pw.Text("POWERED BY: The Griller Zone", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800))),
+            pw.Center(child: pw.Text("Developer: Nikkhil Barwar | +91 9992256959", style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700))),
+            pw.Center(child: pw.Text("Terms: This is a computer generated invoice.", style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700))),
+            pw.SizedBox(height: 5),
           ],
         ),
       ),
@@ -190,7 +265,15 @@ class ExportService {
       final fileName = "Bill_${tx.id}_${DateTime.now().millisecondsSinceEpoch}.pdf";
       final path = "${dir.path}/$fileName";
       final file = File(path);
-      await file.writeAsBytes(await pdf.save());
+      final pdfBytes = await pdf.save();
+      await file.writeAsBytes(pdfBytes);
+      
+      // Also show the print/preview dialog
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        name: "Bill_${tx.id}",
+      );
+
       return path;
     } catch (e) {
       print("Bill PDF Error: $e");
