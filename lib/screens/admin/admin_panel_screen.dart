@@ -20,9 +20,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   final TextEditingController _ownerController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _announcementController = TextEditingController();
 
   bool _isGenerating = false;
   bool _isInitializing = true;
+  bool _isPostingAnnouncement = false;
   String _selectedPlan = '1 Year';
   String? _generatedKey;
   
@@ -41,6 +43,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   void initState() {
     super.initState();
     _initLicenseSystem();
+    _loadCurrentAnnouncement();
   }
 
   Future<void> _initLicenseSystem() async {
@@ -55,6 +58,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         setState(() => _isInitializing = false);
       }
     }
+  }
+
+  Future<void> _loadCurrentAnnouncement() async {
+    try {
+      final doc = await LicenseService.firestore.collection('admin_settings').doc('announcement').get();
+      if (doc.exists) {
+        _announcementController.text = doc.data()?['message'] ?? "";
+      }
+    } catch (_) {}
   }
 
   String _generateLicenseKey(String restaurant, String owner, String phone) {
@@ -98,6 +110,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         'isReminderEnabled': true,
         'saleBlocked': false,
         'expenseBlocked': false,
+        'bypassCheck': false, // New Field for Bypass
       });
 
       setState(() {
@@ -111,12 +124,27 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
   }
 
+  Future<void> _postAnnouncement() async {
+    setState(() => _isPostingAnnouncement = true);
+    try {
+      await LicenseService.firestore.collection('admin_settings').doc('announcement').set({
+        'message': _announcementController.text.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Announcement Published!"), backgroundColor: Colors.green));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    } finally {
+      setState(() => _isPostingAnnouncement = false);
+    }
+  }
+
   void _showLicenseDetails(Map<String, dynamic> data, ProfileProvider profile) {
     bool isActive = data['status'] == 'active';
-    bool isRegistered = data['activated'] == true;
     bool isReminderEnabled = data['isReminderEnabled'] ?? true;
     bool saleBlocked = data['saleBlocked'] ?? false;
     bool expenseBlocked = data['expenseBlocked'] ?? false;
+    bool bypassCheck = data['bypassCheck'] ?? false;
 
     showModalBottomSheet(
       context: context,
@@ -169,6 +197,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 Text("USER PERMISSIONS & CONTROLS", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: profile.secondaryTextColor, letterSpacing: 1)),
                 const SizedBox(height: 16),
                 
+                _toggleTile("Bypass License Check", "Allow app access even if license is invalid", bypassCheck, Icons.verified_user_outlined, profile, (val) async {
+                  await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({'bypassCheck': val});
+                  setModalState(() => bypassCheck = val);
+                }),
                 _toggleTile("Payment Reminder", "Show daily payment alerts to user", isReminderEnabled, Icons.notifications_active_rounded, profile, (val) async {
                   await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({'isReminderEnabled': val});
                   setModalState(() => isReminderEnabled = val);
@@ -314,21 +346,114 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       ),
       body: _isInitializing 
         ? const Center(child: CircularProgressIndicator()) 
-        : SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        : StreamBuilder<QuerySnapshot>(
+            stream: LicenseService.firestore.collection('licenses').snapshots(),
+            builder: (context, snapshot) {
+              final allDocs = snapshot.data?.docs ?? [];
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildStatsOverview(allDocs, profile),
+                    const SizedBox(height: 24),
+                    _buildAnnouncementSection(profile),
+                    const SizedBox(height: 24),
+                    _buildGeneratorCard(profile),
+                    const SizedBox(height: 30),
+                    Text("LICENSE HISTORY", style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold, letterSpacing: 1.2, fontSize: 12)),
+                    const SizedBox(height: 12),
+                    _buildSearchSection(profile),
+                    const SizedBox(height: 12),
+                    _buildHistoryList(allDocs, profile),
+                  ],
+                ),
+              );
+            }
+          ),
+    );
+  }
+
+  Widget _buildStatsOverview(List<QueryDocumentSnapshot> docs, ProfileProvider profile) {
+    int total = docs.length;
+    int active = docs.where((doc) => (doc.data() as Map<String, dynamic>)['status'] == 'active').length;
+    int blocked = total - active;
+
+    return Row(
+      children: [
+        _statItem("Total", total.toString(), Colors.blue, profile),
+        const SizedBox(width: 12),
+        _statItem("Active", active.toString(), Colors.green, profile),
+        const SizedBox(width: 12),
+        _statItem("Blocked", blocked.toString(), Colors.red, profile),
+      ],
+    );
+  }
+
+  Widget _statItem(String label, String value, Color color, ProfileProvider profile) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: profile.cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.2)),
+        ),
+        child: Column(
+          children: [
+            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color)),
+            Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: profile.secondaryTextColor)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnnouncementSection(ProfileProvider profile) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: profile.cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.orange.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              _buildGeneratorCard(profile),
-              const SizedBox(height: 30),
-              Text("LICENSE HISTORY", style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold, letterSpacing: 1.2, fontSize: 12)),
-              const SizedBox(height: 12),
-              _buildSearchSection(profile),
-              const SizedBox(height: 12),
-              _buildHistoryList(profile),
+              const Icon(Icons.campaign_outlined, color: Colors.orange, size: 20),
+              const SizedBox(width: 8),
+              Text("Global Announcement", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: profile.textColor)),
             ],
           ),
-        ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _announcementController,
+            maxLines: 2,
+            style: TextStyle(color: profile.textColor, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: "Enter message for all users...",
+              fillColor: profile.scaffoldColor,
+              filled: true,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: _isPostingAnnouncement ? null : _postAnnouncement,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              minimumSize: const Size(double.infinity, 44),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            child: _isPostingAnnouncement 
+              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : const Text("PUBLISH ANNOUNCEMENT", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -345,7 +470,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Create License", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: profile.textColor)),
+            Text("Create New License", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: profile.textColor)),
             const SizedBox(height: 20),
             _buildField(_restaurantController, "Restaurant Name", Icons.store, profile),
             _buildField(_ownerController, "Owner Name", Icons.person, profile),
@@ -431,68 +556,62 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
-  Widget _buildHistoryList(ProfileProvider profile) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: LicenseService.firestore.collection('licenses').orderBy('createdAt', descending: true).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return Center(child: Text("No licenses generated yet", style: TextStyle(color: profile.secondaryTextColor)));
+  Widget _buildHistoryList(List<QueryDocumentSnapshot> docs, ProfileProvider profile) {
+    var filteredDocs = docs;
+    if (_searchController.text.isNotEmpty) {
+      filteredDocs = docs.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        final phone = (data['phone'] ?? "").toString().toLowerCase();
+        final name = (data['restaurantName'] ?? "").toString().toLowerCase();
+        return phone.contains(_searchController.text.toLowerCase()) || name.contains(_searchController.text.toLowerCase());
+      }).toList();
+    }
 
-        var docs = snapshot.data!.docs;
-        if (_searchController.text.isNotEmpty) {
-          docs = docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final phone = (data['phone'] ?? "").toString().toLowerCase();
-            final name = (data['restaurantName'] ?? "").toString().toLowerCase();
-            return phone.contains(_searchController.text.toLowerCase()) || name.contains(_searchController.text.toLowerCase());
-          }).toList();
-        }
+    if (filteredDocs.isEmpty) return Center(child: Text("No licenses found", style: TextStyle(color: profile.secondaryTextColor)));
 
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: docs.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 10),
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final bool isActive = data['status'] == 'active';
-            final bool isRegistered = data['activated'] == true;
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: filteredDocs.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final data = filteredDocs[index].data() as Map<String, dynamic>;
+        final bool isActive = data['status'] == 'active';
+        final bool isRegistered = data['activated'] == true;
 
-            return Card(
-              elevation: 0,
-              color: profile.cardColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)),
-              child: ListTile(
-                onTap: () => _showLicenseDetails(data, profile),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                leading: CircleAvatar(
-                  backgroundColor: (isActive ? profile.themeColor : Colors.red).withOpacity(0.1),
-                  child: Icon(isActive ? Icons.check_circle_outline : Icons.block, color: isActive ? profile.themeColor : Colors.red),
+        return Card(
+          elevation: 0,
+          color: profile.cardColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)),
+          child: ListTile(
+            onTap: () => _showLicenseDetails(data, profile),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: CircleAvatar(
+              backgroundColor: (isActive ? profile.themeColor : Colors.red).withOpacity(0.1),
+              child: Icon(isActive ? Icons.check_circle_outline : Icons.block, color: isActive ? profile.themeColor : Colors.red),
+            ),
+            title: Text(data['restaurantName'] ?? "N/A", style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
+            subtitle: Text("${data['phone'] ?? 'N/A'} • ${data['validTillFormatted'] ?? 'N/A'}", style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.share, size: 20),
+                  onPressed: () => Share.share("Restaurant: ${data['restaurantName']}\nLicense: ${data['licenseKey']}\nDownload App: $_driveLink"),
+                  tooltip: "Share License",
                 ),
-                title: Text(data['restaurantName'] ?? "N/A", style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
-                subtitle: Text("${data['phone'] ?? 'N/A'} • ${data['validTillFormatted'] ?? 'N/A'}", style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.share, size: 20),
-                      onPressed: () => Share.share("Restaurant: ${data['restaurantName']}\nLicense: ${data['licenseKey']}\nDownload App: $_driveLink"),
-                      tooltip: "Share License",
-                    ),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Icon(isRegistered ? Icons.smartphone : Icons.phonelink_erase, size: 18, color: isRegistered ? Colors.blue : profile.secondaryTextColor),
-                        const SizedBox(height: 4),
-                        Text(isRegistered ? "Mobile OK" : "Pending", style: TextStyle(fontSize: 10, color: isRegistered ? Colors.blue : profile.secondaryTextColor)),
-                      ],
-                    ),
+                    Icon(isRegistered ? Icons.smartphone : Icons.phonelink_erase, size: 18, color: isRegistered ? Colors.blue : profile.secondaryTextColor),
+                    const SizedBox(height: 4),
+                    Text(isRegistered ? "Mobile OK" : "Pending", style: TextStyle(fontSize: 10, color: isRegistered ? Colors.blue : profile.secondaryTextColor)),
                   ],
                 ),
-              ),
-            );
-          },
+              ],
+            ),
+          ),
         );
       },
     );

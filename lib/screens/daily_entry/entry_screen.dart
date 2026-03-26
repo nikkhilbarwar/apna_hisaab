@@ -60,6 +60,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
         final variant = itemMap['variant'] ?? 'Full';
         final unit = itemMap['unit'] ?? 'Full';
         final servingMethod = itemMap['serving_method'] ?? 'Dine-in';
+        final table = itemMap['table_number'] ?? '1';
 
         final item = itemProvider.items.firstWhere((i) => i.name == name);
         _cart.add(CartItem(
@@ -69,6 +70,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
           variant: variant,
           unit: unit,
           servingMethod: servingMethod,
+          tableNumber: table,
         ));
       } catch (e) {
         debugPrint("Error loading item into cart: $e");
@@ -83,7 +85,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
     super.dispose();
   }
 
-  void _addItemToCart(ItemModel item, {String variant = '', double price = 0, String servingMethod = 'Dine-in'}) {
+  void _addItemToCart(ItemModel item, {String variant = '', double price = 0}) {
     setState(() {
       final p = price > 0 ? price : (item.price ?? 0);
       final unit = variant == 'Half' ? (item.halfUnit ?? 'Half') : (item.fullUnit ?? 'Full');
@@ -98,7 +100,8 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
           price: p, 
           variant: variant, 
           unit: unit,
-          servingMethod: servingMethod
+          servingMethod: 'Dine-in',
+          tableNumber: '1'
         ));
       }
     });
@@ -130,24 +133,6 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
     });
   }
 
-  void _toggleServingMethod(ItemModel item) {
-    setState(() {
-      final existingItems = _cart.where((c) => c.item.id == item.id).toList();
-      for (var cartItem in existingItems) {
-        cartItem.servingMethod = cartItem.servingMethod == 'Dine-in' ? 'Takeaway' : 'Dine-in';
-      }
-    });
-  }
-
-  void _setAllServingMethod(String method) {
-    setState(() {
-      for (var cartItem in _cart) {
-        cartItem.servingMethod = method;
-      }
-    });
-    //ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('All items set to $method'), duration: const Duration(seconds: 1)));
-  }
-
   void _showManualQuantityDialog(ItemModel item, double currentQty) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final controller = TextEditingController(text: currentQty.toInt().toString());
@@ -162,9 +147,8 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
           controller: controller,
           keyboardType: TextInputType.number,
           autofocus: true,
-          decoration: InputDecoration(
-            hintText: 'Quantity',
-            fillColor: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100,
+          decoration: const InputDecoration(
+            labelText: 'Quantity',
           ),
           style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
         ),
@@ -246,7 +230,6 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
     );
   }
 
-  // --- ITEM OPTIONS BOTTOM SHEET ---
   void _showItemOptionsBottomSheet(ItemModel item) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final themeColor = profile.themeColor;
@@ -316,7 +299,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
           controller: controller,
           keyboardType: TextInputType.number,
           autofocus: true,
-          decoration: InputDecoration(hintText: 'New Stock Quantity', fillColor: profile.scaffoldColor, filled: true),
+          decoration: const InputDecoration(labelText: 'New Stock Quantity'),
           style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
         ),
         actions: [
@@ -409,7 +392,6 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
     final priceController = TextEditingController(text: item.price?.toString());
     final halfPriceController = TextEditingController(text: item.halfPrice?.toString());
     
-    // logic: Use custom units from provider
     String selectedUnit = item.unit;
     if (!unitProvider.units.any((u) => u.name == selectedUnit)) {
       selectedUnit = unitProvider.units.isNotEmpty ? unitProvider.units.first.name : 'Plate';
@@ -488,18 +470,17 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
       inputFormatters: isCapitalize ? [AppFormatter.capitalizeWordsFormatter] : null,
       style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
       decoration: InputDecoration(
-        labelText: label, prefixText: prefix, prefixIcon: Icon(icon, size: 20), filled: true, fillColor: profile.scaffoldColor,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+        labelText: label,
+        prefixText: prefix,
+        prefixIcon: Icon(icon, size: 20),
       ),
     );
   }
 
-  // --- CATEGORY REORDER SHEET ---
   void _showCategoryReorderSheet() {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final catProvider = Provider.of<CategoryProvider>(context, listen: false);
     
-    // List of categories to reorder (excluding 'All')
     List<CategoryModel> catsToReorder = catProvider.categories
         .where((c) => _isSellingType ? c.type == 'selling' : c.type == 'purchase')
         .toList();
@@ -515,24 +496,21 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           child: Column(
             children: [
+              const SizedBox(height: 12),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
               Text('REORDER CATEGORIES', style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 16, letterSpacing: 1)),
-              Text('Long press and drag to reorder', style: TextStyle(color: profile.secondaryTextColor, fontSize: 11)),
               const SizedBox(height: 20),
               Expanded(
                 child: ReorderableListView.builder(
                   itemCount: catsToReorder.length,
                   onReorder: (oldIndex, newIndex) async {
                     if (newIndex > oldIndex) newIndex -= 1;
-                    
                     final item = catsToReorder.removeAt(oldIndex);
                     catsToReorder.insert(newIndex, item);
-                    setSheetState(() {}); // Update local list
-
-                    // Update in Provider (and Cloud Sync)
-                    // We need to find the absolute index in the master list
+                    setSheetState(() {});
                     int masterOldIndex = catProvider.categories.indexOf(item);
                     int masterNewIndex = catProvider.categories.indexOf(catProvider.categories.where((c) => _isSellingType ? c.type == 'selling' : c.type == 'purchase').toList()[newIndex]);
-                    
                     await catProvider.reorderCategories(masterOldIndex, masterNewIndex);
                   },
                   itemBuilder: (context, index) {
@@ -601,34 +579,14 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
         actions: [
           IconButton(
             icon: Icon(Icons.sort_rounded, color: themeColor),
-            tooltip: 'Reorder Categories',
             onPressed: _showCategoryReorderSheet,
           ),
-          if (_cart.isNotEmpty)
-            PopupMenuButton<String>(
-              icon: Icon(Icons.settings_suggest_outlined, color: themeColor),
-              onSelected: _setAllServingMethod,
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: 'Dine-in', child: Row(children: [Icon(Icons.restaurant, size: 18), SizedBox(width: 8), Text('All Dine-in')])),
-                const PopupMenuItem(value: 'Takeaway', child: Row(children: [Icon(Icons.shopping_bag, size: 18), SizedBox(width: 8), Text('All Takeaway')])),
-              ],
-            ),
           IconButton(
             icon: Icon(Icons.calendar_month_outlined, color: themeColor, size: 20),
             onPressed: () async {
               final date = await showDatePicker(
-                context: context, 
-                initialDate: _selectedDate, 
-                firstDate: DateTime(2000), 
-                lastDate: DateTime(2100),
-                builder: (context, child) {
-                  return Theme(
-                    data: Theme.of(context).copyWith(
-                      colorScheme: ColorScheme.light(primary: themeColor),
-                    ),
-                    child: child!,
-                  );
-                },
+                context: context, initialDate: _selectedDate, firstDate: DateTime(2000), lastDate: DateTime(2100),
+                builder: (context, child) => Theme(data: Theme.of(context).copyWith(colorScheme: ColorScheme.light(primary: themeColor)), child: child!),
               );
               if (date != null) setState(() => _selectedDate = date);
             },
@@ -649,7 +607,6 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
               indicatorColor: themeColor,
               indicatorWeight: 3,
               labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11),
-              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
               tabs: [
                 Tab(text: _isSellingType ? 'ALL SALES' : 'ALL ITEMS'),
                 ...filteredCats.map((c) => Tab(text: c.name.toUpperCase())),
@@ -691,64 +648,46 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
       return matchType && matchCategory && matchSearch;
     }).toList();
 
-    if (filteredItems.isEmpty) {
-      return Center(child: Text('No items found', style: TextStyle(color: profile.secondaryTextColor)));
-    }
+    if (filteredItems.isEmpty) return Center(child: Text('No items found', style: TextStyle(color: profile.secondaryTextColor)));
 
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, 
-        crossAxisSpacing: 16, 
-        mainAxisSpacing: 16, 
-        childAspectRatio: 1.3
-      ),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 1.3),
       itemCount: filteredItems.length,
       itemBuilder: (context, index) {
         final item = filteredItems[index];
         final cartItems = _cart.where((c) => c.item.id == item.id).toList();
         double totalCount = cartItems.fold(0, (sum, c) => sum + c.quantity);
-        String servingMethod = cartItems.isNotEmpty ? cartItems.first.servingMethod : 'Dine-in';
-        return _itemCard(item, totalCount, servingMethod, profile, themeColor);
+        return _itemCard(item, totalCount, profile, themeColor);
       },
     );
   }
 
   Widget _buildSearchBar(ProfileProvider profile, List<dynamic> categories) {
-    String currentCatName;
-    if (_tabController != null && _tabController!.index > 0) {
-      currentCatName = categories[_tabController!.index - 1].name;
-    } else {
-      currentCatName = _isSellingType ? 'All Sales' : 'All Items';
-    }
-
+    String currentCatName = (_tabController != null && _tabController!.index > 0) ? categories[_tabController!.index - 1].name : (_isSellingType ? 'All Sales' : 'All Items');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: profile.cardColor,
       child: TextField(
         controller: _searchController,
         onChanged: (v) => setState(() => _searchQuery = v),
-        decoration: InputDecoration(
-          hintText: 'Search in $currentCatName...',
-          prefixIcon: const Icon(Icons.search, size: 20),
-          contentPadding: const EdgeInsets.symmetric(vertical: 0),
-        ),
+        decoration: InputDecoration(hintText: 'Search in $currentCatName...', prefixIcon: const Icon(Icons.search, size: 20), contentPadding: EdgeInsets.zero),
       ),
     );
   }
 
-  Widget _itemCard(ItemModel item, double totalCount, String servingMethod, ProfileProvider profile, Color themeColor) {
+  Widget _itemCard(ItemModel item, double totalCount, ProfileProvider profile, Color themeColor) {
     bool hasAdded = totalCount > 0;
     return Container(
       decoration: BoxDecoration(
-        color: profile.cardColor, 
-        borderRadius: BorderRadius.circular(18),
+        color: profile.cardColor, borderRadius: BorderRadius.circular(18),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
         border: hasAdded ? Border.all(color: themeColor.withOpacity(0.3), width: 1.5) : null,
       ),
       child: Stack(
         children: [
           Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Expanded(
                 child: InkWell(
@@ -760,49 +699,18 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (hasAdded && _isSellingType)
-                          GestureDetector(
-                            onTap: () => _toggleServingMethod(item),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                              margin: const EdgeInsets.only(bottom: 2),
-                              decoration: BoxDecoration(color: themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(servingMethod == 'Dine-in' ? Icons.restaurant : Icons.shopping_bag, size: 8, color: themeColor),
-                                  const SizedBox(width: 4),
-                                  Text(servingMethod.toUpperCase(), style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: themeColor)),
-                                ],
-                              ),
-                            ),
-                          ),
-                        Text(item.name, 
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profile.textColor), 
-                          textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(item.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profile.textColor), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 2),
-                        Text('${profile.currencySymbol}${item.price}', 
-                          style: TextStyle(color: themeColor, fontWeight: FontWeight.w900, fontSize: 13)),
+                        Text('${profile.currencySymbol}${item.price}', style: TextStyle(color: themeColor, fontWeight: FontWeight.w900, fontSize: 13)),
                       ],
                     ),
                   ),
                 ),
               ),
-              if (hasAdded)
-                _qtyControls(item, totalCount, profile, themeColor)
-              else
-                _addBtn(item, themeColor),
+              if (hasAdded) _qtyControls(item, totalCount, profile, themeColor) else _addBtn(item, themeColor),
             ],
           ),
-          Positioned(
-            top: 4, right: 4,
-            child: IconButton(
-              icon: Icon(Icons.more_vert, size: 18, color: profile.secondaryTextColor.withOpacity(0.6)),
-              onPressed: () => _showItemOptionsBottomSheet(item),
-              constraints: const BoxConstraints(),
-              padding: const EdgeInsets.all(4),
-            ),
-          ),
+          Positioned(top: 4, right: 4, child: IconButton(icon: Icon(Icons.more_vert, size: 18, color: profile.secondaryTextColor.withOpacity(0.6)), onPressed: () => _showItemOptionsBottomSheet(item), constraints: const BoxConstraints(), padding: const EdgeInsets.all(4))),
         ],
       ),
     );
@@ -810,32 +718,14 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
 
   Widget _qtyControls(ItemModel item, double count, ProfileProvider profile, Color themeColor) {
     return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-      decoration: BoxDecoration(
-        color: profile.isDarkMode ? Colors.white10 : const Color(0xFFF1F3F9),
-        borderRadius: BorderRadius.circular(10)
-      ),
+      height: 32, padding: const EdgeInsets.symmetric(horizontal: 8), margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      decoration: BoxDecoration(color: profile.isDarkMode ? Colors.white10 : const Color(0xFFF1F3F9), borderRadius: BorderRadius.circular(10)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            icon: Icon(Icons.remove, size: 16, color: profile.textColor), 
-            onPressed: () => _removeItemFromCart(item),
-            constraints: const BoxConstraints(),
-            padding: EdgeInsets.zero,
-          ),
-          GestureDetector(
-            onLongPress: () => _showManualQuantityDialog(item, count),
-            child: Text('${count.toInt()}', style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 12)),
-          ),
-          IconButton(
-            icon: Icon(Icons.add, size: 16, color: profile.textColor),
-            onPressed: () => _addItemToCart(item),
-            constraints: const BoxConstraints(),
-            padding: EdgeInsets.zero,
-          ),
+          IconButton(icon: Icon(Icons.remove, size: 16, color: profile.textColor), onPressed: () => _removeItemFromCart(item), constraints: const BoxConstraints(), padding: EdgeInsets.zero),
+          GestureDetector(onLongPress: () => _showManualQuantityDialog(item, count), child: Text('${count.toInt()}', style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 12))),
+          IconButton(icon: Icon(Icons.add, size: 16, color: profile.textColor), onPressed: () => _addItemToCart(item), constraints: const BoxConstraints(), padding: EdgeInsets.zero),
         ],
       ),
     );
@@ -844,17 +734,23 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
   Widget _addBtn(ItemModel item, Color themeColor) {
     Color textColor = themeColor.computeLuminance() > 0.5 ? Colors.black : Colors.white;
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      width: double.infinity, padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       child: ElevatedButton(
         onPressed: () => item.halfPrice != null && item.halfPrice! > 0 ? _showVariantPicker(item) : _addItemToCart(item),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: themeColor, 
-          elevation: 0,
-          minimumSize: const Size(double.infinity, 32),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
-        ),
+        style: ElevatedButton.styleFrom(backgroundColor: themeColor, elevation: 0, minimumSize: const Size(double.infinity, 32), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
         child: Text('ADD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: textColor, letterSpacing: 0.5)),
+      ),
+    );
+  }
+
+  Widget _smallEntryField(String hint, ProfileProvider profile, Function(String) onChange, {String? initial}) {
+    return TextFormField(
+      initialValue: initial,
+      keyboardType: TextInputType.number,
+      onChanged: onChange,
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: profile.textColor),
+      decoration: InputDecoration(
+        labelText: hint, // Set hint as label so it shifts to border
       ),
     );
   }
@@ -862,37 +758,18 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
   Widget _buildAnimatedCartButton(ProfileProvider profile) {
     bool show = _cart.isNotEmpty;
     Color textColor = profile.themeColor.computeLuminance() > 0.5 ? Colors.black : Colors.white;
-
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutBack,
-      bottom: show ? 24 : -100,
-      left: 16,
-      right: 16,
+      duration: const Duration(milliseconds: 300), curve: Curves.easeOutBack, bottom: show ? 24 : -100, left: 16, right: 16,
       child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 300),
-        opacity: show ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 300), opacity: show ? 1.0 : 0.0,
         child: GestureDetector(
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => CartDetailsScreen(cart: _cart, type: _type, selectedCategory: 'All', selectedDate: _selectedDate, existingTransaction: widget.transaction))),
           child: Container(
-            height: 60,
-            decoration: BoxDecoration(
-              color: profile.themeColor,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: profile.themeColor.withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 8))],
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            height: 60, padding: const EdgeInsets.symmetric(horizontal: 20),
+            decoration: BoxDecoration(color: profile.themeColor, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: profile.themeColor.withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 8))]),
             child: Row(
               children: [
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${_cart.length} ITEMS', style: TextStyle(color: textColor.withOpacity(0.7), fontSize: 10, fontWeight: FontWeight.bold)),
-                    Text('${profile.currencySymbol}${_cart.fold(0.0, (sum, c) => sum + (c.quantity * c.price)).toStringAsFixed(0)}', 
-                      style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w900)),
-                  ],
-                ),
+                Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${_cart.length} ITEMS', style: TextStyle(color: textColor.withOpacity(0.7), fontSize: 10, fontWeight: FontWeight.bold)), Text('${profile.currencySymbol}${_cart.fold(0.0, (sum, c) => sum + (c.quantity * c.price)).toStringAsFixed(0)}', style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w900))]),
                 const Spacer(),
                 Text('REVIEW CART', style: TextStyle(fontWeight: FontWeight.w900, color: textColor, fontSize: 14, letterSpacing: 1)),
                 const SizedBox(width: 8),

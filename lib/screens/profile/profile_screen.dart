@@ -66,14 +66,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             toolbarTitle: 'Crop Logo',
             toolbarColor: profile.themeColor,
             toolbarWidgetColor: Colors.white,
-            statusBarColor: Colors.black,
-            backgroundColor: Colors.black,
+            //statusBarColor: profile.themeColor, // Fixed to follow theme and stay in Safe Area
+            backgroundColor: profile.scaffoldColor,
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
             hideBottomControls: false,
-            cropFrameColor: Colors.white,
-            cropGridColor: Colors.white,
-            activeControlsWidgetColor: Colors.white,
+            cropFrameColor: profile.themeColor,
+            cropGridColor: profile.themeColor.withOpacity(0.5),
+            activeControlsWidgetColor: profile.themeColor,
           ),
           IOSUiSettings(
             title: 'Crop Logo',
@@ -162,7 +162,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             bool success = await _exportService.restoreFromBackup(file);
             
             if (success) {
-              // Refresh all providers
               await profile.loadProfile();
               if (mounted) {
                 Provider.of<TransactionProvider>(context, listen: false).fetchTransactions();
@@ -395,12 +394,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   maxLines: 5,
                   validator: (v) => v == null || v.trim().isEmpty ? "Please enter your message" : null,
                   style: TextStyle(color: profile.textColor, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: "Enter your feedback or queries here...",
-                    hintStyle: TextStyle(color: profile.secondaryTextColor.withOpacity(0.5)),
+                  decoration: const InputDecoration(
+                    labelText: "Your Feedback",
+                    hintText: "", // Removed hint to keep it clean as requested
                     filled: true,
-                    fillColor: profile.scaffoldColor,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -461,13 +458,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         style: TextStyle(color: profile.textColor, fontSize: 14, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: TextStyle(color: profile.secondaryTextColor),
           prefixIcon: Icon(icon, color: profile.themeColor),
           suffixText: suffix,
-          filled: true,
-          fillColor: profile.scaffoldColor,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: profile.themeColor, width: 2)),
         ),
       ),
     );

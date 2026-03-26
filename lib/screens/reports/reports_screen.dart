@@ -313,7 +313,6 @@ class _ReportList extends StatelessWidget {
                     decoration: BoxDecoration(color: (type == 'sale' ? Colors.green : Colors.red).withOpacity(0.1), shape: BoxShape.circle),
                     child: Icon(type == 'sale' ? Icons.south_west_rounded : Icons.north_east_rounded, color: type == 'sale' ? Colors.green : Colors.red, size: 18),
                   ),
-                  // logic: Show item name with its variant to avoid confusion
                   title: Text(tx.type == 'sale' ? (tx.parsedItems.isNotEmpty ? "${tx.parsedItems[0]['name']}${tx.parsedItems[0]['variant'] != '' ? ' (${tx.parsedItems[0]['variant']})' : ''}" : 'Sale') : tx.category, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
                   subtitle: Text(DateFormat('dd MMM, hh:mm a').format(tx.date), style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
                   trailing: Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, color: type == 'sale' ? Colors.green.shade700 : Colors.red.shade700, fontSize: 15)),
@@ -339,22 +338,43 @@ class _ReportList extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
-            Text('TRANSACTION DETAILS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.secondaryTextColor, letterSpacing: 1.5)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('BILL DETAILS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.secondaryTextColor, letterSpacing: 1.5)),
+                if (tx.parsedItems.isNotEmpty && tx.parsedItems.first['table_number'] != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    child: Text('TABLE: ${tx.parsedItems.first['table_number']}', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w900, fontSize: 10)),
+                  ),
+              ],
+            ),
             const SizedBox(height: 20),
             _detailRow('Date/Time', DateFormat('dd MMM yyyy, hh:mm a').format(tx.date), profile),
-            _detailRow('Category', tx.category, profile),
             _detailRow('Payment Mode', tx.paymentMode, profile),
             const Divider(height: 40),
-            Text('ITEMS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)),
+            Text('ITEMS LIST', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)),
             const SizedBox(height: 12),
             ...tx.parsedItems.map((i) => Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // logic: Include variant in detail view too
-                  Text('${i['name']}${i['variant'] != '' ? ' (${i['variant']})' : ''} x ${i['qty']}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
-                  Text('${profile.currencySymbol}${i['price']}', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: Text('${i['name']}${i['variant'] != '' ? ' (${i['variant']})' : ''} x ${i['qty']}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14))),
+                      Text('${profile.currencySymbol}${i['price']}', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                  if (i['serving_method'] != null && i['serving_method'] != '')
+                    Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.05), borderRadius: BorderRadius.circular(4)),
+                      child: Text(i['serving_method']!.toUpperCase(), style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: profile.themeColor)),
+                    ),
                 ],
               ),
             )),
@@ -362,8 +382,8 @@ class _ReportList extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('TOTAL AMOUNT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.textColor)),
-                Text('${profile.currencySymbol}${tx.amount}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: profile.themeColor)),
+                Text('GRAND TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.textColor)),
+                Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, color: profile.themeColor)),
               ],
             ),
             const SizedBox(height: 32),

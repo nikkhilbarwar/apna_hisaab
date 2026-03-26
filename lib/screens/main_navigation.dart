@@ -38,6 +38,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
   Future<void> _checkAdminStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
+    // List of Authorized Admin Emails
     bool isAdminEmail = user?.email == "nikkhilbarwar@gmail.com" || 
                         user?.email == "anitamishra1714@gmail.com" ||
                         user?.email == "missadvocate06@gmail.com";
@@ -181,7 +182,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
           TextButton(
             onPressed: () async {
-              Navigator.pop(ctx); // Close dialog
+              Navigator.pop(ctx); 
               bool success = await syncProvider.fullRestoreFromServer(context);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -191,7 +192,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                   )
                 );
                 if (success) {
-                   Navigator.pop(context); // Close bottom sheet
+                   Navigator.pop(context); 
                 }
               }
             },
@@ -284,21 +285,17 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                 const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
             ],
           ),
-          IconButton(
-            icon: Icon(
-              _isSysAdmin ? Icons.admin_panel_settings : Icons.shield_outlined, 
-              color: _isSysAdmin ? (_isSysAdmin && appBarContentColor == Colors.black ? Colors.deepOrange : Colors.orangeAccent) : appBarContentColor.withValues(alpha: 0.8),
-              size: 26,
+          // logic: Only show Admin Panel icon if user is authorized admin
+          if (_isSysAdmin)
+            IconButton(
+              icon: Icon(
+                Icons.admin_panel_settings, 
+                color: appBarContentColor == Colors.black ? Colors.deepOrange : Colors.orangeAccent,
+                size: 26,
+              ),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen())),
+              tooltip: "Admin Panel",
             ),
-            onPressed: () {
-              if (_isSysAdmin) {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen()));
-              } else {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminLoginScreen()));
-              }
-            },
-            tooltip: "Admin Panel",
-          ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(65),

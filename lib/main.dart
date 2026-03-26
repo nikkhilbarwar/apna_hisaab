@@ -36,7 +36,6 @@ void callbackDispatcher() {
     }
 
     if (task == "pendingOrdersCheck") {
-      // Notification only logic
       final db = DatabaseHelper.instance;
       final transactions = await db.getAllTransactions();
       final pending = transactions.where((tx) => 
@@ -90,7 +89,6 @@ void main() async {
     existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
   );
 
-  // Periodic check for pending orders every 1 hour instead of immediate/aggressive triggers
   Workmanager().registerPeriodicTask(
     "pending_order_reminder", "pendingOrdersCheck",
     frequency: const Duration(hours: 1),
@@ -162,6 +160,33 @@ class MyApp extends StatelessWidget {
               brightness: profile.isDarkMode ? Brightness.dark : Brightness.light
             ),
             scaffoldBackgroundColor: profile.scaffoldColor,
+            inputDecorationTheme: InputDecorationTheme(
+              filled: true,
+              fillColor: profile.isDarkMode ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade50,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              labelStyle: TextStyle(color: profile.themeColor, fontWeight: FontWeight.bold, fontSize: 14),
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: profile.themeColor.withValues(alpha: 0.3)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: profile.themeColor.withValues(alpha: 0.2)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: profile.themeColor, width: 2),
+              ),
+            ),
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: profile.themeColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+            ),
           ),
           home: const SplashScreen(),
         );
