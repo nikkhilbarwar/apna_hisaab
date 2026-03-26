@@ -59,6 +59,7 @@ class TransactionModel {
               final String sm = (item['serving_method'] ?? '').toString();
               final String tn = (item['table_number'] ?? '').toString();
               final String cat = (item['category'] ?? '').toString();
+              final String chk = (item['checked'] ?? false).toString();
               
               items.add({
                 'id': (item['id'] ?? '').toString(),
@@ -71,6 +72,7 @@ class TransactionModel {
                 'extra_price': (item['extra_price'] ?? '0').toString(),
                 'serving_method': sm,
                 'table_number': tn,
+                'checked': chk,
                 'display': '$q x $n ${v.isNotEmpty ? '($v)' : ''}${sm.isNotEmpty ? ' [$sm]' : ''}${tn.isNotEmpty ? ' [Table: $tn]' : ''}'
               });
             }
@@ -79,55 +81,7 @@ class TransactionModel {
         }
       }
     } catch (e) {
-      // JSON failed, fallback to string parsing
-    }
-
-    // Old String Parsing Logic (Backward Compatibility)
-    String desc = description;
-    if (desc.contains(' | Discount:')) {
-      desc = desc.split(' | Discount:').first;
-    }
-
-    final itemEntries = desc.split(', ');
-    for (var entry in itemEntries) {
-      if (entry.trim().isEmpty) continue;
-      try {
-        if (entry.contains('x ')) {
-          final parts = entry.split('x ');
-          final qtyStr = parts[0].trim();
-          final rest = parts.length > 1 ? parts[1] : '';
-          
-          String itemName = rest.split(' [').first.trim();
-          if (itemName.isEmpty) itemName = 'Item';
-          
-          String variant = '';
-          String price = '';
-
-          if (rest.contains('[') && rest.contains(']')) {
-            String bracketContent = rest.split('[').last.split(']').first;
-            if (bracketContent.contains(':')) {
-              variant = bracketContent.split(':').first.trim();
-              if (bracketContent.contains('₹')) {
-                price = bracketContent.split('₹').last.replaceAll(RegExp(r'[^0-9.]'), '').trim();
-              }
-            } else {
-              variant = bracketContent.trim();
-            }
-          }
-          
-          items.add({
-            'qty': qtyStr,
-            'name': itemName,
-            'variant': variant,
-            'price': price,
-            'display': '$qtyStr $itemName ${variant.isNotEmpty ? '($variant)' : ''}'
-          });
-        } else {
-          items.add({'qty': '', 'name': entry.trim(), 'variant': '', 'price': '', 'display': entry.trim()});
-        }
-      } catch (_) {
-        // Skip bad entries instead of crashing
-      }
+      // JSON failed
     }
     return items;
   }

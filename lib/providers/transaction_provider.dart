@@ -6,6 +6,7 @@ import '../services/notification_service.dart';
 import 'item_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
+import 'dart:convert';
 
 class TransactionProvider with ChangeNotifier {
   List<TransactionModel> _allTransactions = [];
@@ -124,22 +125,66 @@ class TransactionProvider with ChangeNotifier {
     String? status,
   }) {
     return _allTransactions.where((tx) {
-      bool matchType = type == 'all' || tx.type == type;
+      // Logic Fix: Handle both 'purchase' and 'expense' for expense reports
+      bool matchType = type == 'all' || 
+                       tx.type == type || 
+                       (type == 'purchase' && tx.type == 'expense');
+      
       bool matchDelete = tx.isDeleted == 0;
       bool matchStatus = status == null || _normalizeStatus(tx.status) == _normalizeStatus(status);
+      
       bool matchDate = true;
       if (range != null) {
+        // Date Boundary Fix: Normalize to start of day and end of day inclusive
         final start = DateTime(range.start.year, range.start.month, range.start.day);
-        final end = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
-        matchDate = tx.date.isAfter(start.subtract(const Duration(seconds: 1))) && 
-                    tx.date.isBefore(end);
+        final endLimit = DateTime(range.end.year, range.end.month, range.end.day).add(const Duration(days: 1));
+        matchDate = tx.date.isAtSameMomentAs(start) || (tx.date.isAfter(start) && tx.date.isBefore(endLimit));
       }
-      bool matchCategory = category == null || category == 'All' || tx.category == category;
+
+      // Case Sensitivity Fix: Lowercase matching for categories
+      bool matchCategory = category == null || 
+                          category == 'All' || 
+                          tx.category.toLowerCase() == category.toLowerCase();
+      
       bool matchItem = itemName == null || itemName.isEmpty || tx.parsedItems.any((i) => 
           (i['name'] ?? '').toLowerCase().contains(itemName.toLowerCase()));
 
       return matchType && matchDelete && matchStatus && matchDate && matchCategory && matchItem;
     }).toList();
+  }
+
+  // --- Analytical Methods for Pro-Reporting ---
+
+  Map<String, double> getPaymentSplit(List<TransactionModel> txs) {
+    double cash = 0, upi = 0, credit = 0;
+    for (var tx in txs) {
+      if (tx.paymentMode == 'Split') {
+        cash += tx.cashAmount;
+        upi += tx.upiAmount;
+      } else if (tx.paymentMode == 'Cash') {
+        cash += tx.amount;
+      } else if (tx.paymentMode == 'UPI') {
+        upi += tx.amount;
+      } else if (tx.paymentMode == 'Credit') {
+        // Credit is only applicable for sales usually, for expenses it's outstanding
+        credit += (tx.amount - tx.paidAmount);
+        cash += tx.paidAmount; 
+      }
+    }
+    return {'Cash': cash, 'UPI': upi, 'Credit': credit};
+  }
+
+  Map<String, int> getTopItems(List<TransactionModel> txs) {
+    Map<String, int> itemCounts = {};
+    for (var tx in txs) {
+      for (var item in tx.parsedItems) {
+        String name = item['name'] ?? 'Unknown';
+        double qty = double.tryParse(item['qty'] ?? '1') ?? 1;
+        itemCounts[name] = (itemCounts[name] ?? 0) + qty.toInt();
+      }
+    }
+    var sortedEntries = itemCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    return Map.fromEntries(sortedEntries.take(5));
   }
 
   Future<void> addTransaction(TransactionModel tx, ItemProvider itemProvider) async {
@@ -163,7 +208,6 @@ class TransactionProvider with ChangeNotifier {
       await DatabaseHelper.instance.updateTransaction(tx);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
       
-      // If completed, cancel reminders
       if (tx.status == 'completed' && tx.id != null) {
         await NotificationService().cancelOrderReminders(tx.id!);
       }
@@ -175,13 +219,76 @@ class TransactionProvider with ChangeNotifier {
     }
   }
 
+  Future<void> toggleItemCheck(int transactionId, String itemName, bool isChecked) async {
+    try {
+      final index = _allTransactions.indexWhere((t) => t.id == transactionId);
+      if (index == -1) return;
+
+      final tx = _allTransactions[index];
+      if (tx.description.isEmpty || (!tx.description.startsWith('[') && !tx.description.startsWith('{'))) return;
+
+      final List<dynamic> items = jsonDecode(tx.description);
+      for (var item in items) {
+        if (item is Map && item['name'] == itemName) {
+          item['checked'] = isChecked;
+          break;
+        }
+      }
+
+      tx.description = jsonEncode(items);
+      tx.isSynced = 0;
+      await DatabaseHelper.instance.updateTransaction(tx);
+      notifyListeners();
+      _syncSingleTransaction(tx);
+    } catch (e) {
+      debugPrint("Error toggling item check: $e");
+    }
+  }
+
+  Future<void> updatePendingItem(int transactionId, String itemName, {double? newQty, bool isDelete = false, required ItemProvider itemProvider}) async {
+    try {
+      final index = _allTransactions.indexWhere((t) => t.id == transactionId);
+      if (index == -1) return;
+
+      final originalTx = _allTransactions[index];
+      final tx = TransactionModel.fromMap(originalTx.toMap());
+      
+      final List<dynamic> items = jsonDecode(tx.description);
+      int itemIndex = items.indexWhere((i) => i['name'] == itemName);
+      if (itemIndex == -1) return;
+
+      if (isDelete) {
+        items.removeAt(itemIndex);
+      } else if (newQty != null) {
+        items[itemIndex]['qty'] = newQty.toString();
+      }
+
+      if (items.isEmpty) {
+        await softDeleteTransaction(transactionId, itemProvider);
+        return;
+      }
+
+      tx.description = jsonEncode(items);
+      
+      double newTotal = 0;
+      for (var it in items) {
+        double q = double.tryParse(it['qty'].toString()) ?? 0;
+        double p = double.tryParse(it['price'].toString()) ?? 0;
+        newTotal += (q * p);
+      }
+      tx.amount = newTotal;
+
+      await updateTransaction(tx, itemProvider, oldTx: originalTx);
+    } catch (e) {
+      debugPrint("Error updating pending item: $e");
+    }
+  }
+
   Future<void> softDeleteTransaction(int id, ItemProvider itemProvider) async {
     try {
       final tx = _allTransactions.firstWhere((t) => t.id == id);
       await DatabaseHelper.instance.softDeleteTransaction(id);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: false);
-      
-      // Cancel notifications upon delete
       await NotificationService().cancelOrderReminders(id);
       
       tx.isDeleted = 1;
@@ -207,6 +314,17 @@ class TransactionProvider with ChangeNotifier {
       _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error restoring transaction: $e");
+    }
+  }
+
+  Future<void> permanentDeleteTransaction(int id) async {
+    try {
+      await DatabaseHelper.instance.permanentDeleteTransaction(id);
+      _allTransactions.removeWhere((t) => t.id == id);
+      notifyListeners();
+      await _firebaseService.deleteTransaction(id);
+    } catch (e) {
+      debugPrint("Error permanent deleting transaction: $e");
     }
   }
 

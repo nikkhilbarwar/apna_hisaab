@@ -190,6 +190,10 @@ class DatabaseHelper {
     final db = await instance.database;
     return await db.update('transactions', {'is_deleted': 0, 'deleted_at': null, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
   }
+  Future<int> permanentDeleteTransaction(int id) async {
+    final db = await instance.database;
+    return await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
+  }
   Future<List<TransactionModel>> getAllTransactions() async {
     final db = await instance.database;
     final result = await db.query('transactions', orderBy: 'date DESC');

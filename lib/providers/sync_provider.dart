@@ -19,11 +19,13 @@ class SyncProvider with ChangeNotifier {
   bool _isSyncing = false;
   double _syncProgress = 0.0;
   String _syncStatus = "";
+  int _estimatedSecondsRemaining = 0;
   Timer? _autoSyncTimer;
 
   bool get isSyncing => _isSyncing;
   double get syncProgress => _syncProgress;
   String get syncStatus => _syncStatus;
+  int get estimatedSecondsRemaining => _estimatedSecondsRemaining;
 
   SyncProvider() {
     _startAutoSync();
@@ -31,7 +33,6 @@ class SyncProvider with ChangeNotifier {
 
   void _startAutoSync() {
     _autoSyncTimer?.cancel();
-    // 5 minutes auto sync as requested
     _autoSyncTimer = Timer.periodic(const Duration(minutes: 5), (timer) async {
       final connectivity = await Connectivity().checkConnectivity();
       if (connectivity.any((result) => result != ConnectivityResult.none)) {
@@ -51,7 +52,7 @@ class SyncProvider with ChangeNotifier {
     try {
       final db = DatabaseHelper.instance;
       
-      // 1. Sync Categories
+      // Silent sync logic (No UI update needed for progress here typically)
       final unsyncedCats = await db.getUnsyncedData('categories');
       for (var map in unsyncedCats) {
         final cat = CategoryModel.fromMap(map);
@@ -59,7 +60,6 @@ class SyncProvider with ChangeNotifier {
         await db.updateSyncStatus('categories', cat.id!, 1);
       }
 
-      // 2. Sync Items (Inventory)
       final unsyncedItems = await db.getUnsyncedData('items');
       for (var map in unsyncedItems) {
         final item = ItemModel.fromMap(map);
@@ -67,7 +67,6 @@ class SyncProvider with ChangeNotifier {
         await db.updateSyncStatus('items', item.id!, 1);
       }
 
-      // 3. Sync Staff & Salaries
       final unsyncedStaff = await db.getUnsyncedData('staff');
       for (var map in unsyncedStaff) {
         final staff = StaffModel.fromMap(map);
@@ -75,7 +74,6 @@ class SyncProvider with ChangeNotifier {
         await db.updateSyncStatus('staff', staff.id!, 1);
       }
 
-      // 4. Sync Suppliers
       final unsyncedSuppliers = await db.getUnsyncedData('suppliers');
       for (var map in unsyncedSuppliers) {
         final supplier = SupplierModel.fromMap(map);
@@ -83,7 +81,6 @@ class SyncProvider with ChangeNotifier {
         await db.updateSyncStatus('suppliers', supplier.id!, 1);
       }
 
-      // 5. Sync Transactions
       final unsyncedTxs = await db.getUnsyncedTransactions();
       for (var tx in unsyncedTxs) {
         await _firebaseService.syncTransaction(tx);
@@ -100,65 +97,83 @@ class SyncProvider with ChangeNotifier {
     if (_isSyncing) return false;
     
     _isSyncing = true;
-    _syncProgress = 0.1;
-    _syncStatus = "Connecting to cloud...";
+    _syncProgress = 0.0;
+    _syncStatus = "Connecting to secure cloud...";
+    _estimatedSecondsRemaining = 25; // Initial estimate
     notifyListeners();
 
+    // Start a dummy countdown timer for the estimated time
+    Timer? countdown;
+    countdown = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_estimatedSecondsRemaining > 2) {
+        _estimatedSecondsRemaining--;
+        notifyListeners();
+      } else {
+        countdown?.cancel();
+      }
+    });
+
     try {
-      // 1. Fetch all data from Firebase
+      // 1. Fetch data
+      _syncProgress = 0.1;
+      notifyListeners();
       final cloudData = await _firebaseService.fetchAllUserData();
       
-      _syncStatus = "Clearing local database...";
-      _syncProgress = 0.3;
+      _syncProgress = 0.25;
+      _syncStatus = "Cleaning local database for fresh restore...";
       notifyListeners();
-
-      // 2. Clear Local DB
       await DatabaseHelper.instance.clearAllData();
 
-      // 3. Insert Categories
-      _syncStatus = "Restoring Categories...";
+      // 3. Categories
+      _syncProgress = 0.35;
+      _syncStatus = "Restoring Product Categories...";
+      notifyListeners();
       final categories = cloudData['categories'] ?? [];
       for (var cat in categories) {
         await DatabaseHelper.instance.insertCategory(cat);
       }
-      _syncProgress = 0.5;
-      notifyListeners();
 
-      // 4. Insert Items (Stock/Inventory)
-      _syncStatus = "Restoring Inventory...";
+      // 4. Items
+      _syncProgress = 0.55;
+      _syncStatus = "Downloading Inventory Stock...";
+      notifyListeners();
       final items = cloudData['items'] ?? [];
       for (var item in items) {
         await DatabaseHelper.instance.insertItem(item);
       }
-      _syncProgress = 0.7;
-      notifyListeners();
 
-      // 5. Insert Staff & Salary info
-      _syncStatus = "Restoring Staff details...";
+      // 5. Staff & Salaries
+      _syncProgress = 0.70;
+      _syncStatus = "Restoring Staff and Salary data...";
+      notifyListeners();
       final staff = cloudData['staff'] ?? [];
       for (var s in staff) {
         await DatabaseHelper.instance.insertStaff(s);
       }
 
-      // 6. Insert Suppliers
-      _syncStatus = "Restoring Suppliers...";
+      // 6. Suppliers
+      _syncStatus = "Updating Supplier information...";
       final suppliers = cloudData['suppliers'] ?? [];
       for (var sup in suppliers) {
         await DatabaseHelper.instance.insertSupplier(sup);
       }
       
-      // 7. Insert Transactions
-      _syncStatus = "Restoring Transactions...";
+      // 7. Transactions
+      _syncProgress = 0.85;
+      _syncStatus = "Finalizing Transaction History...";
+      notifyListeners();
       final transactions = cloudData['transactions'] ?? [];
       for (var tx in transactions) {
         await DatabaseHelper.instance.insertTransaction(tx);
       }
       
       _syncProgress = 1.0;
-      _syncStatus = "Sync Complete!";
+      _estimatedSecondsRemaining = 0;
+      _syncStatus = "Data successfully restored!";
       notifyListeners();
+      countdown.cancel();
 
-      // 8. Refresh all Providers to show new data on UI
+      // Refresh providers
       if (context.mounted) {
         Provider.of<CategoryProvider>(context, listen: false).fetchCategories();
         Provider.of<ItemProvider>(context, listen: false).fetchItems();
@@ -169,8 +184,9 @@ class SyncProvider with ChangeNotifier {
 
       return true;
     } catch (e) {
-      _syncStatus = "Restore Failed: $e";
+      _syncStatus = "Restore Failed: Check internet connection";
       debugPrint("Full Restore Error: $e");
+      countdown.cancel();
       return false;
     } finally {
       _isSyncing = false;

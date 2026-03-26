@@ -560,6 +560,10 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
       });
     }
 
+    // Dynamic Column Logic based on screen width
+    double width = MediaQuery.of(context).size.width;
+    int crossAxisCount = width > 900 ? 5 : (width > 600 ? 3 : 2);
+
     return Scaffold(
       backgroundColor: profile.scaffoldColor, 
       appBar: AppBar(
@@ -626,8 +630,8 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
                   : TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildItemGrid('All', profile, themeColor),
-                      ...filteredCats.map((c) => _buildItemGrid(c.name, profile, themeColor)),
+                      _buildItemGrid('All', profile, themeColor, crossAxisCount),
+                      ...filteredCats.map((c) => _buildItemGrid(c.name, profile, themeColor, crossAxisCount)),
                     ],
                   ),
               ),
@@ -639,7 +643,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildItemGrid(String categoryName, ProfileProvider profile, Color themeColor) {
+  Widget _buildItemGrid(String categoryName, ProfileProvider profile, Color themeColor, int crossAxisCount) {
     final itemProvider = Provider.of<ItemProvider>(context);
     final filteredItems = itemProvider.items.where((i) {
       bool matchType = _isSellingType ? i.itemType == 'selling' : i.itemType == 'purchase';
@@ -652,7 +656,12 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
 
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 1.3),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount, 
+        crossAxisSpacing: 16, 
+        mainAxisSpacing: 16, 
+        childAspectRatio: 1.3
+      ),
       itemCount: filteredItems.length,
       itemBuilder: (context, index) {
         final item = filteredItems[index];
@@ -750,7 +759,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
       onChanged: onChange,
       style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: profile.textColor),
       decoration: InputDecoration(
-        labelText: hint, // Set hint as label so it shifts to border
+        labelText: hint,
       ),
     );
   }
