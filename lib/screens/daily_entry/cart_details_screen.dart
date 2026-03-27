@@ -6,6 +6,7 @@ import '../../providers/transaction_provider.dart';
 import '../../providers/item_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/cart_item.dart';
+import '../../models/item_model.dart';
 import '../../services/notification_service.dart';
 
 class CartDetailsScreen extends StatefulWidget {
@@ -75,10 +76,27 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     super.dispose();
   }
 
+  // Babu ji: Master Price Recalculation for Cart (Portion Master Fix)
   void _calculateTotal() {
     double subtotal = 0;
-    for (var item in widget.cart) {
-      subtotal += (item.price * item.quantity) + item.extraPrice;
+    for (var cartItem in widget.cart) {
+      final item = cartItem.item;
+      final q = cartItem.quantity;
+      
+      double itemPriceSum = 0;
+      if (item.halfPrice != null && item.halfPrice! > 0) {
+        // Master Logic: (Full Plates * Full Price) + (If 0.5 exists * Half Price)
+        int fullPlatesCount = q.floor();
+        double halfRemainder = q - fullPlatesCount;
+        itemPriceSum = (fullPlatesCount * (item.price ?? 0)) + (halfRemainder > 0 ? item.halfPrice! : 0);
+        
+        // Sync cartItem price for display/JSON
+        cartItem.price = (q == 0.5 ? item.halfPrice! : (item.price ?? 0));
+      } else {
+        itemPriceSum = q * cartItem.price;
+      }
+      
+      subtotal += itemPriceSum + cartItem.extraPrice;
     }
 
     final profile = Provider.of<ProfileProvider>(context, listen: false);
@@ -246,8 +264,18 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
 
   Widget _buildSummaryCard(ProfileProvider profile) {
     double subtotal = 0;
-    for (var item in widget.cart) {
-      subtotal += (item.price * item.quantity) + item.extraPrice;
+    for (var cartItem in widget.cart) {
+      final item = cartItem.item;
+      final q = cartItem.quantity;
+      double itemPriceSum = 0;
+      if (item.halfPrice != null && item.halfPrice! > 0) {
+        int fullPlates = q.floor();
+        double halfRem = q - fullPlates;
+        itemPriceSum = (fullPlates * (item.price ?? 0)) + (halfRem > 0 ? item.halfPrice! : 0);
+      } else {
+        itemPriceSum = q * cartItem.price;
+      }
+      subtotal += itemPriceSum + cartItem.extraPrice;
     }
     double taxAmount = subtotal * (profile.taxPercentage / 100);
 
@@ -299,6 +327,8 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       itemCount: widget.cart.length,
       itemBuilder: (context, index) {
         final c = widget.cart[index];
+        final bool hasHalf = c.item.halfPrice != null && c.item.halfPrice! > 0;
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -321,8 +351,9 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     ),
                   ),
                   _qtyBtn(Icons.remove, profile, () => setState(() {
-                    if (c.quantity > 1) {
-                      c.quantity--;
+                    double step = hasHalf ? 0.5 : 1.0;
+                    if (c.quantity > step) {
+                      c.quantity -= step;
                     } else {
                       widget.cart.removeAt(index);
                     }
@@ -332,17 +363,18 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Column(
                       children: [
-                        Text('${c.quantity.toInt()}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13)),
+                        Text('${c.quantity.toStringAsFixed(1)}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13)),
                         Text(c.unit, style: TextStyle(fontSize: 8, color: profile.secondaryTextColor)),
                       ],
                     ),
                   ),
                   _qtyBtn(Icons.add, profile, () => setState(() {
-                    c.quantity++;
+                    double step = hasHalf ? 0.5 : 1.0;
+                    c.quantity += step;
                     _calculateTotal();
                   })),
                   const SizedBox(width: 10),
-                  Text('${profile.currencySymbol}${(c.price * c.quantity + c.extraPrice).toStringAsFixed(0)}',
+                  Text('${profile.currencySymbol}${_getItemTotalPrice(c).toStringAsFixed(0)}',
                     style: TextStyle(fontWeight: FontWeight.w900, color: profile.themeColor, fontSize: 13)),
                 ],
               ),
@@ -376,7 +408,6 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                   ),
                 ],
               ),
-              // logic: Item-wise serving method checkbox
               if (widget.type == 'sale') ...[
                 const SizedBox(height: 10),
                 Row(
@@ -392,6 +423,17 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         );
       },
     );
+  }
+
+  double _getItemTotalPrice(CartItem c) {
+    final item = c.item;
+    final q = c.quantity;
+    if (item.halfPrice != null && item.halfPrice! > 0) {
+      int fullPlates = q.floor();
+      double halfRem = q - fullPlates;
+      return (fullPlates * (item.price ?? 0)) + (halfRem > 0 ? item.halfPrice! : 0) + c.extraPrice;
+    }
+    return (q * c.price) + c.extraPrice;
   }
 
   Widget _servingCheckbox(CartItem item, String method, ProfileProvider profile) {
@@ -556,7 +598,6 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   Widget _buildGlobalServingAndTableSelector(ProfileProvider profile) {
     return Row(
       children: [
-        // Serving Method Toggle (Radio button style toggle)
         Expanded(
           flex: 2,
           child: Container(
@@ -588,7 +629,6 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
           ),
         ),
         const SizedBox(width: 12),
-        // Table Picker Dropdown (Same size as toggle)
         Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
@@ -662,8 +702,8 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         'price': e.price,
         'extra_qty': e.extraPieces,
         'extra_price': e.extraPrice,
-        'serving_method': e.servingMethod, // Item-wise value
-        'table_number': _selectedTable, // Global value
+        'serving_method': e.servingMethod, 
+        'table_number': _selectedTable,
       }).toList());
 
       double paidAmt = totalAmt;

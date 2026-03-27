@@ -17,10 +17,10 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  String _activeFilter = 'Completed'; 
-  final Set<int> _selectedIds = {}; 
-  final Map<int, GlobalKey> _itemKeys = {}; 
-  DateTimeRange? _selectedDateRange; 
+  String _activeFilter = 'Completed';
+  final Set<int> _selectedIds = {};
+  final Map<int, GlobalKey> _itemKeys = {};
+  DateTimeRange? _selectedDateRange;
 
   String _getSmartItemTitle(TransactionModel tx) {
     final items = tx.parsedItems;
@@ -32,21 +32,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (items.length > 2) names += '...';
       return '${items.length} Items: $names';
     }
-  }
-
-  String _getSmartCategory(TransactionModel tx) {
-    if (tx.category != 'All' && tx.category != 'Mixed' && tx.category.isNotEmpty) {
-      return tx.category;
-    }
-    final items = tx.parsedItems;
-    if (items.isNotEmpty) {
-      final firstCat = items.first['category'];
-      if (firstCat != null && firstCat.isNotEmpty) {
-        bool allSame = items.every((item) => item['category'] == firstCat);
-        if (allSame) return firstCat;
-      }
-    }
-    return tx.category;
   }
 
   void _toggleSelection(int id) {
@@ -78,15 +63,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               for (int id in _selectedIds) {
                 await txProvider.softDeleteTransaction(id, itemProvider);
               }
-              setState(() {
-                _selectedIds.clear();
-                final remainingPurchases = txProvider.transactions.where((tx) => tx.type == 'purchase' && _isToday(tx.date)).length;
-                if (_activeFilter == 'Purchase' && remainingPurchases == 0) {
-                  _activeFilter = 'Completed';
-                }
-              });
+              setState(() => _selectedIds.clear());
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Items moved to trash!')));
             },
             child: const Text('DELETE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ),
@@ -206,7 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Row(
                           children: [
-                            Text('Recent Activity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: profileProvider.textColor)),
+                            Text('Activity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: profileProvider.textColor)),
                             if (_selectedDateRange != null)
                               IconButton(
                                 icon: const Icon(Icons.history_rounded, size: 18, color: Colors.blue),
@@ -252,6 +230,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       final tx = filteredTransactions[index];
                       final isSelected = _selectedIds.contains(tx.id);
                       _itemKeys[tx.id!] ??= GlobalKey();
+                      if (tx.status == 'pending') {
+                        return _buildPendingOrderCard(context, tx, profileProvider, txProvider);
+                      }
                       return Container(
                         key: _itemKeys[tx.id!],
                         child: _buildModernTransactionTile(context, tx, profileProvider, isSelected)
@@ -322,35 +303,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showQtyEditDialog(BuildContext context, TransactionModel tx, Map<String, String> item, TransactionProvider provider, ItemProvider itemProvider) {
-    final TextEditingController qtyController = TextEditingController(text: item['qty']);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Update Quantity: ${item['name']}'),
-        content: TextField(
-          controller: qtyController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder()),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
-          ElevatedButton(
-            onPressed: () {
-              double? nq = double.tryParse(qtyController.text);
-              if (nq != null && nq > 0) {
-                provider.updatePendingItem(tx.id!, item['name']!, newQty: nq, itemProvider: itemProvider);
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('UPDATE'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildPendingOrderCard(BuildContext context, TransactionModel tx, ProfileProvider profile, TransactionProvider provider) {
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
     return Container(
@@ -382,10 +334,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 8),
                 ...tx.parsedItems.map((item) {
                   final bool isChecked = item['checked'] == 'true';
-                  final qty = double.tryParse(item['qty'] ?? '0') ?? 0;
-                  final extraQty = double.tryParse(item['extra_qty'] ?? '0') ?? 0;
-                  final totalQty = qty + extraQty;
-                  final price = double.tryParse(item['price'] ?? '0') ?? 0;
+                  final qty = double.tryParse(item['qty'] ?? '1') ?? 1;
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -401,50 +350,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: InkWell(
-                             onTap: () => _showQtyEditDialog(context, tx, item, provider, itemProvider),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item['name'] ?? 'Item',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: isChecked ? profile.secondaryTextColor : profile.textColor,
-                                    fontWeight: FontWeight.w700,
-                                    decoration: isChecked ? TextDecoration.lineThrough : null,
-                                  )
-                                ),
-                                Row(
-                                  children: [
-                                    Text('${totalQty.toInt()} Units', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
-                                    const SizedBox(width: 8),
-                                    Text('${profile.currencySymbol}${price.toStringAsFixed(0)}', style: TextStyle(fontSize: 10, color: profile.themeColor, fontWeight: FontWeight.bold)),
-                                    if (item['serving_method'] != null && item['serving_method']!.isNotEmpty) ...[
-                                      const SizedBox(width: 8),
-                                      Text('• ${item['serving_method']}', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
-                                    ]
-                                  ],
-                                ),
-                              ],
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item['name'] ?? 'Item',
+                                style: TextStyle(fontSize: 14, color: isChecked ? profile.secondaryTextColor : profile.textColor, fontWeight: FontWeight.w700, decoration: isChecked ? TextDecoration.lineThrough : null)
+                              ),
+                              Text('${item['serving_method'] ?? 'Dine-in'} • ${profile.currencySymbol}${item['price']} x ${item['qty']}', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
+                            ],
                           ),
                         ),
                         Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('${profile.currencySymbol}${(totalQty * price).toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: isChecked ? profile.secondaryTextColor : profile.textColor)),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, size: 18, color: Colors.blue),
-                              onPressed: () => _showQtyEditDialog(context, tx, item, provider, itemProvider),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                              onPressed: () {
-                                provider.updatePendingItem(tx.id!, item['name']!, isDelete: true, itemProvider: itemProvider);
-                              },
-                            ),
+                            _qtyEditBtn(Icons.remove, () {
+                              final masterItem = itemProvider.items.firstWhere((i) => i.name == item['name']);
+                              bool hasHalf = masterItem.halfPrice != null && masterItem.halfPrice! > 0;
+                              provider.addPortionToPending(tx.id!, item['name']!, hasHalf, true, itemProvider);
+                            }),
+                            Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text('${qty.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold))),
+                            _qtyEditBtn(Icons.add, () {
+                              final masterItem = itemProvider.items.firstWhere((i) => i.name == item['name']);
+                              bool hasHalf = masterItem.halfPrice != null && masterItem.halfPrice! > 0;
+                              provider.addPortionToPending(tx.id!, item['name']!, hasHalf, false, itemProvider);
+                            }),
                           ],
                         ),
                       ],
@@ -457,7 +386,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
-                          Navigator.pop(context);
                           Navigator.push(context, MaterialPageRoute(builder: (c) => EntryScreen(transaction: tx)));
                         },
                         style: ElevatedButton.styleFrom(
@@ -471,7 +399,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(width: 12),
                     IconButton(
-                      onPressed: () => _showDeleteConfirm(context, tx, provider, itemProvider, profile),
+                      onPressed: () => provider.softDeleteTransaction(tx.id!, itemProvider),
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
                       style: IconButton.styleFrom(backgroundColor: Colors.red.withOpacity(0.1), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                     ),
@@ -485,76 +413,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildPendingOrderBanner(BuildContext context, TransactionProvider tx, ProfileProvider profile) {
-    return GestureDetector(
-      onTap: () => _showPendingOrdersSheet(context, tx, profile),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.orange.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.orange.withOpacity(0.2)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.timer_outlined, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${tx.pendingTransactions.length} Pending Orders', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.orange)),
-                  const Text('Tap to view and complete bills', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.orange),
-          ],
-        ),
-      ),
-    );
+  Widget _qtyEditBtn(IconData icon, VoidCallback onTap) {
+    return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, size: 16)));
   }
 
-  Widget _filterChip(String label, int count) {
-    final profile = Provider.of<ProfileProvider>(context, listen: false);
-    bool isSelected = _activeFilter == label;
-    Color color = label == 'Pending' ? Colors.orange : (label == 'Purchase' ? Colors.red.shade700 : profile.themeColor);
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _activeFilter = label;
-          _selectedIds.clear(); 
-          _selectedDateRange = null;
-        });
-      },
-      onLongPress: (label == 'Completed' || label == 'Purchase') ? () => _selectDateRange(context) : null,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? color : color.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? color : color.withOpacity(0.2)),
-        ),
-        child: Row(
-          children: [
-            Text(label, style: TextStyle(color: isSelected ? Colors.white : color, fontWeight: FontWeight.w900, fontSize: 10)),
-            if (count > 0) ...[
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(color: isSelected ? Colors.white24 : color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                child: Text('$count', style: TextStyle(color: isSelected ? Colors.white : color, fontWeight: FontWeight.bold, fontSize: 9)),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
+  Widget _buildEmptyState(ProfileProvider profile) {
+    return const Center(child: Text('No Activity Found'));
   }
 
   Widget _buildMainStatsCard(TransactionProvider tx, ProfileProvider profile) {
@@ -564,20 +428,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: [profile.themeColor, profile.themeColor.withOpacity(0.85)]),
         borderRadius: BorderRadius.circular(28),
-        boxShadow: profile.themeShadow, // Restored dynamic shadow
+        boxShadow: profile.themeShadow,
       ),
       child: Stack(
         children: [
-          Positioned(right: -30, top: -30, child: CircleAvatar(radius: 80, backgroundColor: Colors.white.withOpacity(0.05))),
+          Positioned(
+            right: -30, top: -30, 
+            child: CircleAvatar(
+              radius: 80, 
+              backgroundColor: Colors.white.withOpacity(0.05),
+              child: Icon(Icons.bar_chart_rounded, size: 60, color: Colors.white.withOpacity(0.1)),
+            )
+          ),
           Column(
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
+                padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Column(
                   children: [
                     Text(AppStrings.totalSalesToday, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 1.5)),
-                    Text('${profile.currencySymbol}${tx.todaySales.toStringAsFixed(0)}', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white)),
-                    const SizedBox(height: 8),
+                    Text('${profile.currencySymbol}${tx.todaySales.toStringAsFixed(0)}', style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: Colors.white)),
+                    const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(color: Colors.black.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
@@ -591,7 +462,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(color: Colors.black.withOpacity(0.1), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28))),
                 child: Row(
                   children: [
@@ -643,7 +514,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: profile.cardColor, 
+          color: profile.cardColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
         ),
@@ -659,7 +530,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildQuickActions(BuildContext context) {
     return Row(children: [
-      _modernActionButton(context, AppStrings.newSale, Icons.add_shopping_cart_rounded, Colors.green, 
+      _modernActionButton(context, AppStrings.newSale, Icons.add_shopping_cart_rounded, Colors.green,
         () => Navigator.push(context, MaterialPageRoute(builder: (c) => const EntryScreen(initialType: 'sale')))),
       const SizedBox(width: 16),
       _modernActionButton(context, 'PURCHASE', Icons.shopping_bag_rounded, Colors.orangeAccent.shade700,
@@ -691,23 +562,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildModernTransactionTile(BuildContext context, TransactionModel tx, ProfileProvider profile, bool isSelected) {
     final isSale = tx.type == 'sale';
-    final isPending = tx.status == 'pending';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isSelected ? Colors.red.withOpacity(0.08) : profile.cardColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: isSelected ? Colors.red : (isPending ? Colors.orange.withOpacity(0.4) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100))),
+        border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
       ),
       child: ListTile(
         onLongPress: () => _toggleSelection(tx.id!),
-        onTap: () {
-          if (isSelected) {
-            _toggleSelection(tx.id!);
-          } else {
-            _showTransactionActions(context, tx, profile);
-          }
-        },
+        onTap: () => _showTransactionActions(context, tx, profile),
         leading: isSelected ? const Icon(Icons.check_circle, color: Colors.red) : Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(color: (isSale ? Colors.green : Colors.red).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
@@ -725,8 +589,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
 
     showModalBottomSheet(
-      context: context, 
-      isScrollControlled: true, 
+      context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: BoxDecoration(color: profile.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
@@ -766,7 +630,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
-            const Divider(height: 12), // Babu ji Logic: Reduced height row below total
+            const Divider(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -789,7 +653,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(width: 12),
                 _actionButton(icon: Icons.delete_outline_rounded, label: 'DELETE', color: Colors.red, onTap: () {
                   Navigator.pop(context);
-                  _showDeleteConfirm(context, tx, txProvider, itemProvider, profile);
+                  txProvider.softDeleteTransaction(tx.id!, itemProvider);
                 }),
               ],
             ),
@@ -819,25 +683,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, TransactionModel tx, TransactionProvider txProvider, ItemProvider itemProvider, ProfileProvider profile) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        title: const Text('Delete Transaction?'),
-        content: const Text('Move to trash? Stock will be restored.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
-          TextButton(onPressed: () async {
-            await txProvider.softDeleteTransaction(tx.id!, itemProvider);
-            if (mounted) Navigator.pop(ctx);
-          }, child: const Text('DELETE', style: TextStyle(color: Colors.red))),
-        ],
+  Widget _filterChip(String label, int count) {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    bool isSelected = _activeFilter == label;
+    Color color = label == 'Pending' ? Colors.orange : profile.themeColor;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _activeFilter = label;
+          _selectedIds.clear();
+          _selectedDateRange = null;
+        });
+      },
+      onLongPress: (label == 'Completed' || label == 'Purchase') ? () => _selectDateRange(context) : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? color : color.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isSelected ? color : color.withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            Text(label, style: TextStyle(color: isSelected ? Colors.white : color, fontWeight: FontWeight.w900, fontSize: 10)),
+            if (count > 0) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(color: isSelected ? Colors.white24 : color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                child: Text('$count', style: TextStyle(color: isSelected ? Colors.white : color, fontWeight: FontWeight.bold, fontSize: 9)),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildEmptyState(ProfileProvider profile) {
-    return const Center(child: Text('No Activity Found'));
+  Widget _buildPendingOrderBanner(BuildContext context, TransactionProvider tx, ProfileProvider profile) {
+    return GestureDetector(
+      onTap: () => _showPendingOrdersSheet(context, tx, profile),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.orange.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.orange.withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.timer_outlined, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${tx.pendingTransactions.length} Pending Orders', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.orange)),
+                  const Text('Tap to view and complete bills', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.orange),
+          ],
+        ),
+      ),
+    );
   }
 }

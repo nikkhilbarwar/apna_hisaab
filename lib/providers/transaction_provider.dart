@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/item_model.dart';
 import '../models/transaction_model.dart';
 import '../core/database/database_helper.dart';
 import '../services/firebase_service.dart';
@@ -125,35 +126,22 @@ class TransactionProvider with ChangeNotifier {
     String? status,
   }) {
     return _allTransactions.where((tx) {
-      // Logic Fix: Handle both 'purchase' and 'expense' for expense reports
-      bool matchType = type == 'all' || 
-                       tx.type == type || 
-                       (type == 'purchase' && tx.type == 'expense');
-      
+      bool matchType = type == 'all' || tx.type == type || (type == 'purchase' && tx.type == 'expense');
       bool matchDelete = tx.isDeleted == 0;
       bool matchStatus = status == null || _normalizeStatus(tx.status) == _normalizeStatus(status);
-      
       bool matchDate = true;
       if (range != null) {
-        // Date Boundary Fix: Normalize to start of day and end of day inclusive
         final start = DateTime(range.start.year, range.start.month, range.start.day);
         final endLimit = DateTime(range.end.year, range.end.month, range.end.day).add(const Duration(days: 1));
         matchDate = tx.date.isAtSameMomentAs(start) || (tx.date.isAfter(start) && tx.date.isBefore(endLimit));
       }
-
-      // Case Sensitivity Fix: Lowercase matching for categories
-      bool matchCategory = category == null || 
-                          category == 'All' || 
-                          tx.category.toLowerCase() == category.toLowerCase();
-      
+      bool matchCategory = category == null || category == 'All' || tx.category.toLowerCase() == category.toLowerCase();
       bool matchItem = itemName == null || itemName.isEmpty || tx.parsedItems.any((i) => 
           (i['name'] ?? '').toLowerCase().contains(itemName.toLowerCase()));
 
       return matchType && matchDelete && matchStatus && matchDate && matchCategory && matchItem;
     }).toList();
   }
-
-  // --- Analytical Methods for Pro-Reporting ---
 
   Map<String, double> getPaymentSplit(List<TransactionModel> txs) {
     double cash = 0, upi = 0, credit = 0;
@@ -166,7 +154,6 @@ class TransactionProvider with ChangeNotifier {
       } else if (tx.paymentMode == 'UPI') {
         upi += tx.amount;
       } else if (tx.paymentMode == 'Credit') {
-        // Credit is only applicable for sales usually, for expenses it's outstanding
         credit += (tx.amount - tx.paidAmount);
         cash += tx.paidAmount; 
       }
@@ -225,8 +212,6 @@ class TransactionProvider with ChangeNotifier {
       if (index == -1) return;
 
       final tx = _allTransactions[index];
-      if (tx.description.isEmpty || (!tx.description.startsWith('[') && !tx.description.startsWith('{'))) return;
-
       final List<dynamic> items = jsonDecode(tx.description);
       for (var item in items) {
         if (item is Map && item['name'] == itemName) {
@@ -245,7 +230,76 @@ class TransactionProvider with ChangeNotifier {
     }
   }
 
-  Future<void> updatePendingItem(int transactionId, String itemName, {double? newQty, bool isDelete = false, required ItemProvider itemProvider}) async {
+  // Babu ji: Smart Portion logic for clean UI (1, 2, 3 plates) and accurate prices (Cheese Ball Fix)
+  Future<void> addPortionToPending(int transactionId, String itemName, bool isHalfOptionEnabled, bool isDecrement, ItemProvider itemProvider) async {
+    try {
+      final index = _allTransactions.indexWhere((t) => t.id == transactionId);
+      if (index == -1) return;
+
+      final originalTx = _allTransactions[index];
+      final tx = TransactionModel.fromMap(originalTx.toMap());
+      
+      final List<dynamic> items = jsonDecode(tx.description);
+      int itemIndex = items.indexWhere((i) => i['name'] == itemName);
+      if (itemIndex == -1) return;
+
+      final masterItem = itemProvider.items.firstWhere((i) => i.name == itemName);
+      
+      // Babu Ji Logic: Agar item mein Half option hai, toh qty 0.5 se badhegi
+      double qtyChange = isHalfOptionEnabled ? 0.5 : 1.0;
+      double currentQty = double.tryParse(items[itemIndex]['qty'].toString()) ?? 0;
+
+      if (isDecrement) {
+        if (currentQty <= qtyChange) {
+          items.removeAt(itemIndex);
+        } else {
+          items[itemIndex]['qty'] = (currentQty - qtyChange).toString();
+        }
+      } else {
+        items[itemIndex]['qty'] = (currentQty + qtyChange).toString();
+      }
+
+      if (items.isEmpty) {
+        await softDeleteTransaction(transactionId, itemProvider);
+        return;
+      }
+
+      // Master Pricing Recalculation (Cheese Ball 120/70 Logic)
+      double newTotal = 0;
+      for (var it in items) {
+        String name = it['name'] ?? '';
+        double q = double.tryParse(it['qty'].toString()) ?? 0;
+        
+        ItemModel? master;
+        try { master = itemProvider.items.firstWhere((i) => i.name == name); } catch (_) {}
+
+        if (master != null && master.halfPrice != null && master.halfPrice! > 0) {
+          // Calculation: (Full Plates * Full Price) + (If 0.5 exists * Half Price)
+          int fullPlatesCount = q.floor();
+          double remainderHalf = q - fullPlatesCount;
+          
+          double itemPriceSum = (fullPlatesCount * (master.price ?? 0)) + (remainderHalf > 0 ? master.halfPrice! : 0);
+          newTotal += itemPriceSum;
+          
+          // JSON description price update for display consistency
+          it['price'] = (q == 0.5 ? master.halfPrice! : master.price!).toString();
+        } else {
+          double p = double.tryParse(it['price'].toString()) ?? 0;
+          newTotal += (q * p);
+        }
+      }
+
+      tx.description = jsonEncode(items);
+      tx.amount = newTotal < 0 ? 0 : newTotal;
+      tx.isSynced = 0;
+
+      await updateTransaction(tx, itemProvider, oldTx: originalTx);
+    } catch (e) {
+      debugPrint("Error updating portion: $e");
+    }
+  }
+
+  Future<void> updatePendingItem(int transactionId, String itemName, {double? newQty, String? newVariant, bool isDelete = false, required ItemProvider itemProvider}) async {
     try {
       final index = _allTransactions.indexWhere((t) => t.id == transactionId);
       if (index == -1) return;
@@ -259,8 +313,15 @@ class TransactionProvider with ChangeNotifier {
 
       if (isDelete) {
         items.removeAt(itemIndex);
-      } else if (newQty != null) {
-        items[itemIndex]['qty'] = newQty.toString();
+      } else {
+        if (newQty != null) items[itemIndex]['qty'] = newQty.toString();
+        if (newVariant != null) {
+          items[itemIndex]['variant'] = newVariant;
+          try {
+            final masterItem = itemProvider.items.firstWhere((i) => i.name == itemName);
+            items[itemIndex]['price'] = (newVariant == 'Half' ? masterItem.halfPrice : masterItem.price).toString();
+          } catch (_) {}
+        }
       }
 
       if (items.isEmpty) {
@@ -290,10 +351,8 @@ class TransactionProvider with ChangeNotifier {
       await DatabaseHelper.instance.softDeleteTransaction(id);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: false);
       await NotificationService().cancelOrderReminders(id);
-      
       tx.isDeleted = 1;
       tx.deletedAt = DateTime.now();
-      
       await fetchTransactions();
       _syncSingleTransaction(tx);
     } catch (e) {
@@ -306,10 +365,8 @@ class TransactionProvider with ChangeNotifier {
       final tx = _allTransactions.firstWhere((t) => t.id == id);
       await DatabaseHelper.instance.restoreTransaction(id);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
-      
       tx.isDeleted = 0;
       tx.deletedAt = null;
-      
       await fetchTransactions();
       _syncSingleTransaction(tx);
     } catch (e) {
@@ -333,17 +390,25 @@ class TransactionProvider with ChangeNotifier {
     for (var itemMap in items) {
       try {
         final name = itemMap['name']!;
-        final qty = double.tryParse(itemMap['qty'] ?? '0') ?? 0;
-        final extraQty = double.tryParse(itemMap['extra_qty'] ?? '0') ?? 0;
-        final totalQty = qty + extraQty;
-        if (totalQty == 0) continue;
-
         int? targetId;
-        try { targetId = itemProvider.items.firstWhere((i) => i.name == name).id; } catch (_) {}
+        ItemModel? masterItem;
+        try { 
+          masterItem = itemProvider.items.firstWhere((i) => i.name == name);
+          targetId = masterItem.id; 
+        } catch (_) {}
 
-        if (targetId != null) {
+        if (targetId != null && masterItem != null) {
+          // Babu Ji: Stock piece-wise minus hona chahiye, Plate-wise nahi
+          final displayQty = double.tryParse(itemMap['qty'] ?? '0') ?? 0;
+          final extraQty = double.tryParse(itemMap['extra_qty'] ?? '0') ?? 0;
+          final totalDisplayQty = displayQty + extraQty;
+          
+          double piecesToAdjust = totalDisplayQty * (masterItem.fullQty ?? 1.0);
+          
+          if (piecesToAdjust == 0) continue;
+
           bool shouldIncrease = (tx.type == 'sale') ? !isAddingEffect : isAddingEffect;
-          await itemProvider.adjustStock(targetId, totalQty, shouldIncrease);
+          await itemProvider.adjustStock(targetId, piecesToAdjust, shouldIncrease);
         }
       } catch (e) {
         debugPrint("Stock adjustment failed: $e");

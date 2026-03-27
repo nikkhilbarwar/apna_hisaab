@@ -85,18 +85,22 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
     super.dispose();
   }
 
+  // Babu ji: Smart Add to Cart Logic (Fixed Half -> Full issue)
   void _addItemToCart(ItemModel item, {String variant = '', double price = 0}) {
     setState(() {
       final p = price > 0 ? price : (item.price ?? 0);
       final unit = variant == 'Half' ? (item.halfUnit ?? 'Half') : (item.fullUnit ?? 'Full');
       
-      final existingIndex = _cart.indexWhere((c) => c.item.id == item.id && c.variant == variant);
+      // Logic: Initial quantity 0.5 for Half, 1.0 for Full
+      double step = (variant == 'Half') ? 0.5 : 1.0;
+
+      final existingIndex = _cart.indexWhere((c) => c.item.id == item.id);
       if (existingIndex != -1) {
-        _cart[existingIndex].quantity++;
+        _cart[existingIndex].quantity += step;
       } else {
         _cart.add(CartItem(
           item: item, 
-          quantity: 1, 
+          quantity: step, 
           price: p, 
           variant: variant, 
           unit: unit,
@@ -109,10 +113,11 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
 
   void _removeItemFromCart(ItemModel item) {
     setState(() {
-      final existingIndex = _cart.lastIndexWhere((c) => c.item.id == item.id);
+      final existingIndex = _cart.indexWhere((c) => c.item.id == item.id);
       if (existingIndex != -1) {
-        if (_cart[existingIndex].quantity > 1) {
-          _cart[existingIndex].quantity--;
+        double step = (item.halfPrice != null && item.halfPrice! > 0) ? 0.5 : 1.0;
+        if (_cart[existingIndex].quantity > step) {
+          _cart[existingIndex].quantity -= step;
         } else {
           _cart.removeAt(existingIndex);
         }
@@ -135,7 +140,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
 
   void _showManualQuantityDialog(ItemModel item, double currentQty) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
-    final controller = TextEditingController(text: currentQty.toInt().toString());
+    final controller = TextEditingController(text: currentQty.toString());
     
     showDialog(
       context: context,
@@ -145,7 +150,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
         title: Text('Enter Quantity', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: controller,
-          keyboardType: TextInputType.number,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           autofocus: true,
           decoration: const InputDecoration(
             labelText: 'Quantity',
@@ -560,7 +565,6 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
       });
     }
 
-    // Dynamic Column Logic based on screen width
     double width = MediaQuery.of(context).size.width;
     int crossAxisCount = width > 900 ? 5 : (width > 600 ? 3 : 2);
 
@@ -733,7 +737,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(icon: Icon(Icons.remove, size: 16, color: profile.textColor), onPressed: () => _removeItemFromCart(item), constraints: const BoxConstraints(), padding: EdgeInsets.zero),
-          GestureDetector(onLongPress: () => _showManualQuantityDialog(item, count), child: Text('${count.toInt()}', style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 12))),
+          GestureDetector(onLongPress: () => _showManualQuantityDialog(item, count), child: Text('${count.toStringAsFixed(1)}', style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 12))),
           IconButton(icon: Icon(Icons.add, size: 16, color: profile.textColor), onPressed: () => _addItemToCart(item), constraints: const BoxConstraints(), padding: EdgeInsets.zero),
         ],
       ),
@@ -748,18 +752,6 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
         onPressed: () => item.halfPrice != null && item.halfPrice! > 0 ? _showVariantPicker(item) : _addItemToCart(item),
         style: ElevatedButton.styleFrom(backgroundColor: themeColor, elevation: 0, minimumSize: const Size(double.infinity, 32), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
         child: Text('ADD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: textColor, letterSpacing: 0.5)),
-      ),
-    );
-  }
-
-  Widget _smallEntryField(String hint, ProfileProvider profile, Function(String) onChange, {String? initial}) {
-    return TextFormField(
-      initialValue: initial,
-      keyboardType: TextInputType.number,
-      onChanged: onChange,
-      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: profile.textColor),
-      decoration: InputDecoration(
-        labelText: hint,
       ),
     );
   }

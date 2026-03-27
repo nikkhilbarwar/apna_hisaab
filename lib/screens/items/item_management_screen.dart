@@ -300,8 +300,15 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
     final priceController = TextEditingController(text: item?.price?.toString());
     final halfPriceController = TextEditingController(text: item?.halfPrice?.toString());
     
-    // Dynamic Units logic
-    String selectedUnit = item?.unit ?? (unitProvider.units.isNotEmpty ? unitProvider.units.first.name : 'Plate');
+    // Safety check for unit selection (Babu Ji: Dropdown crash fix)
+    List<String> availableUnitNames = unitProvider.units.map((u) => u.name).toSet().toList(); // Avoid duplicates
+    String selectedUnit = item?.unit ?? (availableUnitNames.isNotEmpty ? availableUnitNames.first : 'Plate');
+    
+    // Agar item ki unit list mein nahi hai, toh reset to first available
+    if (!availableUnitNames.contains(selectedUnit)) {
+       selectedUnit = availableUnitNames.isNotEmpty ? availableUnitNames.first : 'Plate';
+    }
+
     final halfUnitController = TextEditingController(text: item?.halfUnit ?? 'Half Portion');
     final fullQtyController = TextEditingController(text: item?.fullQty?.toString() ?? '1');
     final halfQtyController = TextEditingController(text: item?.halfQty?.toString() ?? '0.5');
@@ -341,11 +348,12 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                         decoration: BoxDecoration(color: profileProvider.scaffoldColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: profileProvider.isDarkMode ? Colors.white10 : Colors.grey.shade200)),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: unitProvider.units.any((u) => u.name == selectedUnit) ? selectedUnit : (unitProvider.units.isNotEmpty ? unitProvider.units.first.name : null),
+                            value: availableUnitNames.contains(selectedUnit) ? selectedUnit : null,
                             isExpanded: true,
+                            hint: const Text("Unit"),
                             dropdownColor: profileProvider.cardColor,
                             style: TextStyle(color: profileProvider.textColor, fontWeight: FontWeight.bold),
-                            items: unitProvider.units.map((u) => DropdownMenuItem(value: u.name, child: Text(u.name))).toList(),
+                            items: availableUnitNames.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList(),
                             onChanged: (val) { if (val != null) setDialogState(() => selectedUnit = val); },
                           ),
                         ),
@@ -373,6 +381,7 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                 const SizedBox(height: 32),
                 ElevatedButton(
                   onPressed: () async {
+                    if (nameController.text.isEmpty) return;
                     final newItem = ItemModel(
                       id: item?.id, name: nameController.text, category: widget.category,
                       unit: selectedUnit, minStock: item?.minStock ?? 0, currentStock: item?.currentStock ?? 0,

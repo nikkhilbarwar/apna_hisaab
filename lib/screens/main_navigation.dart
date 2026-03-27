@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,6 +32,9 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _checkAdminStatus();
     _checkAutoBackup();
   }
@@ -38,7 +42,6 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
   Future<void> _checkAdminStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
-    // List of Authorized Admin Emails
     bool isAdminEmail = user?.email == "nikkhilbarwar@gmail.com" || 
                         user?.email == "anitamishra1714@gmail.com" ||
                         user?.email == "missadvocate06@gmail.com";
@@ -256,112 +259,127 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
 
     final bool globalSyncing = txProvider.isSyncing || syncProvider.isSyncing;
 
-    return Scaffold(
-      backgroundColor: profile.scaffoldColor,
-      appBar: AppBar(
-        toolbarHeight: 62,
-        elevation: 0,
-        backgroundColor: themeColor,
-        centerTitle: true,
-        leadingWidth: 80,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 12.0),
-          child: Center(
-            child: GestureDetector(
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen())),
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: appBarContentColor.withValues(alpha: 0.2), width: 1.5),
-                  color: Colors.black.withValues(alpha: 0.1),
-                ),
-                padding: const EdgeInsets.all(2),
-                child: CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.transparent,
-                  backgroundImage: profile.logoPath.isNotEmpty && File(profile.logoPath).existsSync()
-                      ? FileImage(File(profile.logoPath)) 
-                      : (user?.photoURL != null ? NetworkImage(user!.photoURL!) as ImageProvider : null),
-                  child: (profile.logoPath.isEmpty || !File(profile.logoPath).existsSync()) && user?.photoURL == null
-                      ? Icon(Icons.person, color: appBarContentColor, size: 24)
-                      : null,
+    // Babu Ji: Back press par Dashboard par redirect karne wala robust logic
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (didPop) return;
+        
+        if (_tabController.index != 0) {
+          // Agar kisi aur tab (Stock, Reports etc.) par hain, toh pehle Home par bhej do
+          _tabController.animateTo(0);
+        } else {
+          // Agar pehle se hi Home par hain, toh exit allow karo
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: profile.scaffoldColor,
+        appBar: AppBar(
+          toolbarHeight: 62,
+          elevation: 0,
+          backgroundColor: themeColor,
+          centerTitle: true,
+          leadingWidth: 80,
+          leading: Padding(
+            padding: const EdgeInsets.only(left: 12.0),
+            child: Center(
+              child: GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen())),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: appBarContentColor.withValues(alpha: 0.2), width: 1.5),
+                    color: Colors.black.withValues(alpha: 0.1),
+                  ),
+                  padding: const EdgeInsets.all(2),
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.transparent,
+                    backgroundImage: profile.logoPath.isNotEmpty && File(profile.logoPath).existsSync()
+                        ? FileImage(File(profile.logoPath)) 
+                        : (user?.photoURL != null ? NetworkImage(user!.photoURL!) as ImageProvider : null),
+                    child: (profile.logoPath.isEmpty || !File(profile.logoPath).existsSync()) && user?.photoURL == null
+                        ? Icon(Icons.person, color: appBarContentColor, size: 24)
+                        : null,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        title: Text(profile.businessName.toUpperCase(), 
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1, color: appBarContentColor)),
-        actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
+          title: Text(profile.businessName.toUpperCase(), 
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1, color: appBarContentColor)),
+          actions: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    globalSyncing ? Icons.cloud_sync_rounded : Icons.cloud_done_rounded, 
+                    color: globalSyncing ? appBarContentColor.withOpacity(0.5) : Colors.greenAccent,
+                    size: 26,
+                  ),
+                  onPressed: () => _showSyncStatus(context, txProvider, profile),
+                  tooltip: "Sync Status",
+                ),
+                if (globalSyncing)
+                  SizedBox(
+                    width: 32, height: 32, 
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2, 
+                      color: appBarContentColor.withOpacity(0.8),
+                      backgroundColor: appBarContentColor.withOpacity(0.1),
+                    )
+                  ),
+              ],
+            ),
+            if (_isSysAdmin)
               IconButton(
                 icon: Icon(
-                  globalSyncing ? Icons.cloud_sync_rounded : Icons.cloud_done_rounded, 
-                  color: globalSyncing ? appBarContentColor.withOpacity(0.5) : Colors.greenAccent,
+                  Icons.admin_panel_settings, 
+                  color: appBarContentColor == Colors.black ? Colors.deepOrange : Colors.orangeAccent,
                   size: 26,
                 ),
-                onPressed: () => _showSyncStatus(context, txProvider, profile),
-                tooltip: "Sync Status",
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen())),
+                tooltip: "Admin Panel",
               ),
-              if (globalSyncing)
-                SizedBox(
-                  width: 32, height: 32, 
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2, 
-                    color: appBarContentColor.withOpacity(0.8),
-                    backgroundColor: appBarContentColor.withOpacity(0.1),
-                  )
+          ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(65),
+            child: Column(
+              children: [
+                Container(height: 1, width: double.infinity, color: appBarContentColor.withValues(alpha: 0.1)),
+                Container(
+                  color: themeColor,
+                  child: TabBar(
+                    controller: _tabController,
+                    indicatorColor: appBarContentColor,
+                    indicatorWeight: 4,
+                    labelColor: appBarContentColor,
+                    unselectedLabelColor: appBarContentColor.withValues(alpha: 0.6),
+                    labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                    tabs: const [
+                      Tab(text: 'HOME', icon: Icon(Icons.dashboard_rounded, size: 20)),
+                      Tab(text: 'STOCK', icon: Icon(Icons.inventory_2_rounded, size: 20)),
+                      Tab(text: 'REPORTS', icon: Icon(Icons.analytics_rounded, size: 20)),
+                      Tab(text: 'STAFF', icon: Icon(Icons.people_alt_rounded, size: 20)),
+                    ],
+                  ),
                 ),
-            ],
-          ),
-          if (_isSysAdmin)
-            IconButton(
-              icon: Icon(
-                Icons.admin_panel_settings, 
-                color: appBarContentColor == Colors.black ? Colors.deepOrange : Colors.orangeAccent,
-                size: 26,
-              ),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen())),
-              tooltip: "Admin Panel",
+                Container(height: 1, width: double.infinity, color: appBarContentColor.withValues(alpha: 0.1)),
+              ],
             ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(65),
-          child: Column(
-            children: [
-              Container(height: 1, width: double.infinity, color: appBarContentColor.withValues(alpha: 0.1)),
-              Container(
-                color: themeColor,
-                child: TabBar(
-                  controller: _tabController,
-                  indicatorColor: appBarContentColor,
-                  indicatorWeight: 4,
-                  labelColor: appBarContentColor,
-                  unselectedLabelColor: appBarContentColor.withValues(alpha: 0.6),
-                  labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                  tabs: const [
-                    Tab(text: 'HOME', icon: Icon(Icons.dashboard_rounded, size: 20)),
-                    Tab(text: 'STOCK', icon: Icon(Icons.inventory_2_rounded, size: 20)),
-                    Tab(text: 'REPORTS', icon: Icon(Icons.analytics_rounded, size: 20)),
-                    Tab(text: 'STAFF', icon: Icon(Icons.people_alt_rounded, size: 20)),
-                  ],
-                ),
-              ),
-              Container(height: 1, width: double.infinity, color: appBarContentColor.withValues(alpha: 0.1)),
-            ],
           ),
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: const [
-          DashboardScreen(),
-          StockScreen(),
-          ReportsScreen(),
-          StaffScreen(),
-        ],
+        body: TabBarView(
+          controller: _tabController,
+          children: const [
+            DashboardScreen(),
+            StockScreen(),
+            ReportsScreen(),
+            StaffScreen(),
+          ],
+        ),
       ),
     );
   }
