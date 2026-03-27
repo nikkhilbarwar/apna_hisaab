@@ -184,7 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Row(
                           children: [
-                            Text('Activity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: profileProvider.textColor)),
+                            Text('Recent Activity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: profileProvider.textColor)),
                             if (_selectedDateRange != null)
                               IconButton(
                                 icon: const Icon(Icons.history_rounded, size: 18, color: Colors.blue),
@@ -754,4 +754,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+
+  Widget _filterChipOld(String label, int count) {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    bool isSelected = _activeFilter == label;
+    return GestureDetector(
+      onTap: () => setState(() => _activeFilter = label),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? profile.themeColor : profile.cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? profile.themeColor : Colors.grey.withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            Text(label, style: TextStyle(color: isSelected ? Colors.white : profile.textColor, fontWeight: FontWeight.bold, fontSize: 12)),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(color: isSelected ? Colors.white.withOpacity(0.2) : profile.themeColor.withOpacity(0.1), shape: BoxShape.circle),
+              child: Text('$count', style: TextStyle(color: isSelected ? Colors.white : profile.themeColor, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _verticalDividerOld() => Container(height: 24, width: 1, color: Colors.white12);
 }

@@ -66,7 +66,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             toolbarTitle: 'Crop Logo',
             toolbarColor: profile.themeColor,
             toolbarWidgetColor: Colors.white,
-            //statusBarColor: profile.themeColor, // Fixed to follow theme and stay in Safe Area
+            statusBarColor: profile.themeColor, // Fixed: Ensuring Status Bar stays themed and Safe
             backgroundColor: profile.scaffoldColor,
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
@@ -396,7 +396,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: TextStyle(color: profile.textColor, fontSize: 14),
                   decoration: const InputDecoration(
                     labelText: "Your Feedback",
-                    hintText: "", // Removed hint to keep it clean as requested
+                    hintText: "",
                     filled: true,
                   ),
                 ),
