@@ -9,7 +9,7 @@ import '../../providers/staff_provider.dart';
 import '../../providers/item_provider.dart';
 import '../../services/export_service.dart';
 import '../../services/notification_service.dart';
-import '../daily_entry/entry_screen.dart';
+import '../../utils/report_helper.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -21,34 +21,35 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   int _currentIndex = 0;
   DateTimeRange _selectedRange = DateTimeRange(
-    start: DateTime.now().subtract(const Duration(days: 7)),
+    start: DateTime.now().subtract(const Duration(days: 30)),
     end: DateTime.now(),
   );
   String _selectedCategory = 'All';
+  String _selectedPaymentMode = 'All';
 
   @override
   Widget build(BuildContext context) {
     final profile = Provider.of<ProfileProvider>(context);
     final themeColor = profile.themeColor;
     final txProvider = Provider.of<TransactionProvider>(context);
+    final staffProvider = Provider.of<StaffProvider>(context);
 
-    // Dynamic Calculations for Pro-Reporting - Now respecting Category Filter
-    final allSalesSummary = txProvider.getFilteredTransactions(
+    // Dynamic Filter Logic: respects tab, date, category, and payment mode
+    final allSales = txProvider.getFilteredTransactions(
       type: 'sale', 
       range: _selectedRange, 
-      category: _selectedCategory,
       status: 'completed'
     );
-    final allPurchasesSummary = txProvider.getFilteredTransactions(
+    final allPurchases = txProvider.getFilteredTransactions(
       type: 'purchase', 
       range: _selectedRange, 
-      category: _selectedCategory,
       status: 'completed'
     );
     
-    double totalRevenue = allSalesSummary.fold(0, (sum, tx) => sum + tx.amount);
-    double totalExpense = allPurchasesSummary.fold(0, (sum, tx) => sum + tx.amount);
-    double netProfit = totalRevenue - totalExpense;
+    double totalRevenue = allSales.fold(0, (sum, tx) => sum + tx.amount);
+    double paidExpenses = allPurchases.fold(0, (sum, tx) => sum + tx.amount);
+    double pendingSalary = staffProvider.totalNetPayable;
+    double netProfit = totalRevenue - paidExpenses;
 
     return Scaffold(
       backgroundColor: profile.scaffoldColor,
@@ -57,7 +58,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         title: Text(_currentIndex == 3 ? 'TRASH BIN' : 'BUSINESS REPORTS', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1, color: Colors.white)),
         flexibleSpace: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [_currentIndex == 3 ? Colors.red.shade400 : themeColor.withOpacity(0.8), _currentIndex == 3 ? Colors.red.shade700 : themeColor]),
+            gradient: LinearGradient(colors: [_currentIndex == 3 ? Colors.red.shade400 : themeColor.withValues(alpha: 0.8), _currentIndex == 3 ? Colors.red.shade700 : themeColor]),
           ),
         ),
         actions: [
@@ -71,36 +72,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
       body: Column(
         children: [
-          // Fixed Header Section
           if (_currentIndex != 3) ...[
              _buildFilters(context, profile),
-             _buildExecutiveSummary(totalRevenue, totalExpense, netProfit, profile),
+             _buildExecutiveSummary(totalRevenue, paidExpenses, netProfit, pendingSalary, profile),
           ],
           
-          // Scrollable List with Fade Effect
           Expanded(
-            child: Stack(
+            child: IndexedStack(
+              index: _currentIndex,
               children: [
-                ShaderMask(
-                  shaderCallback: (Rect rect) {
-                    return const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Colors.black, Colors.black, Colors.black],
-                      stops: [0.0, 0.05, 0.9, 1.0], 
-                    ).createShader(rect);
-                  },
-                  blendMode: BlendMode.dstIn,
-                  child: IndexedStack(
-                    index: _currentIndex,
-                    children: [
-                      _ReportList(type: 'sale', range: _selectedRange, category: _selectedCategory),
-                      _ReportList(type: 'purchase', range: _selectedRange, category: _selectedCategory),
-                      _StaffReportList(range: _selectedRange),
-                      const _TrashList(),
-                    ],
-                  ),
-                ),
+                _ReportList(type: 'sale', range: _selectedRange, category: _selectedCategory, paymentMode: _selectedPaymentMode),
+                _ReportList(type: 'purchase', range: _selectedRange, category: _selectedCategory, paymentMode: _selectedPaymentMode),
+                _StaffReportList(range: _selectedRange),
+                const _TrashList(),
               ],
             ),
           ),
@@ -108,11 +92,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -5))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, -5))],
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+              _selectedCategory = 'All'; 
+            });
+          },
           selectedItemColor: _currentIndex == 3 ? Colors.red : themeColor,
           unselectedItemColor: profile.secondaryTextColor,
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
@@ -130,35 +119,52 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildExecutiveSummary(double revenue, double expense, double profit, ProfileProvider profile) {
+  Widget _buildExecutiveSummary(double revenue, double expense, double profit, double pending, ProfileProvider profile) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       decoration: BoxDecoration(
         color: profile.cardColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 10), 
-          )
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 10))],
       ),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [profile.themeColor.withOpacity(0.05), profile.themeColor.withOpacity(0.1)]),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: profile.themeColor.withOpacity(0.1)),
-        ),
-        child: Row(
-          children: [
-            _summaryItem('REVENUE', revenue, profile.themeColor, profile),
-            _verticalDivider(profile),
-            _summaryItem('EXPENSE', expense, Colors.red, profile),
-            _verticalDivider(profile),
-            _summaryItem('NET PROFIT', profit, profit >= 0 ? Colors.green : Colors.red, profile, isBold: true),
-          ],
-        ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [profile.themeColor.withValues(alpha: 0.05), profile.themeColor.withValues(alpha: 0.1)]),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: profile.themeColor.withValues(alpha: 0.1)),
+            ),
+            child: Row(
+              children: [
+                _summaryItem('REVENUE', revenue, profile.themeColor, profile),
+                _verticalDivider(profile),
+                _summaryItem('EXPENSE', expense, Colors.red, profile),
+                _verticalDivider(profile),
+                _summaryItem('NET PROFIT', profit, profit >= 0 ? Colors.green : Colors.red, profile, isBold: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.1)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('UPCOMING SALARY (PENDING)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.orange, letterSpacing: 0.5)),
+                Text(
+                  profile.showAmount ? '${profile.currencySymbol}${pending.toStringAsFixed(0)}' : '${profile.currencySymbol}****',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.orange),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -170,7 +176,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: profile.secondaryTextColor, letterSpacing: 0.5)),
           const SizedBox(height: 4),
           Text(
-            '${profile.currencySymbol}${val.toStringAsFixed(0)}',
+            profile.showAmount ? '${profile.currencySymbol}${val.toStringAsFixed(0)}' : '${profile.currencySymbol}****',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: color),
           ),
         ],
@@ -178,79 +184,103 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _verticalDivider(ProfileProvider profile) => Container(height: 30, width: 1, color: profile.secondaryTextColor.withOpacity(0.1));
+  Widget _verticalDivider(ProfileProvider profile) => Container(height: 30, width: 1, color: profile.secondaryTextColor.withValues(alpha: 0.1));
 
   Widget _buildFilters(BuildContext context, ProfileProvider profile) {
     final catProvider = Provider.of<CategoryProvider>(context);
+    final themeColor = profile.themeColor;
+
     return Container(
       padding: const EdgeInsets.all(16),
       color: profile.cardColor,
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: InkWell(
-              onTap: () async {
-                final r = await showDateRangePicker(
-                  context: context,
-                  initialDateRange: _selectedRange,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime.now(),
-                  builder: (context, child) => Theme(
-                    data: Theme.of(context).copyWith(
-                      colorScheme: ColorScheme.light(primary: profile.themeColor),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () async {
+                    final r = await ReportHelper.showAppDateRangePicker(
+                      context, 
+                      _selectedRange, 
+                      themeColor,
+                      lastDate: DateTime.now(),
+                    );
+                    if (r != null) setState(() => _selectedRange = r);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: profile.scaffoldColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
                     ),
-                    child: child!,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.calendar_today, size: 14, color: themeColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          DateFormat('dd MMM').format(_selectedRange.start) == DateFormat('dd MMM').format(_selectedRange.end)
+                            ? DateFormat('dd MMM yyyy').format(_selectedRange.start)
+                            : '${DateFormat('dd MMM').format(_selectedRange.start)} - ${DateFormat('dd MMM').format(_selectedRange.end)}',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: profile.textColor),
+                        ),
+                      ],
+                    ),
                   ),
-                );
-                if (r != null) setState(() => _selectedRange = r);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: profile.scaffoldColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.calendar_today, size: 14, color: profile.themeColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      DateFormat('dd MMM').format(_selectedRange.start) == DateFormat('dd MMM').format(_selectedRange.end)
-                        ? DateFormat('dd MMM yyyy').format(_selectedRange.start)
-                        : '${DateFormat('dd MMM').format(_selectedRange.start)} - ${DateFormat('dd MMM').format(_selectedRange.end)}',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: profile.textColor),
-                    ),
-                  ],
                 ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: profile.scaffoldColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _dropdownFilter(
+                  label: 'Category',
                   value: _selectedCategory,
-                  isExpanded: true,
-                  dropdownColor: profile.cardColor,
-                  style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold, fontSize: 13),
-                  items: ['All', ...catProvider.categories.map((c) => c.name)].map((String value) {
-                    return DropdownMenuItem<String>(value: value, child: Text(value));
-                  }).toList(),
+                  items: ['All', ...catProvider.categories.where((c) => _currentIndex == 0 ? c.type == 'selling' : c.type == 'purchase').map((c) => c.name)],
                   onChanged: (val) => setState(() => _selectedCategory = val!),
+                  profile: profile,
                 ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _dropdownFilter(
+                  label: 'Payment',
+                  value: _selectedPaymentMode,
+                  items: ['All', 'Cash', 'UPI', 'Split', 'Credit'],
+                  onChanged: (val) => setState(() => _selectedPaymentMode = val!),
+                  profile: profile,
+                ),
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _dropdownFilter({required String label, required String value, required List<String> items, required Function(String?) onChanged, required ProfileProvider profile}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: profile.scaffoldColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          dropdownColor: profile.cardColor,
+          style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold, fontSize: 12),
+          items: items.toSet().map((String val) {
+            return DropdownMenuItem<String>(value: val, child: Text(val));
+          }).toList(),
+          onChanged: onChanged,
+        ),
       ),
     );
   }
@@ -269,16 +299,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2))),
+            Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
             Text('DOWNLOAD REPORT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor, letterSpacing: 1)),
             const SizedBox(height: 24),
             _exportTile(Icons.table_view_rounded, 'Download as Excel Sheet', Colors.green, () async {
               final txs = txProvider.getFilteredTransactions(
                 type: _currentIndex == 0 ? 'sale' : 'purchase',
                 range: _selectedRange,
-                category: _selectedCategory,
+                category: _selectedCategory == 'All' ? null : _selectedCategory,
                 status: 'completed'
-              );
+              ).where((t) => _selectedPaymentMode == 'All' || t.paymentMode == _selectedPaymentMode).toList();
+              
               Navigator.pop(context);
               await exportService.exportToExcel(txs, "${_currentIndex == 0 ? 'Sales' : 'Expense'}_Report");
               NotificationService().showNotification(id: 888, title: "Report Downloaded", body: "Excel report saved in Documents folder.");
@@ -288,9 +319,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
               final txs = txProvider.getFilteredTransactions(
                 type: _currentIndex == 0 ? 'sale' : 'purchase',
                 range: _selectedRange,
-                category: _selectedCategory,
+                category: _selectedCategory == 'All' ? null : _selectedCategory,
                 status: 'completed'
-              );
+              ).where((t) => _selectedPaymentMode == 'All' || t.paymentMode == _selectedPaymentMode).toList();
+
               Navigator.pop(context);
               await exportService.exportToPdf(txs, "${_currentIndex == 0 ? 'Sales' : 'Expense'}_Report");
               NotificationService().showNotification(id: 889, title: "Report Downloaded", body: "PDF report saved in Documents folder.");
@@ -305,7 +337,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _exportTile(IconData icon, String title, Color color, VoidCallback onTap, ProfileProvider profile) {
     return ListTile(
       onTap: onTap,
-      leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
+      leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
       title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
       trailing: const Icon(Icons.file_download_outlined, size: 18),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -318,28 +350,34 @@ class _ReportList extends StatelessWidget {
   final String type;
   final DateTimeRange range;
   final String category;
+  final String paymentMode;
 
-  const _ReportList({required this.type, required this.range, required this.category});
+  const _ReportList({required this.type, required this.range, required this.category, required this.paymentMode});
 
   @override
   Widget build(BuildContext context) {
     final txProvider = Provider.of<TransactionProvider>(context);
+    final itemProvider = Provider.of<ItemProvider>(context);
     final profile = Provider.of<ProfileProvider>(context);
     
-    final filtered = txProvider.getFilteredTransactions(
+    List<TransactionModel> filtered = txProvider.getFilteredTransactions(
       type: type, 
       range: range, 
       category: category == 'All' ? null : category, 
       status: 'completed'
     );
 
+    if (paymentMode != 'All') {
+      filtered = filtered.where((tx) => tx.paymentMode == paymentMode).toList();
+    }
+
     if (filtered.isEmpty) {
       return Center(child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.analytics_outlined, size: 64, color: profile.secondaryTextColor.withOpacity(0.1)),
+          Icon(Icons.analytics_outlined, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.1)),
           const SizedBox(height: 16),
-          Text('No records found for this period', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+          Text('No records found', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
         ],
       ));
     }
@@ -355,21 +393,21 @@ class _ReportList extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 16),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
-              color: profile.themeColor.withOpacity(0.05),
+              color: profile.themeColor.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: profile.themeColor.withOpacity(0.1))
+              border: Border.all(color: profile.themeColor.withValues(alpha: 0.1))
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('${filtered.length} TRANSACTIONS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: profile.themeColor, letterSpacing: 0.5)),
-                Text('TOTAL: ${profile.currencySymbol}${total.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.themeColor)),
+                Text('TOTAL: ${profile.currencySymbol}${profile.showAmount ? total.toStringAsFixed(0) : "****"}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.themeColor)),
               ],
             ),
           );
         }
         if (index == 1) {
-          return _buildQuickStats(filtered, profile, txProvider, type);
+          return _buildAnalysisSummary(filtered, profile, txProvider, itemProvider, type);
         }
         
         final tx = filtered[index - 2];
@@ -379,35 +417,65 @@ class _ReportList extends StatelessWidget {
             color: profile.cardColor,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
           ),
           child: ListTile(
             onTap: () => _showDetails(context, tx, profile),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             leading: Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: (tx.type == 'sale' ? Colors.green : Colors.red).withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: (tx.type == 'sale' ? Colors.green : Colors.red).withValues(alpha: 0.1), shape: BoxShape.circle),
               child: Icon(tx.type == 'sale' ? Icons.south_west_rounded : Icons.north_east_rounded, color: tx.type == 'sale' ? Colors.green : Colors.red, size: 18),
             ),
-            title: Text(tx.type == 'sale' ? (tx.parsedItems.isNotEmpty ? "${tx.parsedItems[0]['name']}${tx.parsedItems[0]['variant'] != '' ? ' (${tx.parsedItems[0]['variant']})' : ''}" : 'Sale') : tx.category, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
-            subtitle: Text(DateFormat('dd MMM, hh:mm a').format(tx.date), style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
-            trailing: Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, color: tx.type == 'sale' ? Colors.green.shade700 : Colors.red.shade700, fontSize: 15)),
+            title: Text(tx.type == 'sale' ? _getCleanItemNames(tx) : tx.category, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text('${DateFormat('dd MMM, hh:mm a').format(tx.date)} • ${tx.paymentMode}', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
+            trailing: Text('${profile.currencySymbol}${profile.showAmount ? tx.amount.toStringAsFixed(0) : "****"}', style: TextStyle(fontWeight: FontWeight.w900, color: tx.type == 'sale' ? Colors.green.shade700 : Colors.red.shade700, fontSize: 14)),
           ),
         );
       },
     );
   }
 
-  Widget _buildQuickStats(List<TransactionModel> txs, ProfileProvider profile, TransactionProvider provider, String reportType) {
-    // Both Sales and Expenses now get Payment Summary
+  String _getCleanItemNames(TransactionModel tx) {
+    final items = tx.parsedItems;
+    if (items.isEmpty) return 'Sale Entry';
+    if (items.length == 1) return items.first['name'] ?? 'Item';
+    return '${items.first['name']} + ${items.length - 1} more';
+  }
+
+  Widget _buildAnalysisSummary(List<TransactionModel> txs, ProfileProvider profile, TransactionProvider provider, ItemProvider itemProvider, String reportType) {
     final split = provider.getPaymentSplit(txs);
-    final topItems = reportType == 'sale' ? provider.getTopItems(txs) : <String, int>{};
+    
+    // Grouping logic with Fallback
+    Map<String, double> itemRevenue = {};
+    Map<String, double> catRevenue = {};
+
+    for (var tx in txs) {
+      for (var item in tx.parsedItems) {
+        String name = item['name'] ?? 'Unknown';
+        double q = double.tryParse(item['qty'] ?? '0') ?? 0;
+        double p = double.tryParse(item['price'] ?? '0') ?? 0;
+        double lineTotal = q * p;
+
+        itemRevenue[name] = (itemRevenue[name] ?? 0) + lineTotal;
+
+        // Fallback Category Resolution
+        String cat = item['category'] ?? '';
+        if (cat == '' || cat == 'Sales' || cat == 'General' || cat == 'purchase' || cat == 'sale') {
+           try {
+             final master = itemProvider.items.firstWhere((i) => i.name == name);
+             cat = master.category;
+           } catch(_) { cat = 'Uncategorized'; }
+        }
+        catRevenue[cat] = (catRevenue[cat] ?? 0) + lineTotal;
+      }
+    }
+
+    var sortedItems = itemRevenue.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    var sortedCats = catRevenue.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('PAYMENT SUMMARY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: profile.secondaryTextColor, letterSpacing: 1)),
-        const SizedBox(height: 12),
         Row(
           children: [
             _miniStat('Cash', split['Cash']!, Colors.green, profile),
@@ -417,37 +485,43 @@ class _ReportList extends StatelessWidget {
             _miniStat('Credit', split['Credit']!, Colors.orange, profile),
           ],
         ),
-        if (reportType == 'sale' && topItems.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Text('TOP SELLING ITEMS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: profile.secondaryTextColor, letterSpacing: 1)),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: topItems.entries.map((e) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: profile.themeColor.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: profile.themeColor.withOpacity(0.1)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(e.key, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: profile.textColor)),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    decoration: BoxDecoration(color: profile.themeColor, borderRadius: BorderRadius.circular(4)),
-                    child: Text('${e.value}', style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            )).toList(),
-          ),
-        ],
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
+        _sectionHeader('CATEGORY-WISE SALES', profile),
+        const SizedBox(height: 12),
+        _summaryBox(sortedCats, profile),
+        const SizedBox(height: 24),
+        _sectionHeader('ITEM-WISE SALES', profile),
+        const SizedBox(height: 12),
+        _summaryBox(sortedItems.take(10).toList(), profile),
+        const SizedBox(height: 24),
+        _sectionHeader('TRANSACTION LOG', profile),
+        const SizedBox(height: 12),
       ],
+    );
+  }
+
+  Widget _sectionHeader(String title, ProfileProvider profile) {
+    return Text(title, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: profile.secondaryTextColor, letterSpacing: 1));
+  }
+
+  Widget _summaryBox(List<MapEntry<String, double>> entries, ProfileProvider profile) {
+    return Container(
+      decoration: BoxDecoration(
+        color: profile.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+      ),
+      child: Column(
+        children: entries.map((e) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(child: Text(e.key, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: profile.textColor))),
+              Text('${profile.currencySymbol}${e.value.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: profile.themeColor)),
+            ],
+          ),
+        )).toList(),
+      ),
     );
   }
 
@@ -456,15 +530,15 @@ class _ReportList extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.05),
+          color: color.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.1)),
+          border: Border.all(color: color.withValues(alpha: 0.1)),
         ),
         child: Column(
           children: [
             Text(label, style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: color)),
             const SizedBox(height: 4),
-            Text('${profile.currencySymbol}${val.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: profile.textColor)),
+            Text(profile.showAmount ? '${profile.currencySymbol}${val.toStringAsFixed(0)}' : '${profile.currencySymbol}****', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: profile.textColor)),
           ],
         ),
       ),
@@ -483,7 +557,7 @@ class _ReportList extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
+            Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -491,7 +565,7 @@ class _ReportList extends StatelessWidget {
                 if (tx.parsedItems.isNotEmpty && tx.parsedItems.first['table_number'] != null)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                     child: Text('TABLE: ${tx.parsedItems.first['table_number']}', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w900, fontSize: 10)),
                   ),
               ],
@@ -511,14 +585,14 @@ class _ReportList extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(child: Text('${i['name']}${i['variant'] != '' ? ' (${i['variant']})' : ''} x ${i['qty']}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14))),
-                      Text('${profile.currencySymbol}${i['price']}', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w900)),
+                      Text(profile.showAmount ? '${profile.currencySymbol}${i['price']}' : '${profile.currencySymbol}****', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w900)),
                     ],
                   ),
                   if (i['serving_method'] != null && i['serving_method'] != '')
                     Container(
                       margin: const EdgeInsets.only(top: 4),
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.05), borderRadius: BorderRadius.circular(4)),
+                      decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(4)),
                       child: Text(i['serving_method']!.toUpperCase(), style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: profile.themeColor)),
                     ),
                 ],
@@ -529,7 +603,7 @@ class _ReportList extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('GRAND TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.textColor)),
-                Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, color: profile.themeColor)),
+                Text(profile.showAmount ? '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}' : '${profile.currencySymbol}****', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, color: profile.themeColor)),
               ],
             ),
             const SizedBox(height: 32),
@@ -580,7 +654,7 @@ class _StaffReportList extends StatelessWidget {
       return Center(child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.people_outline, size: 64, color: profile.secondaryTextColor.withOpacity(0.1)),
+          Icon(Icons.people_outline, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.1)),
           const SizedBox(height: 16),
           Text('No staff records found', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
         ],
@@ -603,20 +677,33 @@ class _StaffReportList extends StatelessWidget {
           child: ExpansionTile(
             shape: const RoundedRectangleBorder(side: BorderSide.none),
             collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
-            leading: CircleAvatar(backgroundColor: profile.themeColor.withOpacity(0.1), child: Icon(Icons.person_outline, color: profile.themeColor, size: 20)),
+            leading: CircleAvatar(backgroundColor: profile.themeColor.withValues(alpha: 0.1), child: Icon(Icons.person_outline, color: profile.themeColor, size: 20)),
             title: Text(staff.name, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
-            subtitle: Text('Contact: ${staff.contact}', style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
+            subtitle: Text('Monthly: ${profile.currencySymbol}${staff.monthlySalary.toStringAsFixed(0)}', style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: Column(
                   children: [
                     const Divider(),
-                    _row('Monthly Salary', '${profile.currencySymbol}${staff.monthlySalary}', profile),
-                    _row('Advance Taken', '${profile.currencySymbol}${staff.advance}', profile, color: Colors.red),
-                    _row('Leaves Taken', '${staff.totalLeaves} days', profile),
+                    _row('Base Salary', '${profile.currencySymbol}${profile.showAmount ? staff.monthlySalary : "****"}', profile),
+                    _row('Advance Given', '${profile.currencySymbol}${profile.showAmount ? staff.advance : "****"}', profile, color: Colors.red),
+                    _row('Leaves (${staff.totalLeaves})', '- ${profile.currencySymbol}${(staff.monthlySalary / 30 * staff.totalLeaves).toStringAsFixed(0)}', profile, color: Colors.red),
                     const Divider(),
-                    _row('NET PAYABLE', '${profile.currencySymbol}${payable}', profile, isBold: true, color: profile.themeColor),
+                    _row('NET PAYABLE', '${profile.currencySymbol}${profile.showAmount ? payable.toStringAsFixed(0) : "****"}', profile, isBold: true, color: Colors.green),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => _paySalary(context, staff, payable),
+                      icon: const Icon(Icons.payments_outlined, size: 18),
+                      label: const Text('PAY & ADD TO EXPENSE'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 45),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                    ),
                   ],
                 ),
               )
@@ -624,6 +711,45 @@ class _StaffReportList extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  void _paySalary(BuildContext context, dynamic staff, double amount) {
+    final txProvider = Provider.of<TransactionProvider>(context, listen: false);
+    final staffProvider = Provider.of<StaffProvider>(context, listen: false);
+    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Salary Payment'),
+        content: Text('Add ${amount.toStringAsFixed(0)} as an expense and reset leaves/advance for ${staff.name}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () async {
+              final tx = TransactionModel(
+                type: 'purchase',
+                category: 'Salary',
+                description: 'Salary Paid to ${staff.name} for ${DateFormat('MMMM yyyy').format(DateTime.now())}',
+                amount: amount,
+                date: DateTime.now(),
+                paymentMode: 'Cash',
+                status: 'completed',
+              );
+              await txProvider.addTransaction(tx, itemProvider);
+
+              staff.advance = 0;
+              staff.totalLeaves = 0;
+              await staffProvider.updateStaff(staff);
+
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Salary paid and added to expenses!')));
+            },
+            child: const Text('CONFIRM'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -652,7 +778,7 @@ class _TrashListState extends State<_TrashList> {
     final items = tx.parsedItems;
     if (items.isEmpty) return tx.type == 'sale' ? 'Sale' : 'Purchase';
     if (items.length == 1) return items.first['name'] ?? 'Item';
-    return '${items.length} Items: ${items.take(2).map((e) => e['name']).join(', ')}...';
+    return '${items.first['name']} + ${items.length - 1} more';
   }
 
   void _toggleSelection(int id) {
@@ -706,7 +832,7 @@ class _TrashListState extends State<_TrashList> {
       return Center(child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.delete_sweep_outlined, size: 64, color: profile.secondaryTextColor.withOpacity(0.1)),
+          Icon(Icons.delete_sweep_outlined, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.1)),
           const SizedBox(height: 16),
           Text('Trash is empty', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
         ],
@@ -718,8 +844,8 @@ class _TrashListState extends State<_TrashList> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
-            color: isSelectionMode ? Colors.red.shade700 : Colors.red.withOpacity(0.05),
-            border: Border(bottom: BorderSide(color: Colors.red.withOpacity(0.1)))
+            color: isSelectionMode ? Colors.red.shade700 : Colors.red.withValues(alpha: 0.05),
+            border: Border(bottom: BorderSide(color: Colors.red.withValues(alpha: 0.1)))
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -757,9 +883,9 @@ class _TrashListState extends State<_TrashList> {
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
-                  color: isSelected ? Colors.red.withOpacity(0.08) : profile.cardColor,
+                  color: isSelected ? Colors.red.withValues(alpha: 0.08) : profile.cardColor,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: isSelected ? Colors.red : Colors.red.withOpacity(0.1), width: isSelected ? 2 : 1),
+                  border: Border.all(color: isSelected ? Colors.red : Colors.red.withValues(alpha: 0.1), width: isSelected ? 2 : 1),
                 ),
                 child: ListTile(
                   onLongPress: () => _toggleSelection(tx.id!),
@@ -769,7 +895,7 @@ class _TrashListState extends State<_TrashList> {
                     ? const Icon(Icons.check_circle, color: Colors.red, size: 28)
                     : Container(
                         padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(color: (isPending ? Colors.orange : Colors.grey).withOpacity(0.1), shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: (isPending ? Colors.orange : Colors.grey).withValues(alpha: 0.1), shape: BoxShape.circle),
                         child: Icon(
                           isPending ? Icons.timer_outlined : (tx.type == 'sale' ? Icons.south_west_rounded : Icons.north_east_rounded), 
                           color: isPending ? Colors.orange : Colors.grey, 
@@ -789,7 +915,7 @@ class _TrashListState extends State<_TrashList> {
                       if (isPending)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                          decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
                           child: const Text('PENDING', style: TextStyle(color: Colors.orange, fontSize: 8, fontWeight: FontWeight.bold)),
                         ),
                     ],
@@ -798,7 +924,7 @@ class _TrashListState extends State<_TrashList> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 14)),
+                      Text(profile.showAmount ? '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}' : '${profile.currencySymbol}****', style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 14)),
                       if (!isSelectionMode) const Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey),
                     ],
                   ),
@@ -823,14 +949,14 @@ class _TrashListState extends State<_TrashList> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
+            Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('DELETED ENTRY DETAILS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.secondaryTextColor, letterSpacing: 1.5)),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                  decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                   child: const Text('TRASHED', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontSize: 10)),
                 ),
               ],
@@ -860,7 +986,7 @@ class _TrashListState extends State<_TrashList> {
                           Text(item['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
                           Text('${item['qty']} x ${profile.currencySymbol}${item['price']}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
                         ]),
-                        Text('${profile.currencySymbol}${(double.parse(item['qty'] ?? '0') * double.parse(item['price'] ?? '0')).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                        Text(profile.showAmount ? '${profile.currencySymbol}${(double.parse(item['qty'] ?? '0') * double.parse(item['price'] ?? '0')).toStringAsFixed(0)}' : '${profile.currencySymbol}****', style: const TextStyle(fontWeight: FontWeight.w900)),
                       ],
                     ),
                   )).toList(),
@@ -873,7 +999,7 @@ class _TrashListState extends State<_TrashList> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('TOTAL AMOUNT', style: TextStyle(fontWeight: FontWeight.bold)),
-                Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: Colors.red)),
+                Text(profile.showAmount ? '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}' : '${profile.currencySymbol}****', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: Colors.red)),
               ],
             ),
             const SizedBox(height: 28),
@@ -917,7 +1043,7 @@ class _TrashListState extends State<_TrashList> {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.3))),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withValues(alpha: 0.3))),
         child: Column(
           children: [
             Icon(icon, color: color, size: 24),

@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:math';
 import '../../services/license_service.dart';
 import '../../providers/profile_provider.dart';
+import '../../utils/report_helper.dart';
 import 'package:provider/provider.dart';
 
 class AdminPanelScreen extends StatefulWidget {
@@ -282,10 +283,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   void _editExpiryDate(Map<String, dynamic> data, ProfileProvider profile) async {
     DateTime initial = data['validTill'] != null ? DateTime.parse(data['validTill']) : DateTime.now();
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(2020),
+    final DateTime? picked = await ReportHelper.showAppDatePicker(
+      context, 
+      initial, 
+      profile.themeColor,
       lastDate: DateTime(2030),
     );
 

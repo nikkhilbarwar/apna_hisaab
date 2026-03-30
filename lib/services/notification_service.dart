@@ -56,7 +56,6 @@ class NotificationService {
 
   Future<void> schedulePendingOrderReminder(int id, String title, String body) async {
     try {
-      // Schedule the first reminder after 10 minutes
       final scheduledTime = DateTime.now().add(const Duration(minutes: 10));
       final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
       
@@ -71,28 +70,75 @@ class NotificationService {
             'Pending Order Reminders',
             importance: Importance.max,
             priority: Priority.high,
-            icon: '@mipmap/res/mipmap-xxhdpi/launcher_icon.png',
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: DateTimeComponents.time, // This makes it somewhat repeating, but for strict 10m intervals we need a better approach or multiple schedules
+        matchDateTimeComponents: DateTimeComponents.time,
       );
     } catch (e) {
       print("Notification Scheduling Error: $e");
     }
   }
 
-  // To strictly follow the "every 10 minutes" requirement for a specific order
+  Future<void> schedulePurchaseReminder(int reminderId, String itemName, DateTime dueDate) async {
+    try {
+      final now = DateTime.now();
+      
+      // 1. Notification at exact time
+      if (dueDate.isAfter(now)) {
+        await _schedule(
+          reminderId * 10 + 1,
+          'Purchase Reminder: $itemName',
+          'It\'s time to buy $itemName as planned.',
+          dueDate,
+        );
+      }
+
+      // 2. Notification 1 hour before
+      final oneHourBefore = dueDate.subtract(const Duration(hours: 1));
+      if (oneHourBefore.isAfter(now)) {
+        await _schedule(
+          reminderId * 10 + 2,
+          'Upcoming Purchase: $itemName',
+          'Reminder to buy $itemName in 1 hour.',
+          oneHourBefore,
+        );
+      }
+    } catch (e) {
+      print("Purchase Reminder Scheduling Error: $e");
+    }
+  }
+
+  Future<void> _schedule(int id, String title, String body, DateTime scheduledTime) async {
+    final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      id,
+      title,
+      body,
+      tzScheduledTime,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'purchase_reminders',
+          'Purchase Reminders',
+          importance: Importance.max,
+          priority: Priority.high,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  Future<void> cancelPurchaseReminder(int reminderId) async {
+    await flutterLocalNotificationsPlugin.cancel(reminderId * 10 + 1);
+    await flutterLocalNotificationsPlugin.cancel(reminderId * 10 + 2);
+  }
+
   Future<void> scheduleRepeatingReminder(int txId, String title, String body) async {
-    // We can schedule multiple reminders or use a repeating notification if supported
-    // For simplicity and reliability across Android versions, we'll schedule the next one when this one is shown or handle it via a background task.
-    // However, flutter_local_notifications supports periodiShow but with limited intervals (hourly, daily, etc.)
-    
-    // Custom logic: Schedule 5 reminders, 10 minutes apart
     for (int i = 1; i <= 6; i++) {
-      final id = txId * 100 + i; // Unique ID for each reminder instance
+      final id = txId * 100 + i;
       final scheduledTime = DateTime.now().add(Duration(minutes: 10 * i));
       final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
       
@@ -116,7 +162,6 @@ class NotificationService {
   }
 
   Future<void> cancelOrderReminders(int txId) async {
-    // Cancel all instances scheduled for this transaction
     for (int i = 1; i <= 6; i++) {
       await flutterLocalNotificationsPlugin.cancel(txId * 100 + i);
     }

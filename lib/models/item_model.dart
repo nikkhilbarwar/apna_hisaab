@@ -12,8 +12,9 @@ class ItemModel {
   double? fullQty; 
   double? halfQty; 
   String itemType; 
-  int isSynced; // 0 for no, 1 for yes
-  int lowStockAlert; // 0 for off, 1 for on
+  int isSynced; 
+  int lowStockAlert; 
+  String? icon; // Added for custom icon support
 
   ItemModel({
     this.id,
@@ -30,12 +31,13 @@ class ItemModel {
     this.halfQty,
     this.itemType = 'selling',
     this.isSynced = 0,
-    this.lowStockAlert = 1, // Default ON
+    this.lowStockAlert = 1,
+    this.icon,
   });
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      if (id != null) 'id': id,
       'name': name,
       'category': category,
       'unit': unit,
@@ -50,17 +52,18 @@ class ItemModel {
       'item_type': itemType,
       'is_synced': isSynced,
       'low_stock_alert': lowStockAlert,
+      'icon': icon,
     };
   }
 
   factory ItemModel.fromMap(Map<String, dynamic> map) {
     return ItemModel(
       id: map['id'],
-      name: map['name'],
-      category: map['category'],
-      unit: map['unit'],
-      minStock: (map['min_stock'] as num).toDouble(),
-      currentStock: (map['current_stock'] as num).toDouble(),
+      name: map['name'] ?? '',
+      category: map['category'] ?? 'General',
+      unit: map['unit'] ?? 'pcs',
+      minStock: (map['min_stock'] as num? ?? 0).toDouble(),
+      currentStock: (map['current_stock'] as num? ?? 0).toDouble(),
       price: map['price'] != null ? (map['price'] as num).toDouble() : null,
       halfPrice: map['half_price'] != null ? (map['half_price'] as num).toDouble() : null,
       fullUnit: map['full_unit'],
@@ -70,6 +73,7 @@ class ItemModel {
       itemType: map['item_type'] ?? 'selling',
       isSynced: map['is_synced'] ?? 0,
       lowStockAlert: map['low_stock_alert'] ?? 1,
+      icon: map['icon'],
     );
   }
 }

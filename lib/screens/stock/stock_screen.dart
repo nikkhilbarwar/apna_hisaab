@@ -3,13 +3,22 @@ import 'package:provider/provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/item_provider.dart';
 import '../../providers/category_provider.dart';
+import '../../providers/purchase_reminder_provider.dart';
 import '../../models/item_model.dart';
 import '../items/item_management_screen.dart';
+import '../purchase_reminders/purchase_reminder_screen.dart';
 import 'category_management_screen.dart';
 import '../../utils/app_formatter.dart';
 
 class StockScreen extends StatefulWidget {
-  const StockScreen({super.key});
+  final String? initialCategory;
+  final bool filterLowStock;
+
+  const StockScreen({
+    super.key, 
+    this.initialCategory, 
+    this.filterLowStock = false
+  });
 
   @override
   State<StockScreen> createState() => _StockScreenState();
@@ -17,20 +26,44 @@ class StockScreen extends StatefulWidget {
 
 class _StockScreenState extends State<StockScreen> {
   String? _selectedCategory;
+  String _searchQuery = '';
+  bool _onlyShowLowStock = false;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategory = widget.initialCategory;
+    _onlyShowLowStock = widget.filterLowStock;
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final itemProvider = Provider.of<ItemProvider>(context);
     final catProvider = Provider.of<CategoryProvider>(context);
     final profileProvider = Provider.of<ProfileProvider>(context);
+    final reminderProvider = Provider.of<PurchaseReminderProvider>(context);
     final themeColor = profileProvider.themeColor;
 
     return PopScope(
-      canPop: _selectedCategory == null,
+      canPop: _selectedCategory == null && _searchQuery.isEmpty && !_onlyShowLowStock,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _selectedCategory != null) {
-          setState(() => _selectedCategory = null);
-        }
+        if (didPop) return;
+        setState(() {
+          if (_selectedCategory != null) {
+            _selectedCategory = null;
+          } else {
+            _searchQuery = '';
+            _searchController.clear();
+            _onlyShowLowStock = false;
+          }
+        });
       },
       child: Scaffold(
         backgroundColor: profileProvider.scaffoldColor,
@@ -40,18 +73,33 @@ class _StockScreenState extends State<StockScreen> {
           flexibleSpace: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [themeColor.withOpacity(0.8), themeColor],
+                colors: [themeColor.withValues(alpha: 0.8), themeColor],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
             ),
           ),
-          leading: _selectedCategory != null ? IconButton(
+          leading: (_selectedCategory != null || _searchQuery.isNotEmpty || _onlyShowLowStock) ? IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => setState(() => _selectedCategory = null),
+            onPressed: () {
+              setState(() {
+                if (_selectedCategory != null) {
+                  _selectedCategory = null;
+                } else {
+                  _searchQuery = '';
+                  _searchController.clear();
+                  _onlyShowLowStock = false;
+                }
+              });
+            },
           ) : null,
           centerTitle: true,
           actions: [
+            IconButton(
+              icon: Icon(_onlyShowLowStock ? Icons.filter_list_off : Icons.filter_list, color: Colors.white),
+              onPressed: () => setState(() => _onlyShowLowStock = !_onlyShowLowStock),
+              tooltip: 'Low Stock Filter',
+            ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.white),
               onSelected: (value) {
@@ -59,9 +107,12 @@ class _StockScreenState extends State<StockScreen> {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoryManagementScreen()));
                 } else if (value == 'low_stock_settings') {
                   _showLowStockSettings(context, itemProvider, catProvider, profileProvider);
+                } else if (value == 'purchase_planning') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseReminderScreen()));
                 }
               },
               itemBuilder: (context) => [
+                const PopupMenuItem(value: 'purchase_planning', child: Row(children: [Icon(Icons.playlist_add_check_rounded, size: 18), SizedBox(width: 8), Text('Purchase List')])),
                 const PopupMenuItem(value: 'manage_categories', child: Text('Manage Categories')),
                 const PopupMenuItem(value: 'low_stock_settings', child: Text('Low Stock Alerts')),
               ],
@@ -72,12 +123,72 @@ class _StockScreenState extends State<StockScreen> {
         ),
         body: Column(
           children: [
+            _buildSearchBar(profileProvider),
+            if (reminderProvider.reminders.any((r) => r.status == 'pending'))
+              _buildReminderBanner(reminderProvider, profileProvider),
             Expanded(
-              child: _selectedCategory == null 
+              child: _selectedCategory == null && _searchQuery.isEmpty && !_onlyShowLowStock
                 ? _buildCategoryList(catProvider, itemProvider, profileProvider)
-                : _buildItemList(itemProvider, profileProvider),
+                : _buildFilteredItemList(itemProvider, profileProvider),
             ),
             _buildBottomActionBar(profileProvider, catProvider),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(ProfileProvider profile) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      color: profile.cardColor,
+      child: TextField(
+        controller: _searchController,
+        onChanged: (v) => setState(() => _searchQuery = v),
+        style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
+        decoration: InputDecoration(
+          hintText: 'Search items by name...',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: _searchQuery.isNotEmpty ? IconButton(
+            icon: const Icon(Icons.clear, size: 18),
+            onPressed: () {
+              _searchController.clear();
+              setState(() => _searchQuery = '');
+            },
+          ) : null,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          filled: true,
+          fillColor: profile.scaffoldColor,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReminderBanner(PurchaseReminderProvider provider, ProfileProvider profile) {
+    final pendingCount = provider.reminders.where((r) => r.status == 'pending').length;
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const PurchaseReminderScreen())),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: profile.themeColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: profile.themeColor.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.shopping_cart_checkout_rounded, color: profile.themeColor, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'You have $pendingCount planned purchases',
+                style: TextStyle(fontWeight: FontWeight.bold, color: profile.themeColor, fontSize: 13),
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios_rounded, size: 14, color: profile.themeColor),
           ],
         ),
       ),
@@ -109,10 +220,11 @@ class _StockScreenState extends State<StockScreen> {
           ),
           const SizedBox(width: 12),
           IconButton(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoryManagementScreen())),
-            icon: Icon(Icons.settings_suggest_rounded, color: profile.themeColor, size: 20),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseReminderScreen())),
+            icon: Icon(Icons.playlist_add_check_rounded, color: profile.themeColor, size: 20),
+            tooltip: 'Purchase List',
             style: IconButton.styleFrom(
-              backgroundColor: profile.themeColor.withOpacity(0.1),
+              backgroundColor: profile.themeColor.withValues(alpha: 0.1),
               padding: const EdgeInsets.all(10),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
@@ -123,18 +235,20 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   Widget _buildCategoryList(CategoryProvider catProvider, ItemProvider itemProvider, ProfileProvider profile) {
-    if (catProvider.categories.isEmpty) return _buildEmptyState(context, profile);
-
-    final sortedCats = List.from(catProvider.categories);
-    sortedCats.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final List<String> categories = catProvider.categories.map((c) => c.name).toList();
+    categories.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    
+    final uncategorizedItems = itemProvider.getItemsByCategory('Uncategorized');
+    final hasUncategorized = uncategorizedItems.isNotEmpty;
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: sortedCats.length,
+      itemCount: categories.length + (hasUncategorized ? 1 : 0),
       itemBuilder: (context, index) {
-        final cat = sortedCats[index];
-        final items = itemProvider.getItemsByCategory(cat.name);
-        final lowStockCount = items.where((i) => i.lowStockAlert == 1 && i.currentStock <= i.minStock).length;
+        final isUncategorized = hasUncategorized && index == categories.length;
+        final catName = isUncategorized ? 'Uncategorized' : categories[index];
+        final items = itemProvider.getItemsByCategory(catName);
+        final lowStockCount = items.where((i) => itemProvider.isLowStock(i)).length;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -148,10 +262,10 @@ class _StockScreenState extends State<StockScreen> {
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             leading: Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
-              child: Icon(Icons.folder_rounded, color: profile.themeColor, size: 24),
+              decoration: BoxDecoration(color: (isUncategorized ? Colors.grey : profile.themeColor).withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
+              child: Icon(isUncategorized ? Icons.help_outline_rounded : Icons.folder_rounded, color: isUncategorized ? Colors.grey : profile.themeColor, size: 24),
             ),
-            title: Text(cat.name, style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 15)),
+            title: Text(catName, style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 15)),
             subtitle: Text('${items.length} Items Total', style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -160,29 +274,40 @@ class _StockScreenState extends State<StockScreen> {
                   Container(
                     margin: const EdgeInsets.only(right: 8),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                     child: Text('$lowStockCount LOW', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10)),
                   ),
                 Icon(Icons.chevron_right, color: profile.secondaryTextColor.withOpacity(0.5)),
               ],
             ),
-            onTap: () => setState(() => _selectedCategory = cat.name),
+            onTap: () => setState(() => _selectedCategory = catName),
           ),
         );
       },
     );
   }
 
-  Widget _buildItemList(ItemProvider itemProvider, ProfileProvider profile) {
-    final sortedItems = itemProvider.getItemsByCategory(_selectedCategory!);
-    if (sortedItems.isEmpty) {
+  Widget _buildFilteredItemList(ItemProvider itemProvider, ProfileProvider profile) {
+    final filteredItems = itemProvider.allItems.where((item) {
+      bool matchCategory = _selectedCategory == null || 
+          (_selectedCategory == 'Uncategorized' 
+              ? itemProvider.getItemsByCategory('Uncategorized').contains(item)
+              : item.category == _selectedCategory);
+      
+      bool matchSearch = _searchQuery.isEmpty || item.name.toLowerCase().contains(_searchQuery.toLowerCase());
+      bool matchLowStock = !_onlyShowLowStock || itemProvider.isLowStock(item);
+      
+      return matchCategory && matchSearch && matchLowStock;
+    }).toList();
+
+    if (filteredItems.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.inventory_2_outlined, size: 60, color: profile.secondaryTextColor.withOpacity(0.3)),
             const SizedBox(height: 16),
-            Text('No items in this category', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+            Text('No items found', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
           ],
         ),
       );
@@ -190,10 +315,10 @@ class _StockScreenState extends State<StockScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: sortedItems.length,
+      itemCount: filteredItems.length,
       itemBuilder: (context, index) {
-        final item = sortedItems[index];
-        final isLow = item.lowStockAlert == 1 && item.currentStock <= item.minStock;
+        final item = filteredItems[index];
+        final isLow = itemProvider.isLowStock(item);
         
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -201,7 +326,7 @@ class _StockScreenState extends State<StockScreen> {
             color: profile.cardColor,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
-            border: Border.all(color: isLow ? Colors.red.withOpacity(0.5) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)),
+            border: Border.all(color: isLow ? Colors.red.withValues(alpha: 0.5) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100), width: isLow ? 2 : 1),
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
@@ -215,7 +340,7 @@ class _StockScreenState extends State<StockScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: isLow ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+                        color: isLow ? Colors.red.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -373,7 +498,7 @@ class _StockScreenState extends State<StockScreen> {
             }),
             _actionTile(Icons.edit, 'Edit Item Details', Colors.orange, profile, () {
               Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => ItemManagementScreen(category: item.category, editItem: item)));
+              Navigator.push(context, MaterialPageRoute(builder: (c) => ItemManagementScreen(category: item.category, editItem: item)));
             }),
             _actionTile(Icons.delete_outline, 'Delete Item', Colors.red, profile, () {
               Navigator.pop(context);
@@ -388,9 +513,9 @@ class _StockScreenState extends State<StockScreen> {
 
   Widget _actionTile(IconData icon, String title, Color color, ProfileProvider profile, VoidCallback onTap) {
     return ListTile(
-      leading: CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color, size: 20)),
+      leading: CircleAvatar(backgroundColor: color.withValues(alpha: 0.1), child: Icon(icon, color: color, size: 20)),
       title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
-      trailing: Icon(Icons.arrow_forward_ios_rounded, size: 12, color: profile.secondaryTextColor.withOpacity(0.3)),
+      trailing: Icon(Icons.arrow_forward_ios_rounded, size: 12, color: profile.secondaryTextColor.withValues(alpha: 0.3)),
       onTap: onTap,
     );
   }
@@ -449,14 +574,14 @@ class _StockScreenState extends State<StockScreen> {
                     ),
                     child: ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: themeColor.withOpacity(0.1),
+                        backgroundColor: themeColor.withValues(alpha: 0.1),
                         child: Icon(Icons.folder_outlined, color: themeColor, size: 20),
                       ),
                       title: Text(cat.name, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
                       trailing: Icon(Icons.chevron_right, color: profile.secondaryTextColor),
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => ItemManagementScreen(category: cat.name)));
+                        Navigator.push(context, MaterialPageRoute(builder: (c) => ItemManagementScreen(category: cat.name)));
                       },
                     ),
                   );

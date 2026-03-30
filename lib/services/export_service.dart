@@ -39,6 +39,19 @@ class ExportService {
     return baseDir;
   }
 
+  String _getCleanDescription(TransactionModel tx) {
+    final items = tx.parsedItems;
+    if (items.isEmpty) return tx.category;
+    return items.map((i) {
+      double q = double.tryParse(i['qty'] ?? '0') ?? 0;
+      String qtyStr = q % 1 == 0 ? q.toInt().toString() : q.toString();
+      if (i['variant']?.toLowerCase() == 'half') {
+        return "${i['name']} (Half) x$qtyStr";
+      }
+      return "${i['name']} x$qtyStr";
+    }).join(", ");
+  }
+
   /// Export transactions to Excel (XLSX)
   Future<void> exportToExcel(List<TransactionModel> transactions, String title) async {
     var excel = Excel.createExcel();
@@ -50,7 +63,7 @@ class ExportService {
       fontFamily: getFontFamily(FontFamily.Arial),
     );
 
-    List<String> headers = ['Date', 'Bill No', 'Category', 'Description', 'Amount', 'Payment Mode', 'Contact'];
+    List<String> headers = ['Date', 'Bill No', 'Category', 'Items (Description)', 'Amount', 'Payment Mode', 'Contact'];
     for (var i = 0; i < headers.length; i++) {
       var cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
       cell.value = TextCellValue(headers[i]);
@@ -63,7 +76,7 @@ class ExportService {
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).value = TextCellValue(DateFormat('yyyy-MM-dd HH:mm').format(tx.date));
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row)).value = TextCellValue(tx.id?.toString() ?? '');
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row)).value = TextCellValue(tx.category);
-      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row)).value = TextCellValue(tx.description);
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row)).value = TextCellValue(_getCleanDescription(tx));
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row)).value = DoubleCellValue(tx.amount);
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row)).value = TextCellValue(tx.paymentMode);
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row)).value = TextCellValue(tx.customerContact);
@@ -97,13 +110,16 @@ class ExportService {
           pw.SizedBox(height: 20),
           pw.Table.fromTextArray(
             headers: ['Date', 'Category', 'Items', 'Amount', 'Mode'],
-            data: transactions.map((tx) => [
-              DateFormat('dd-MM-yy').format(tx.date),
-              tx.category,
-              tx.description.length > 30 ? tx.description.substring(0, 27) + "..." : tx.description,
-              tx.amount.toStringAsFixed(0),
-              tx.paymentMode
-            ]).toList(),
+            data: transactions.map((tx) {
+              String desc = _getCleanDescription(tx);
+              return [
+                DateFormat('dd-MM-yy').format(tx.date),
+                tx.category,
+                desc.length > 40 ? desc.substring(0, 37) + "..." : desc,
+                tx.amount.toStringAsFixed(0),
+                tx.paymentMode
+              ];
+            }).toList(),
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
             cellHeight: 30,
@@ -212,6 +228,10 @@ class ExportService {
               final double qty = double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
               final double price = double.tryParse(item['price']?.toString() ?? '0') ?? 0.0;
               final double lineTotal = qty * price;
+              
+              String qStr = qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
+              String qtyDisplay = item['variant']?.toLowerCase() == 'half' ? "$qStr (Half)" : qStr;
+
               return pw.Padding(
                 padding: const pw.EdgeInsets.symmetric(vertical: 2),
                 child: pw.Row(
@@ -229,7 +249,7 @@ class ExportService {
                         ],
                       ),
                     ),
-                    pw.Expanded(flex: 1, child: pw.Text("${qty.toStringAsFixed(0)}", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                    pw.Expanded(flex: 1, child: pw.Text(qtyDisplay, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
                     pw.Expanded(flex: 2, child: pw.Text(lineTotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
                   ],
                 ),

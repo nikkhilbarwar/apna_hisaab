@@ -150,6 +150,12 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> wit
                           style: TextStyle(fontSize: 10, color: cat.type == 'selling' ? Colors.green : Colors.orange, fontWeight: FontWeight.bold),
                         ),
                       ),
+                      if (cat.useCategoryStock == 1) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.inventory_2, size: 10, color: Colors.blue),
+                        const SizedBox(width: 4),
+                        Text('Stock: ${cat.lowStockLimit.toStringAsFixed(0)}', style: const TextStyle(fontSize: 9, color: Colors.blue, fontWeight: FontWeight.bold)),
+                      ],
                     ],
                   ),
                   trailing: Row(
@@ -300,8 +306,10 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> wit
   void _showCategoryBottomSheet(BuildContext context, CategoryProvider provider, ProfileProvider profile, {CategoryModel? category}) {
     final themeColor = profile.themeColor;
     final nameController = TextEditingController(text: category?.name);
+    final limitController = TextEditingController(text: category?.lowStockLimit.toStringAsFixed(0) ?? '10');
     String selectedIcon = category?.iconName ?? 'category';
     String selectedType = category?.type ?? 'selling';
+    bool useCategoryStock = category?.useCategoryStock == 1;
     
     final List<Map<String, dynamic>> availableIcons = [
       {'icon': 'category', 'name': 'General'},
@@ -426,10 +434,60 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> wit
                   ],
                 ),
                 const SizedBox(height: 24),
+                
+                // Babu Ji Logic: New Category Wise Low Stock UI
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: themeColor.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: themeColor.withOpacity(0.1)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.inventory_2_outlined, color: themeColor, size: 20),
+                              const SizedBox(width: 12),
+                              Text('Category Wise Low Stock', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: profile.textColor)),
+                            ],
+                          ),
+                          Switch(
+                            value: useCategoryStock,
+                            activeColor: themeColor,
+                            onChanged: (val) => setModalState(() => useCategoryStock = val),
+                          ),
+                        ],
+                      ),
+                      if (useCategoryStock) ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: limitController,
+                          keyboardType: TextInputType.number,
+                          style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
+                          decoration: InputDecoration(
+                            labelText: 'Low Stock Warning Limit',
+                            hintText: 'Enter value (e.g. 10)',
+                            fillColor: profile.scaffoldColor,
+                            filled: true,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text('All items in this category will use this limit for warnings.', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
+                      ],
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
                 Text('SELECT CATEGORY ICON', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)),
                 const SizedBox(height: 12),
                 
-                // Dropdown-like Selector for Icons
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
@@ -462,25 +520,6 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> wit
                     ),
                   ),
                 ),
-                
-                const SizedBox(height: 12),
-                // Quick selection Wrap for some popular ones
-                Wrap(
-                  spacing: 10,
-                  children: availableIcons.take(6).map((item) {
-                    bool isSel = selectedIcon == item['icon'];
-                    return GestureDetector(
-                      onTap: () => setModalState(() => selectedIcon = item['icon']),
-                      child: Chip(
-                        label: Text(item['name'], style: TextStyle(fontSize: 10, color: isSel ? Colors.white : profile.textColor)),
-                        avatar: Icon(_getIconData(item['icon']), size: 14, color: isSel ? Colors.white : themeColor),
-                        backgroundColor: isSel ? themeColor : profile.scaffoldColor,
-                        side: BorderSide(color: isSel ? themeColor : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade200)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    );
-                  }).toList(),
-                ),
 
                 const SizedBox(height: 32),
                 ElevatedButton(
@@ -492,6 +531,8 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> wit
                         iconName: selectedIcon,
                         type: selectedType,
                         displayOrder: category?.displayOrder ?? 0,
+                        useCategoryStock: useCategoryStock ? 1 : 0,
+                        lowStockLimit: double.tryParse(limitController.text) ?? 10,
                       );
                       
                       bool success;

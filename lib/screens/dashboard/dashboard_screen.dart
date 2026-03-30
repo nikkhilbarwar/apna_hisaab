@@ -4,10 +4,16 @@ import 'package:intl/intl.dart';
 import '../../providers/transaction_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/transaction_model.dart';
+import '../../models/item_model.dart';
 import '../../providers/item_provider.dart';
+import '../../providers/purchase_reminder_provider.dart';
 import '../../utils/app_strings.dart';
+import '../../utils/report_helper.dart';
 import '../daily_entry/entry_screen.dart';
+import '../purchase_reminders/purchase_reminder_screen.dart';
+import '../stock/stock_screen.dart';
 import '../../services/export_service.dart';
+import 'widgets/stat_card.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -21,6 +27,130 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final Set<int> _selectedIds = {};
   final Map<int, GlobalKey> _itemKeys = {};
   DateTimeRange? _selectedDateRange;
+  
+  // Alert Tracking Logic
+  final Set<String> _dismissedAlertsToday = {};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkLowStock();
+    });
+  }
+
+  void _checkLowStock() {
+    if (!mounted) return;
+    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+    final itemsToAlert = itemProvider.pendingAlertItems;
+    
+    if (itemsToAlert.isNotEmpty) {
+      _showLowStockPopup(itemsToAlert);
+    }
+  }
+
+  void _showLowStockPopup(List<ItemModel> items) {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 28),
+            const SizedBox(width: 12),
+            Text('Low Stock Alert', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.w900)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Items reaching critical levels:', style: TextStyle(color: profile.secondaryTextColor, fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.3),
+              child: SingleChildScrollView(
+                child: Column(
+                  children: items.map((item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), shape: BoxShape.circle),
+                          child: Icon(Icons.inventory_2_outlined, color: Colors.orange.shade800, size: 16),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(item.name, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
+                              Text('Stock: ${item.currentStock.toStringAsFixed(1)} / Min: ${item.minStock.toInt()}', 
+                                style: TextStyle(color: profile.secondaryTextColor, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () {
+                    for (var item in items) {
+                      itemProvider.snoozeAlert(item.id!, item.currentStock);
+                    }
+                    Navigator.pop(context);
+                  },
+                  child: Text('REMIND LATER', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+              ),
+              Expanded(
+                child: TextButton(
+                  onPressed: () {
+                    for (var item in items) {
+                      itemProvider.dismissAlertForToday(item.id!, item.currentStock);
+                    }
+                    Navigator.pop(context);
+                  },
+                  child: Text('OK', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w900, fontSize: 12)),
+                ),
+              ),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (c) => const StockScreen(filterLowStock: true)));
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: profile.themeColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0
+                  ),
+                  child: const Text('UPDATE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   String _getSmartItemTitle(TransactionModel tx) {
     final items = tx.parsedItems;
@@ -64,7 +194,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 await txProvider.softDeleteTransaction(id, itemProvider);
               }
               setState(() => _selectedIds.clear());
-              Navigator.pop(ctx);
+              if (mounted) Navigator.pop(ctx);
+              _checkLowStock(); 
             },
             child: const Text('DELETE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ),
@@ -75,23 +206,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _selectDateRange(BuildContext context) async {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
-    final DateTimeRange? picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
+    final DateTimeRange? picked = await ReportHelper.showAppDateRangePicker(
+      context, 
+      _selectedDateRange, 
+      profile.themeColor,
       lastDate: DateTime.now(),
-      initialDateRange: _selectedDateRange,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: profile.themeColor,
-              onPrimary: Colors.white,
-              onSurface: profile.textColor,
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
 
     if (picked != null) {
@@ -105,7 +224,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final txProvider = Provider.of<TransactionProvider>(context);
     final profileProvider = Provider.of<ProfileProvider>(context);
-    final themeColor = profileProvider.themeColor;
+    final reminderProvider = Provider.of<PurchaseReminderProvider>(context);
     final isSelectionMode = _selectedIds.isNotEmpty;
 
     final todayCompletedCount = txProvider.transactions.where((tx) => tx.type == 'sale' && _isToday(tx.date)).length;
@@ -162,9 +281,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!isSelectionMode) _buildMainStatsCard(txProvider, profileProvider),
+                    if (!isSelectionMode) StatCard(tx: txProvider, profile: profileProvider, range: _selectedDateRange),
                     const SizedBox(height: 16),
                     
+                    if (reminderProvider.reminders.any((r) => r.status == 'pending')) ...[
+                      _buildReminderBanner(context, reminderProvider, profileProvider),
+                      const SizedBox(height: 16),
+                    ],
+
                     if (txProvider.pendingTransactions.isNotEmpty) ...[
                       _buildPendingOrderBanner(context, txProvider, profileProvider),
                       const SizedBox(height: 16),
@@ -180,32 +304,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     
                     const SizedBox(height: 20),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Text('Recent Activity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: profileProvider.textColor)),
-                            if (_selectedDateRange != null)
-                              IconButton(
-                                icon: const Icon(Icons.history_rounded, size: 18, color: Colors.blue),
-                                onPressed: () => setState(() => _selectedDateRange = null),
-                              ),
-                          ],
-                        ),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              _filterChip('Completed', _selectedDateRange != null && _activeFilter == 'Completed' ? filteredTransactions.length : todayCompletedCount),
-                              const SizedBox(width: 8),
-                              if (todayPurchaseCount > 0 || _activeFilter == 'Purchase' || _selectedDateRange != null) ...[
-                                _filterChip('Purchase', _selectedDateRange != null && _activeFilter == 'Purchase' ? filteredTransactions.length : todayPurchaseCount),
+                        Text('Recent Activity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: profileProvider.textColor)),
+                        if (_selectedDateRange != null)
+                          IconButton(
+                            icon: const Icon(Icons.history_rounded, size: 18, color: Colors.blue),
+                            onPressed: () => setState(() => _selectedDateRange = null),
+                          ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Row(
+                              children: [
+                                _filterChip('Completed', _selectedDateRange != null && _activeFilter == 'Completed' ? filteredTransactions.length : todayCompletedCount),
                                 const SizedBox(width: 8),
+                                if (todayPurchaseCount > 0 || _activeFilter == 'Purchase' || _selectedDateRange != null) ...[
+                                  _filterChip('Purchase', _selectedDateRange != null && _activeFilter == 'Purchase' ? filteredTransactions.length : todayPurchaseCount),
+                                  const SizedBox(width: 8),
+                                ],
+                                if (txProvider.pendingTransactions.isNotEmpty) ...[
+                                  _filterChip('Pending', txProvider.pendingTransactions.length),
+                                ],
                               ],
-                              if (txProvider.pendingTransactions.isNotEmpty) ...[
-                                _filterChip('Pending', txProvider.pendingTransactions.length),
-                              ],
-                            ],
+                            ),
                           ),
                         ),
                       ],
@@ -268,7 +391,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             children: [
               const SizedBox(height: 12),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2))),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -276,7 +399,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Text('PENDING ORDERS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor, letterSpacing: 1)),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                    decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
                     child: Consumer<TransactionProvider>(
                       builder: (context, provider, _) => Text('${provider.pendingTransactions.length}', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
                     ),
@@ -306,19 +429,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildPendingOrderCard(BuildContext context, TransactionModel tx, ProfileProvider profile, TransactionProvider provider) {
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
     return Container(
+      key: _itemKeys[tx.id!],
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: profile.scaffoldColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.orange.withOpacity(0.2)),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
       ),
       child: ExpansionTile(
+        onExpansionChanged: (isExpanded) {
+          if (isExpanded) {
+            Future.delayed(const Duration(milliseconds: 300), () {
+              final ctx = _itemKeys[tx.id]?.currentContext;
+              if (ctx != null) {
+                Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+              }
+            });
+          }
+        },
         shape: const RoundedRectangleBorder(side: BorderSide.none),
         collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: Container(
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), shape: BoxShape.circle),
+          decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), shape: BoxShape.circle),
           child: const Icon(Icons.timer_outlined, color: Colors.orange, size: 20),
         ),
         title: Text(_getSmartItemTitle(tx), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: profile.textColor)),
@@ -344,7 +478,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           onTap: () => provider.toggleItemCheck(tx.id!, item['name']!, !isChecked),
                           child: Icon(
                             isChecked ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                            color: isChecked ? Colors.green : Colors.orange.withOpacity(0.5),
+                            color: isChecked ? Colors.green : Colors.orange.withValues(alpha: 0.5),
                             size: 22,
                           ),
                         ),
@@ -368,7 +502,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               bool hasHalf = masterItem.halfPrice != null && masterItem.halfPrice! > 0;
                               provider.addPortionToPending(tx.id!, item['name']!, hasHalf, true, itemProvider);
                             }),
-                            Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text('${qty.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold))),
+                            Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(qty.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold))),
                             _qtyEditBtn(Icons.add, () {
                               final masterItem = itemProvider.items.firstWhere((i) => i.name == item['name']);
                               bool hasHalf = masterItem.halfPrice != null && masterItem.halfPrice! > 0;
@@ -384,6 +518,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   children: [
                     Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (c) => EntryScreen(transaction: tx)));
+                        },
+                        icon: const Icon(Icons.add_shopping_cart_rounded, size: 16),
+                        label: const Text('ADD MORE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueGrey.shade100,
+                          foregroundColor: Colors.blueGrey.shade800,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
                       child: ElevatedButton(
                         onPressed: () {
                           Navigator.push(context, MaterialPageRoute(builder: (c) => EntryScreen(transaction: tx)));
@@ -394,10 +544,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           elevation: 0,
                         ),
-                        child: const Text('COMPLETE BILL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        child: const Text('COMPLETE BILL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 8),
                     IconButton(
                       onPressed: () => provider.softDeleteTransaction(tx.id!, itemProvider),
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
@@ -414,71 +564,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _qtyEditBtn(IconData icon, VoidCallback onTap) {
-    return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, size: 16)));
+    return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), shape: BoxShape.circle), child: Icon(icon, size: 16)));
   }
 
   Widget _buildEmptyState(ProfileProvider profile) {
     return const Center(child: Text('No Activity Found'));
-  }
-
-  Widget _buildMainStatsCard(TransactionProvider tx, ProfileProvider profile) {
-    final todayOrders = tx.transactions.where((t) => t.type == 'sale' && _isToday(t.date)).length;
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [profile.themeColor, profile.themeColor.withOpacity(0.85)]),
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: profile.themeShadow,
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -30, top: -30, 
-            child: CircleAvatar(
-              radius: 80, 
-              backgroundColor: Colors.white.withOpacity(0.05),
-              child: Icon(Icons.bar_chart_rounded, size: 60, color: Colors.white.withOpacity(0.1)),
-            )
-          ),
-          Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Column(
-                  children: [
-                    Text(AppStrings.totalSalesToday, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 1.5)),
-                    Text('${profile.currencySymbol}${tx.todaySales.toStringAsFixed(0)}', style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: Colors.white)),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(tx.salesGrowth >= 0 ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded, size: 14, color: tx.salesGrowth >= 0 ? Colors.greenAccent : Colors.redAccent),
-                        const SizedBox(width: 6),
-                        Text('${tx.salesGrowth.abs().toStringAsFixed(1)}% vs yesterday', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white)),
-                      ]),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(color: Colors.black.withOpacity(0.1), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28))),
-                child: Row(
-                  children: [
-                    _miniStat('Orders', todayOrders.toString()),
-                    _verticalDivider(),
-                    _miniStat('Avg Bill', '${profile.currencySymbol}${tx.avgOrderValue.toStringAsFixed(0)}'),
-                    _verticalDivider(),
-                    _miniStat('Profit', '${profile.currencySymbol}${tx.profitToday.toStringAsFixed(0)}'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 
   bool _isToday(DateTime date) {
@@ -486,25 +576,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return date.year == now.year && date.month == now.month && date.day == now.day;
   }
 
-  Widget _miniStat(String label, String value) {
-    return Expanded(
-      child: Column(children: [
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.white)),
-        Text(label.toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w800)),
-      ]),
-    );
-  }
-
-  Widget _verticalDivider() => Container(height: 24, width: 1, color: Colors.white12);
-
   Widget _buildPaymentModeRow(TransactionProvider tx, ProfileProvider profile) {
+    double cash = tx.getCashSalesForRange(_selectedDateRange);
+    double upi = tx.getUpiSalesForRange(_selectedDateRange);
+    double credit = tx.getCreditSalesForRange(_selectedDateRange);
+
     return Row(
       children: [
-        _paymentCard(Icons.payments_rounded, 'Cash', '${profile.currencySymbol}${tx.cashSalesToday.toStringAsFixed(0)}', Colors.green, profile),
+        _paymentCard(Icons.payments_rounded, 'Cash', '${profile.currencySymbol}${cash.toStringAsFixed(0)}', Colors.green, profile),
         const SizedBox(width: 8),
-        _paymentCard(Icons.qr_code_2_rounded, 'UPI', '${profile.currencySymbol}${tx.upiSalesToday.toStringAsFixed(0)}', Colors.blueAccent, profile),
+        _paymentCard(Icons.qr_code_2_rounded, 'UPI', '${profile.currencySymbol}${upi.toStringAsFixed(0)}', Colors.blueAccent, profile),
         const SizedBox(width: 8),
-        _paymentCard(Icons.timer_rounded, 'Credit', '${profile.currencySymbol}${tx.creditSalesToday.toStringAsFixed(0)}', Colors.orangeAccent, profile),
+        _paymentCard(Icons.timer_rounded, 'Credit', '${profile.currencySymbol}${credit.toStringAsFixed(0)}', Colors.orangeAccent, profile),
       ],
     );
   }
@@ -521,7 +604,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(children: [
           Icon(icon, color: color, size: 16),
           const SizedBox(height: 8),
-          Text(value, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: profile.textColor)),
+          Text(profile.showAmount ? value : '****', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: profile.textColor)),
           Text(label, style: TextStyle(color: profile.secondaryTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
         ]),
       ),
@@ -579,7 +662,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         title: Text(_getSmartItemTitle(tx), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: profile.textColor)),
         subtitle: Text('${DateFormat('hh:mm a').format(tx.date)} • ${tx.paymentMode}', style: const TextStyle(fontSize: 10)),
-        trailing: Text('${(isSale) ? "+" : "-"}${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: isSale ? Colors.green : Colors.red)),
+        trailing: Text('${(isSale) ? "+" : "-"}${profile.currencySymbol}${profile.showAmount ? tx.amount.toStringAsFixed(0) : "****"}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: isSale ? Colors.green : Colors.red)),
       ),
     );
   }
@@ -599,7 +682,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
+            Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -623,7 +706,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Text(item['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
                           Text('${item['qty']} x ${profile.currencySymbol}${item['price']} • ${item['serving_method'] ?? 'Dine-in'}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
                         ]),
-                        Text('${profile.currencySymbol}${(double.parse(item['qty'] ?? '0') * double.parse(item['price'] ?? '0')).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                        Text('${profile.currencySymbol}${profile.showAmount ? (double.parse(item['qty'] ?? '0') * double.parse(item['price'] ?? '0')).toStringAsFixed(0) : "****"}', style: const TextStyle(fontWeight: FontWeight.w900)),
                       ],
                     ),
                   )).toList(),
@@ -635,7 +718,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('GRAND TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-                Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: profile.themeColor)),
+                Text('${profile.currencySymbol}${profile.showAmount ? tx.amount.toStringAsFixed(0) : "****"}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: profile.themeColor)),
               ],
             ),
             const SizedBox(height: 20),
@@ -670,7 +753,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.3))),
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withValues(alpha: 0.3))),
           child: Column(
             children: [
               Icon(icon, color: color, size: 20),
@@ -686,7 +769,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _filterChip(String label, int count) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     bool isSelected = _activeFilter == label;
-    Color color = label == 'Pending' ? Colors.orange : profile.themeColor;
+    Color color;
+    if (label == 'Pending') {
+      color = Colors.orange;
+    } else if (label == 'Purchase') {
+      color = Colors.orangeAccent.shade700;
+    } else {
+      color = profile.themeColor;
+    }
 
     return GestureDetector(
       onTap: () {
@@ -700,9 +790,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? color : color.withOpacity(0.05),
+          color: isSelected ? color : color.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? color : color.withOpacity(0.2)),
+          border: Border.all(color: isSelected ? color : color.withValues(alpha: 0.2)),
         ),
         child: Row(
           children: [
@@ -711,10 +801,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(width: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(color: isSelected ? Colors.white24 : color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(color: isSelected ? Colors.white24 : color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
                 child: Text('$count', style: TextStyle(color: isSelected ? Colors.white : color, fontWeight: FontWeight.bold, fontSize: 9)),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReminderBanner(BuildContext context, PurchaseReminderProvider provider, ProfileProvider profile) {
+    final pendingCount = provider.reminders.where((r) => r.status == 'pending').length;
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const PurchaseReminderScreen())),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: profile.themeColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: profile.themeColor.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: profile.themeColor, borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.playlist_add_check_rounded, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$pendingCount Items to Buy', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: profile.themeColor)),
+                  Text('View your purchase checklist', style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios_rounded, size: 16, color: profile.themeColor),
           ],
         ),
       ),
@@ -727,9 +852,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.orange.withOpacity(0.08),
+          color: Colors.orange.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.orange.withOpacity(0.2)),
+          border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
         ),
         child: Row(
           children: [
@@ -755,32 +880,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _filterChipOld(String label, int count) {
-    final profile = Provider.of<ProfileProvider>(context, listen: false);
-    bool isSelected = _activeFilter == label;
-    return GestureDetector(
-      onTap: () => setState(() => _activeFilter = label),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? profile.themeColor : profile.cardColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? profile.themeColor : Colors.grey.withOpacity(0.2)),
-        ),
-        child: Row(
-          children: [
-            Text(label, style: TextStyle(color: isSelected ? Colors.white : profile.textColor, fontWeight: FontWeight.bold, fontSize: 12)),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(color: isSelected ? Colors.white.withOpacity(0.2) : profile.themeColor.withOpacity(0.1), shape: BoxShape.circle),
-              child: Text('$count', style: TextStyle(color: isSelected ? Colors.white : profile.themeColor, fontSize: 10, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _verticalDividerOld() => Container(height: 24, width: 1, color: Colors.white12);
 }

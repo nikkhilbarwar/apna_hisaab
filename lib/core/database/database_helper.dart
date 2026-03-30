@@ -42,7 +42,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path, 
-      version: 20, 
+      version: 23, 
       onCreate: _createDB, 
       onUpgrade: _onUpgrade
     );
@@ -57,6 +57,31 @@ class DatabaseHelper {
         CREATE TABLE IF NOT EXISTS units (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT,
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+    }
+    if (oldVersion < 21) {
+      try { await db.execute('ALTER TABLE categories ADD COLUMN use_category_stock INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE categories ADD COLUMN stock_qty REAL DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE categories ADD COLUMN low_stock_limit REAL DEFAULT 10'); } catch(_) {}
+    }
+    if (oldVersion < 22) {
+      try { await db.execute('ALTER TABLE items ADD COLUMN icon TEXT'); } catch(_) {}
+    }
+    if (oldVersion < 23) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS purchase_reminders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          item_id INTEGER,
+          item_name TEXT,
+          category TEXT,
+          quantity REAL,
+          expected_price REAL,
+          note TEXT,
+          priority TEXT,
+          due_date TEXT,
+          status TEXT,
           is_synced INTEGER DEFAULT 0
         )
       ''');
@@ -104,7 +129,8 @@ class DatabaseHelper {
         half_qty REAL,
         item_type TEXT DEFAULT "selling",
         is_synced INTEGER DEFAULT 0,
-        low_stock_alert INTEGER DEFAULT 1
+        low_stock_alert INTEGER DEFAULT 1,
+        icon TEXT
       )
     ''');
 
@@ -139,7 +165,10 @@ class DatabaseHelper {
         icon_name TEXT,
         type TEXT DEFAULT "selling",
         is_synced INTEGER DEFAULT 0,
-        display_order INTEGER DEFAULT 0
+        display_order INTEGER DEFAULT 0,
+        use_category_stock INTEGER DEFAULT 0,
+        stock_qty REAL DEFAULT 0,
+        low_stock_limit REAL DEFAULT 10
       )
     ''');
 
@@ -147,6 +176,22 @@ class DatabaseHelper {
       CREATE TABLE units (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
+        is_synced INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE purchase_reminders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER,
+        item_name TEXT,
+        category TEXT,
+        quantity REAL,
+        expected_price REAL,
+        note TEXT,
+        priority TEXT,
+        due_date TEXT,
+        status TEXT,
         is_synced INTEGER DEFAULT 0
       )
     ''');
@@ -160,9 +205,9 @@ class DatabaseHelper {
     await db.delete('staff');
     await db.delete('suppliers');
     await db.delete('units');
+    await db.delete('purchase_reminders');
   }
 
-  // --- Generic Sync Methods ---
   Future<int> updateSyncStatus(String table, int id, int status) async {
     final db = await instance.database;
     return await db.update(table, {'is_synced': status}, where: 'id = ?', whereArgs: [id]);
@@ -173,10 +218,9 @@ class DatabaseHelper {
     return await db.query(table, where: 'is_synced = ?', whereArgs: [0]);
   }
 
-  // --- Transactions ---
   Future<int> insertTransaction(TransactionModel tx) async {
     final db = await instance.database;
-    return await db.insert('transactions', tx.toMap());
+    return await db.insert('transactions', tx.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<int> updateTransaction(TransactionModel tx) async {
     final db = await instance.database;
@@ -208,10 +252,9 @@ class DatabaseHelper {
     return await updateSyncStatus('transactions', id, status);
   }
 
-  // --- Items ---
   Future<int> insertItem(ItemModel item) async {
     final db = await instance.database;
-    return await db.insert('items', item.toMap());
+    return await db.insert('items', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<ItemModel>> getAllItems() async {
     final db = await instance.database;
@@ -231,10 +274,9 @@ class DatabaseHelper {
     return await db.delete('items', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Categories ---
   Future<int> insertCategory(CategoryModel category) async {
     final db = await instance.database;
-    return await db.insert('categories', category.toMap());
+    return await db.insert('categories', category.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<CategoryModel>> getAllCategories() async {
     final db = await instance.database;
@@ -245,15 +287,18 @@ class DatabaseHelper {
     final db = await instance.database;
     return await db.update('categories', category.toMap(), where: 'id = ?', whereArgs: [category.id]);
   }
+  Future<int> updateCategoryStock(int id, double newStock) async {
+    final db = await instance.database;
+    return await db.update('categories', {'stock_qty': newStock, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
   Future<int> deleteCategory(int id) async {
     final db = await instance.database;
     return await db.delete('categories', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Staff ---
   Future<int> insertStaff(StaffModel staff) async {
     final db = await instance.database;
-    return await db.insert('staff', staff.toMap());
+    return await db.insert('staff', staff.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<StaffModel>> getAllStaff() async {
     final db = await instance.database;
@@ -269,10 +314,9 @@ class DatabaseHelper {
     return await db.delete('staff', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Suppliers ---
   Future<int> insertSupplier(SupplierModel supplier) async {
     final db = await instance.database;
-    return await db.insert('suppliers', supplier.toMap());
+    return await db.insert('suppliers', supplier.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<SupplierModel>> getAllSuppliers() async {
     final db = await instance.database;
@@ -288,10 +332,9 @@ class DatabaseHelper {
     return await db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Units ---
   Future<int> insertUnit(String name) async {
     final db = await instance.database;
-    return await db.insert('units', {'name': name, 'is_synced': 0});
+    return await db.insert('units', {'name': name, 'is_synced': 0}, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
   Future<List<Map<String, dynamic>>> getAllUnits() async {
     final db = await instance.database;

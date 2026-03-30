@@ -66,7 +66,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             toolbarTitle: 'Crop Logo',
             toolbarColor: profile.themeColor,
             toolbarWidgetColor: Colors.white,
-            statusBarColor: profile.themeColor, // Fixed: Ensuring Status Bar stays themed and Safe
+            statusBarColor: profile.themeColor, 
             backgroundColor: profile.scaffoldColor,
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
@@ -238,7 +238,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Form(
             key: formKey,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: Map<String, dynamic>.from(profile.isPinEnabled ? {'pin': true} : {}).keys.length > 0 ? MainAxisSize.min : MainAxisSize.max,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(
@@ -288,6 +288,117 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showSecuritySettings(ProfileProvider profile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          decoration: BoxDecoration(
+            color: profile.cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              Text("Security Settings", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: profile.textColor)),
+              const SizedBox(height: 24),
+              
+              // Custom PIN Toggle
+              SwitchListTile(
+                title: Text("Custom PIN Lock", style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
+                subtitle: Text(profile.isPinEnabled ? "PIN is active" : "Protect sensitive data with a PIN", style: TextStyle(fontSize: 12)),
+                value: profile.isPinEnabled,
+                activeColor: profile.themeColor,
+                onChanged: (val) {
+                  if (!val) {
+                    profile.setPin("");
+                    setModalState(() {});
+                  } else {
+                    _showSetPinDialog(profile, setModalState);
+                  }
+                },
+              ),
+              
+              if (profile.isPinEnabled)
+                ListTile(
+                  leading: Icon(Icons.edit_outlined, color: profile.themeColor),
+                  title: Text("Change PIN", style: TextStyle(color: profile.textColor, fontSize: 14, fontWeight: FontWeight.bold)),
+                  onTap: () => _showSetPinDialog(profile, setModalState),
+                ),
+
+              const Divider(),
+
+              // Biometric Toggle
+              SwitchListTile(
+                title: Text("Device Lock (Biometric)", style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
+                subtitle: const Text("Use fingerprint or face ID", style: TextStyle(fontSize: 12)),
+                value: profile.isBiometricEnabled,
+                activeColor: profile.themeColor,
+                onChanged: (val) {
+                  profile.setBiometric(val);
+                  setModalState(() {});
+                },
+              ),
+              
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(backgroundColor: profile.themeColor, minimumSize: const Size(double.infinity, 50)),
+                child: const Text("DONE", style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSetPinDialog(ProfileProvider profile, StateSetter parentState) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text("Set 4-Digit PIN"),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          maxLength: 4,
+          obscureText: true,
+          autofocus: true,
+          textAlign: TextAlign.center,
+          decoration: const InputDecoration(hintText: "****", counterText: ""),
+          style: const TextStyle(fontSize: 24, letterSpacing: 10, fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.length == 4) {
+                profile.setPin(controller.text);
+                parentState(() {});
+                Navigator.pop(context);
+              }
+            },
+            child: const Text("SAVE"),
+          ),
+        ],
       ),
     );
   }
@@ -581,10 +692,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Text("SETTINGS", style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold, letterSpacing: 1.2, fontSize: 12)),
                   const SizedBox(height: 12),
                   ProfileActionCard(
-                    title: AppStrings.editBusiness,
-                    subtitle: "Update name, contact and address",
-                    icon: Icons.edit_note_rounded,
-                    onTap: () => _showEditBottomSheet(context, profile),
+                    title: "Security & Lock",
+                    subtitle: "PIN and Fingerprint settings",
+                    icon: Icons.lock_outline_rounded,
+                    onTap: () => _showSecuritySettings(profile),
                     profile: profile,
                   ),
                   ProfileActionCard(

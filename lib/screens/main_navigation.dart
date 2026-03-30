@@ -121,11 +121,28 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                 children: [
                   Icon(Icons.cloud_sync_rounded, color: profile.themeColor, size: 28),
                   const SizedBox(width: 16),
-                  Text('CLOUD SYNC STATUS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor)),
+                  Text('CLOUD BACKUP & RESTORE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor)),
                 ],
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
               
+              // Cloud Sync Toggle
+              Container(
+                decoration: BoxDecoration(
+                  color: profile.scaffoldColor,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+                ),
+                child: SwitchListTile(
+                  title: const Text('Auto Cloud Sync', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  subtitle: Text(profile.isCloudSyncEnabled ? 'Enabled (Every 5 mins)' : 'Disabled', style: const TextStyle(fontSize: 11)),
+                  value: profile.isCloudSyncEnabled,
+                  activeColor: profile.themeColor,
+                  onChanged: (val) => profile.toggleCloudSync(val),
+                ),
+              ),
+              const SizedBox(height: 24),
+
               if (syncProvider.isSyncing) ...[
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -153,17 +170,6 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                           backgroundColor: profile.themeColor.withOpacity(0.1),
                         ),
                       ),
-                      if (syncProvider.estimatedSecondsRemaining > 0) ...[
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.timer_outlined, size: 14, color: profile.secondaryTextColor),
-                            const SizedBox(width: 6),
-                            Text('Estimated time: ${syncProvider.estimatedSecondsRemaining}s remaining', style: TextStyle(fontSize: 11, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -171,34 +177,49 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
               ] else ...[
                 _syncInfoRow('Data Protection', 'Securely synced with cloud', profile, icon: Icons.security_rounded, color: Colors.blue),
                 const Divider(height: 32),
-                _syncInfoRow('Last Updated', 'Automated background sync active', profile, icon: Icons.history_rounded, color: Colors.green),
+                _syncInfoRow('Storage', 'Backup includes all transactions', profile, icon: Icons.storage_rounded, color: Colors.green),
                 const SizedBox(height: 32),
               ],
 
-              ElevatedButton(
-                onPressed: syncProvider.isSyncing ? null : () async {
-                  await syncProvider.syncAllToCloudSilently();
-                  if (context.mounted) Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: profile.themeColor,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                child: Text(syncProvider.isSyncing ? 'SYNCING...' : 'SYNC DATA NOW', style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
-              ),
-              const SizedBox(height: 12),
-              if (!syncProvider.isSyncing)
-                OutlinedButton(
-                  onPressed: () => _showFullRestoreConfirm(context, syncProvider, profile),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                    side: BorderSide(color: Colors.red.shade300),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: syncProvider.isSyncing ? null : () async {
+                        bool success = await syncProvider.manualSyncToCloud(context);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(success ? 'Sync Successful!' : 'Sync Failed!'),
+                              backgroundColor: success ? Colors.green : Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                      label: const Text('SYNC NOW', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: profile.themeColor,
+                        minimumSize: const Size(0, 56),
+                      ),
+                    ),
                   ),
-                  child: Text('RESTORE ALL DATA FROM CLOUD', style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold)),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: syncProvider.isSyncing ? null : () => _showFullRestoreConfirm(context, syncProvider, profile),
+                      icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                      label: const Text('RESTORE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 56),
+                        side: BorderSide(color: Colors.red.shade300),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -219,7 +240,15 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx); 
-              await syncProvider.fullRestoreFromServer(context);
+              bool success = await syncProvider.fullRestoreFromServer(context);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(success ? 'Restore Successful!' : 'Restore Failed!'),
+                    backgroundColor: success ? Colors.green : Colors.red,
+                  ),
+                );
+              }
             },
             child: const Text('RESTORE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ),
@@ -259,17 +288,13 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
 
     final bool globalSyncing = txProvider.isSyncing || syncProvider.isSyncing;
 
-    // Babu Ji: Back press par Dashboard par redirect karne wala robust logic
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, dynamic result) {
         if (didPop) return;
-        
         if (_tabController.index != 0) {
-          // Agar kisi aur tab (Stock, Reports etc.) par hain, toh pehle Home par bhej do
           _tabController.animateTo(0);
         } else {
-          // Agar pehle se hi Home par hain, toh exit allow karo
           SystemNavigator.pop();
         }
       },

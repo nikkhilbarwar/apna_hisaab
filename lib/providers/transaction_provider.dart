@@ -19,7 +19,8 @@ class TransactionProvider with ChangeNotifier {
   bool get isSyncing => _isSyncing;
 
   String _normalizeStatus(String? status) {
-    return (status ?? '').trim().toLowerCase();
+    if (status == null || status.isEmpty) return 'completed';
+    return status.trim().toLowerCase();
   }
 
   List<TransactionModel> get transactions => _allTransactions.where((tx) {
@@ -43,29 +44,62 @@ class TransactionProvider with ChangeNotifier {
   Future<void> _initializeData() async {
     await fetchTransactions();
     await syncAllUnsynced();
+    // Reinstall Check: If transactions are empty, do a Master Restore
     if (_allTransactions.isEmpty) {
-      await restoreFromCloud();
+      await masterRestoreFromCloud();
     }
   }
 
-  Future<void> restoreFromCloud() async {
+  Future<void> masterRestoreFromCloud() async {
     final connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult.any((result) => result != ConnectivityResult.none)) {
       _isSyncing = true;
       notifyListeners();
       try {
-        final cloudData = await _firebaseService.fetchAllTransactions();
-        if (cloudData.isNotEmpty) {
-          for (var tx in cloudData) {
-            bool exists = await _checkIfTransactionExistsLocally(tx.id!);
+        debugPrint("Starting Master Restore...");
+        
+        // 1. Restore Categories First (to prevent foreign key or logic issues)
+        final cloudCategories = await _firebaseService.fetchAllCategories();
+        for (var cat in cloudCategories) {
+          final localCats = await DatabaseHelper.instance.getAllCategories();
+          if (!localCats.any((c) => c.id == cat.id || c.name == cat.name)) {
+            await DatabaseHelper.instance.insertCategory(cat);
+          }
+        }
+
+        // 2. Restore Items
+        final cloudItems = await _firebaseService.fetchAllItems();
+        for (var item in cloudItems) {
+          final localItems = await DatabaseHelper.instance.getAllItems();
+          if (!localItems.any((i) => i.id == item.id || i.name == item.name)) {
+            await DatabaseHelper.instance.insertItem(item);
+          }
+        }
+
+        // 3. Restore Transactions
+        final cloudTxs = await _firebaseService.fetchAllTransactions();
+        if (cloudTxs.isNotEmpty) {
+          for (var tx in cloudTxs) {
+            tx.status = 'completed';
+            final localTxs = await DatabaseHelper.instance.getAllTransactions();
+            bool exists = localTxs.any((t) => t.id == tx.id || (t.date.isAtSameMomentAs(tx.date) && t.amount == tx.amount));
             if (!exists) {
               await DatabaseHelper.instance.insertTransaction(tx);
             }
           }
-          await fetchTransactions();
         }
+        
+        // 4. Restore Staff & Suppliers
+        final cloudStaff = await _firebaseService.fetchAllStaff();
+        for (var s in cloudStaff) {
+           final localStaff = await DatabaseHelper.instance.getAllStaff();
+           if (!localStaff.any((ls) => ls.id == s.id)) await DatabaseHelper.instance.insertStaff(s);
+        }
+
+        await fetchTransactions();
+        debugPrint("Master Restore Completed Successfully");
       } catch (e) {
-        debugPrint("Restore error: $e");
+        debugPrint("Master Restore error: $e");
       } finally {
         _isSyncing = false;
         notifyListeners();
@@ -73,9 +107,8 @@ class TransactionProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> _checkIfTransactionExistsLocally(int id) async {
-    return _allTransactions.any((t) => t.id == id);
-  }
+  // Keep existing restoreFromCloud for manual UI triggers
+  Future<void> restoreFromCloud() async => await masterRestoreFromCloud();
 
   void _setupConnectivityListener() {
     Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
@@ -132,10 +165,18 @@ class TransactionProvider with ChangeNotifier {
       bool matchDate = true;
       if (range != null) {
         final start = DateTime(range.start.year, range.start.month, range.start.day);
-        final endLimit = DateTime(range.end.year, range.end.month, range.end.day).add(const Duration(days: 1));
+        final endLimit = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
         matchDate = tx.date.isAtSameMomentAs(start) || (tx.date.isAfter(start) && tx.date.isBefore(endLimit));
       }
-      bool matchCategory = category == null || category == 'All' || tx.category.toLowerCase() == category.toLowerCase();
+      
+      bool matchCategory = category == null || category == 'All';
+      if (!matchCategory && category != null) {
+        // Root Fix: Check transaction-level category OR any item-level category
+        bool txCategoryMatch = tx.category.toLowerCase() == category.toLowerCase();
+        bool itemCategoryMatch = tx.parsedItems.any((i) => (i['category'] ?? '').toLowerCase() == category.toLowerCase());
+        matchCategory = txCategoryMatch || itemCategoryMatch;
+      }
+
       bool matchItem = itemName == null || itemName.isEmpty || tx.parsedItems.any((i) => 
           (i['name'] ?? '').toLowerCase().contains(itemName.toLowerCase()));
 
@@ -230,7 +271,6 @@ class TransactionProvider with ChangeNotifier {
     }
   }
 
-  // Babu ji: Smart Portion logic for clean UI (1, 2, 3 plates) and accurate prices (Cheese Ball Fix)
   Future<void> addPortionToPending(int transactionId, String itemName, bool isHalfOptionEnabled, bool isDecrement, ItemProvider itemProvider) async {
     try {
       final index = _allTransactions.indexWhere((t) => t.id == transactionId);
@@ -238,14 +278,12 @@ class TransactionProvider with ChangeNotifier {
 
       final originalTx = _allTransactions[index];
       final tx = TransactionModel.fromMap(originalTx.toMap());
-      
+      bool isSale = tx.type.toLowerCase() == 'sale' || tx.type.toLowerCase() == 'income';
+
       final List<dynamic> items = jsonDecode(tx.description);
       int itemIndex = items.indexWhere((i) => i['name'] == itemName);
       if (itemIndex == -1) return;
 
-      final masterItem = itemProvider.items.firstWhere((i) => i.name == itemName);
-      
-      // Babu Ji Logic: Agar item mein Half option hai, toh qty 0.5 se badhegi
       double qtyChange = isHalfOptionEnabled ? 0.5 : 1.0;
       double currentQty = double.tryParse(items[itemIndex]['qty'].toString()) ?? 0;
 
@@ -264,7 +302,6 @@ class TransactionProvider with ChangeNotifier {
         return;
       }
 
-      // Master Pricing Recalculation (Cheese Ball 120/70 Logic)
       double newTotal = 0;
       for (var it in items) {
         String name = it['name'] ?? '';
@@ -273,16 +310,14 @@ class TransactionProvider with ChangeNotifier {
         ItemModel? master;
         try { master = itemProvider.items.firstWhere((i) => i.name == name); } catch (_) {}
 
-        if (master != null && master.halfPrice != null && master.halfPrice! > 0) {
-          // Calculation: (Full Plates * Full Price) + (If 0.5 exists * Half Price)
+        if (isSale && master != null && master.halfPrice != null && master.halfPrice! > 0) {
           int fullPlatesCount = q.floor();
           double remainderHalf = q - fullPlatesCount;
           
           double itemPriceSum = (fullPlatesCount * (master.price ?? 0)) + (remainderHalf > 0 ? master.halfPrice! : 0);
           newTotal += itemPriceSum;
           
-          // JSON description price update for display consistency
-          it['price'] = (q == 0.5 ? master.halfPrice! : master.price!).toString();
+          it['price'] = (q == 0.5 ? (master.halfPrice ?? 0) : (master.price ?? 0)).toString();
         } else {
           double p = double.tryParse(it['price'].toString()) ?? 0;
           newTotal += (q * p);
@@ -306,7 +341,8 @@ class TransactionProvider with ChangeNotifier {
 
       final originalTx = _allTransactions[index];
       final tx = TransactionModel.fromMap(originalTx.toMap());
-      
+      bool isSale = tx.type.toLowerCase() == 'sale' || tx.type.toLowerCase() == 'income';
+
       final List<dynamic> items = jsonDecode(tx.description);
       int itemIndex = items.indexWhere((i) => i['name'] == itemName);
       if (itemIndex == -1) return;
@@ -317,10 +353,12 @@ class TransactionProvider with ChangeNotifier {
         if (newQty != null) items[itemIndex]['qty'] = newQty.toString();
         if (newVariant != null) {
           items[itemIndex]['variant'] = newVariant;
-          try {
-            final masterItem = itemProvider.items.firstWhere((i) => i.name == itemName);
-            items[itemIndex]['price'] = (newVariant == 'Half' ? masterItem.halfPrice : masterItem.price).toString();
-          } catch (_) {}
+          if (isSale) {
+            try {
+              final masterItem = itemProvider.items.firstWhere((i) => i.name == itemName);
+              items[itemIndex]['price'] = (newVariant == 'Half' ? (masterItem.halfPrice ?? 0) : (masterItem.price ?? 0)).toString();
+            } catch (_) {}
+          }
         }
       }
 
@@ -335,6 +373,17 @@ class TransactionProvider with ChangeNotifier {
       for (var it in items) {
         double q = double.tryParse(it['qty'].toString()) ?? 0;
         double p = double.tryParse(it['price'].toString()) ?? 0;
+        
+        if (isSale) {
+           ItemModel? master;
+           try { master = itemProvider.items.firstWhere((i) => i.name == it['name']); } catch (_) {}
+           if (master != null && master.halfPrice != null && master.halfPrice! > 0) {
+              int fullPlatesCount = q.floor();
+              double halfRem = q - fullPlatesCount;
+              newTotal += (fullPlatesCount * (master.price ?? 0)) + (halfRem > 0 ? master.halfPrice! : 0);
+              continue;
+           }
+        }
         newTotal += (q * p);
       }
       tx.amount = newTotal;
@@ -398,7 +447,6 @@ class TransactionProvider with ChangeNotifier {
         } catch (_) {}
 
         if (targetId != null && masterItem != null) {
-          // Babu Ji: Stock piece-wise minus hona chahiye, Plate-wise nahi
           final displayQty = double.tryParse(itemMap['qty'] ?? '0') ?? 0;
           final extraQty = double.tryParse(itemMap['extra_qty'] ?? '0') ?? 0;
           final totalDisplayQty = displayQty + extraQty;
@@ -454,26 +502,90 @@ class TransactionProvider with ChangeNotifier {
     }
   }
 
-  double get todaySales => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale').fold(0.0, (sum, tx) => sum + tx.amount);
-  double get todayPurchases => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'purchase' || tx.type == 'expense').fold(0.0, (sum, tx) => sum + tx.amount);
-  double get yesterdaySales => _activeDayTransactions(DateTime.now().subtract(const Duration(days: 1))).where((tx) => tx.type == 'sale').fold(0.0, (sum, tx) => sum + tx.amount);
+  double get todaySales => getSalesForRange(null);
+  double get todayPurchases => getPurchasesForRange(null);
+  double get yesterdaySales {
+    final start = DateTime.now().subtract(const Duration(days: 1));
+    final range = DateTimeRange(start: start, end: start);
+    return getSalesForRange(range);
+  }
   
-  double get cashSalesToday => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale' && (tx.paymentMode == 'Cash' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.cashAmount : tx.amount));
-  double get upiSalesToday => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale' && (tx.paymentMode == 'UPI' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.upiAmount : tx.amount));
-  double get creditSalesToday => _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale' && tx.paymentMode == 'Credit').fold(0.0, (sum, tx) => sum + (tx.amount - tx.paidAmount));
-
-  double get salesGrowth {
-    if (yesterdaySales == 0) return todaySales > 0 ? 100.0 : 0.0;
-    return ((todaySales - yesterdaySales) / yesterdaySales) * 100;
+  double getSalesForRange(DateTimeRange? range) {
+    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale').fold(0.0, (sum, tx) => sum + tx.amount);
   }
 
-  double get avgOrderValue {
-    final todayTxs = _activeDayTransactions(DateTime.now()).where((tx) => tx.type == 'sale').toList();
-    if (todayTxs.isEmpty) return 0.0;
-    return todaySales / todayTxs.length;
+  double getPurchasesForRange(DateTimeRange? range) {
+    return _getTransactionsInRange(range).where((tx) => tx.type == 'purchase' || tx.type == 'expense').fold(0.0, (sum, tx) => sum + tx.amount);
   }
 
-  double get profitToday => todaySales - todayPurchases;
+  double getCashSalesForRange(DateTimeRange? range) {
+    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale' && (tx.paymentMode == 'Cash' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.cashAmount : tx.amount));
+  }
+
+  double getUpiSalesForRange(DateTimeRange? range) {
+    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale' && (tx.paymentMode == 'UPI' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.upiAmount : tx.amount));
+  }
+
+  double getCreditSalesForRange(DateTimeRange? range) {
+    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale' && tx.paymentMode == 'Credit').fold(0.0, (sum, tx) => sum + (tx.amount - tx.paidAmount));
+  }
+
+  double getAvgOrderValueForRange(DateTimeRange? range) {
+    final txs = _getTransactionsInRange(range).where((tx) => tx.type == 'sale').toList();
+    if (txs.isEmpty) return 0.0;
+    return getSalesForRange(range) / txs.length;
+  }
+
+  double getProfitForRange(DateTimeRange? range) {
+    return getSalesForRange(range) - getPurchasesForRange(range);
+  }
+
+  int getOrderCountForRange(DateTimeRange? range) {
+    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale').length;
+  }
+
+  double getSalesGrowthForRange(DateTimeRange? range) {
+    double current = getSalesForRange(range);
+    double prev = 0;
+    
+    if (range == null) {
+      prev = yesterdaySales;
+    } else {
+      final duration = range.end.difference(range.start);
+      final prevStart = range.start.subtract(duration).subtract(const Duration(days: 1));
+      final prevEnd = range.start.subtract(const Duration(days: 1));
+      prev = getSalesForRange(DateTimeRange(start: prevStart, end: prevEnd));
+    }
+
+    if (prev == 0) return current > 0 ? 100.0 : 0.0;
+    return ((current - prev) / prev) * 100;
+  }
+
+  List<TransactionModel> _getTransactionsInRange(DateTimeRange? range) {
+    return _allTransactions.where((tx) {
+      bool matchStatus = tx.isDeleted == 0 && _normalizeStatus(tx.status) == 'completed';
+      if (!matchStatus) return false;
+
+      if (range == null) {
+        final now = DateTime.now();
+        return tx.date.year == now.year && tx.date.month == now.month && tx.date.day == now.day;
+      } else {
+        final start = DateTime(range.start.year, range.start.month, range.start.day);
+        final end = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
+        return tx.date.isAfter(start.subtract(const Duration(seconds: 1))) && tx.date.isBefore(end);
+      }
+    }).toList();
+  }
+
+  double get cashSalesToday => getCashSalesForRange(null);
+  double get upiSalesToday => getUpiSalesForRange(null);
+  double get creditSalesToday => getCreditSalesForRange(null);
+
+  double get salesGrowth => getSalesGrowthForRange(null);
+
+  double get avgOrderValue => getAvgOrderValueForRange(null);
+
+  double get profitToday => getProfitForRange(null);
 
   List<TransactionModel> _activeDayTransactions(DateTime day) {
     return _allTransactions.where((tx) => 

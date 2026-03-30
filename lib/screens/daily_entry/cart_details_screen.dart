@@ -42,6 +42,8 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   String _globalServingMethod = 'Dine-in';
   String _selectedTable = '1';
 
+  bool get _isSellingType => widget.type.toLowerCase() == 'sale' || widget.type.toLowerCase() == 'income';
+
   @override
   void initState() {
     super.initState();
@@ -76,27 +78,10 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     super.dispose();
   }
 
-  // Babu ji: Master Price Recalculation for Cart (Portion Master Fix)
   void _calculateTotal() {
     double subtotal = 0;
     for (var cartItem in widget.cart) {
-      final item = cartItem.item;
-      final q = cartItem.quantity;
-      
-      double itemPriceSum = 0;
-      if (item.halfPrice != null && item.halfPrice! > 0) {
-        // Master Logic: (Full Plates * Full Price) + (If 0.5 exists * Half Price)
-        int fullPlatesCount = q.floor();
-        double halfRemainder = q - fullPlatesCount;
-        itemPriceSum = (fullPlatesCount * (item.price ?? 0)) + (halfRemainder > 0 ? item.halfPrice! : 0);
-        
-        // Sync cartItem price for display/JSON
-        cartItem.price = (q == 0.5 ? item.halfPrice! : (item.price ?? 0));
-      } else {
-        itemPriceSum = q * cartItem.price;
-      }
-      
-      subtotal += itemPriceSum + cartItem.extraPrice;
+      subtotal += _getItemTotalPrice(cartItem);
     }
 
     final profile = Provider.of<ProfileProvider>(context, listen: false);
@@ -117,9 +102,22 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     }
   }
 
+  double _getItemTotalPrice(CartItem c) {
+    final item = c.item;
+    final q = c.quantity;
+    
+    // Babu Ji: For Sales, use master portion logic. For Purchases, use manual cart price.
+    if (_isSellingType && item.halfPrice != null && item.halfPrice! > 0) {
+      int fullPlates = q.floor();
+      double halfRem = q - fullPlates;
+      return (fullPlates * (item.price ?? 0)) + (halfRem > 0 ? item.halfPrice! : 0) + c.extraPrice;
+    }
+    return (q * c.price) + c.extraPrice;
+  }
+
   void _showManualQuantityDialog(CartItem cartItem) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
-    final controller = TextEditingController(text: cartItem.quantity.toInt().toString());
+    final controller = TextEditingController(text: cartItem.quantity.toString());
 
     showDialog(
       context: context,
@@ -129,7 +127,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         title: Text('Enter Quantity', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: controller,
-          keyboardType: TextInputType.number,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           autofocus: true,
           decoration: const InputDecoration(labelText: 'Quantity'),
           style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
@@ -170,7 +168,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   Widget build(BuildContext context) {
     final profileProvider = Provider.of<ProfileProvider>(context);
     final themeColor = profileProvider.themeColor;
-    final isSale = widget.type == 'sale';
+    final isSale = _isSellingType;
     final isPurchase = widget.type == 'purchase';
 
     return PopScope(
@@ -265,17 +263,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   Widget _buildSummaryCard(ProfileProvider profile) {
     double subtotal = 0;
     for (var cartItem in widget.cart) {
-      final item = cartItem.item;
-      final q = cartItem.quantity;
-      double itemPriceSum = 0;
-      if (item.halfPrice != null && item.halfPrice! > 0) {
-        int fullPlates = q.floor();
-        double halfRem = q - fullPlates;
-        itemPriceSum = (fullPlates * (item.price ?? 0)) + (halfRem > 0 ? item.halfPrice! : 0);
-      } else {
-        itemPriceSum = q * cartItem.price;
-      }
-      subtotal += itemPriceSum + cartItem.extraPrice;
+      subtotal += _getItemTotalPrice(cartItem);
     }
     double taxAmount = subtotal * (profile.taxPercentage / 100);
 
@@ -327,7 +315,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       itemCount: widget.cart.length,
       itemBuilder: (context, index) {
         final c = widget.cart[index];
-        final bool hasHalf = c.item.halfPrice != null && c.item.halfPrice! > 0;
+        final bool hasHalf = _isSellingType && c.item.halfPrice != null && c.item.halfPrice! > 0;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -361,11 +349,14 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                   })),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Column(
-                      children: [
-                        Text('${c.quantity.toStringAsFixed(1)}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13)),
-                        Text(c.unit, style: TextStyle(fontSize: 8, color: profile.secondaryTextColor)),
-                      ],
+                    child: InkWell(
+                      onTap: () => _showManualQuantityDialog(c),
+                      child: Column(
+                        children: [
+                          Text('${c.quantity.toStringAsFixed(1)}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13)),
+                          Text(c.unit, style: TextStyle(fontSize: 8, color: profile.secondaryTextColor)),
+                        ],
+                      ),
                     ),
                   ),
                   _qtyBtn(Icons.add, profile, () => setState(() {
@@ -408,7 +399,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                   ),
                 ],
               ),
-              if (widget.type == 'sale') ...[
+              if (_isSellingType) ...[
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -423,17 +414,6 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         );
       },
     );
-  }
-
-  double _getItemTotalPrice(CartItem c) {
-    final item = c.item;
-    final q = c.quantity;
-    if (item.halfPrice != null && item.halfPrice! > 0) {
-      int fullPlates = q.floor();
-      double halfRem = q - fullPlates;
-      return (fullPlates * (item.price ?? 0)) + (halfRem > 0 ? item.halfPrice! : 0) + c.extraPrice;
-    }
-    return (q * c.price) + c.extraPrice;
   }
 
   Widget _servingCheckbox(CartItem item, String method, ProfileProvider profile) {
@@ -477,11 +457,11 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   }
 
   Widget _smallEntryField(String hint, ProfileProvider profile, Function(String) onChange, {String? initial}) {
-    final borderColor = widget.type == 'sale' ? Colors.green : Colors.orange;
-    return Container(height: 33,
+    final borderColor = _isSellingType ? Colors.green : Colors.orange;
+    return SizedBox(height: 33,
       child: TextFormField(
         initialValue: initial,
-        keyboardType: TextInputType.number,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
         onChanged: onChange,
         style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: profile.textColor),
         decoration: InputDecoration(
@@ -565,7 +545,8 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         elevation: 0,
                       ),
-                      child: const Text('PENDING', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
+                      child: Text(widget.existingTransaction != null ? 'UPDATE PENDING' : 'PENDING', 
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -697,7 +678,9 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       String description = jsonEncode(widget.cart.map((e) => {
         'id': e.item.id,
         'name': e.item.name,
+        'category': e.item.category,
         'qty': e.quantity,
+        'unit': e.unit,
         'variant': e.variant,
         'price': e.price,
         'extra_qty': e.extraPieces,

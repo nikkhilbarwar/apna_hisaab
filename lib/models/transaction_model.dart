@@ -60,6 +60,8 @@ class TransactionModel {
               final String tn = (item['table_number'] ?? '').toString();
               final String cat = (item['category'] ?? '').toString();
               final String chk = (item['checked'] ?? false).toString();
+              final String u = (item['unit'] ?? '').toString();
+              final String it = (item['item_type'] ?? '').toString();
               
               items.add({
                 'id': (item['id'] ?? '').toString(),
@@ -73,6 +75,8 @@ class TransactionModel {
                 'serving_method': sm,
                 'table_number': tn,
                 'checked': chk,
+                'unit': u,
+                'item_type': it,
                 'display': '$q x $n ${v.isNotEmpty ? '($v)' : ''}${sm.isNotEmpty ? ' [$sm]' : ''}${tn.isNotEmpty ? ' [Table: $tn]' : ''}'
               });
             }

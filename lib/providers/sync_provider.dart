@@ -7,10 +7,15 @@ import 'item_provider.dart';
 import 'category_provider.dart';
 import 'staff_provider.dart';
 import 'supplier_provider.dart';
+import 'unit_provider.dart';
+import 'purchase_reminder_provider.dart';
 import '../models/item_model.dart';
 import '../models/staff_model.dart';
 import '../models/category_model.dart';
 import '../models/supplier_model.dart';
+import '../models/transaction_model.dart';
+import '../models/purchase_reminder_model.dart';
+import 'profile_provider.dart';
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -52,7 +57,6 @@ class SyncProvider with ChangeNotifier {
     try {
       final db = DatabaseHelper.instance;
       
-      // Silent sync logic (No UI update needed for progress here typically)
       final unsyncedCats = await db.getUnsyncedData('categories');
       for (var map in unsyncedCats) {
         final cat = CategoryModel.fromMap(map);
@@ -93,85 +97,189 @@ class SyncProvider with ChangeNotifier {
     }
   }
 
+  Future<bool> manualSyncToCloud(BuildContext context) async {
+    if (_isSyncing) return false;
+    
+    _isSyncing = true;
+    _syncProgress = 0.0;
+    _syncStatus = "Preparing data...";
+    notifyListeners();
+
+    try {
+      final db = DatabaseHelper.instance;
+      final profile = Provider.of<ProfileProvider>(context, listen: false);
+
+      // 1. Sync Profile
+      _syncStatus = "Uploading profile...";
+      await _firebaseService.syncProfile(profile.getProfileMap());
+      _syncProgress = 0.1;
+      notifyListeners();
+
+      // 2. Categories
+      _syncStatus = "Uploading categories...";
+      final allCats = await db.getAllCategories();
+      for (int i = 0; i < allCats.length; i++) {
+        await _firebaseService.syncCategory(allCats[i]);
+        await db.updateSyncStatus('categories', allCats[i].id!, 1);
+        _syncProgress = 0.1 + (0.15 * (i + 1) / (allCats.isEmpty ? 1 : allCats.length));
+        notifyListeners();
+      }
+
+      // 3. Items
+      _syncStatus = "Uploading items...";
+      final allItems = await db.getAllItems();
+      for (int i = 0; i < allItems.length; i++) {
+        await _firebaseService.syncItem(allItems[i]);
+        await db.updateSyncStatus('items', allItems[i].id!, 1);
+        _syncProgress = 0.25 + (0.2 * (i + 1) / (allItems.isEmpty ? 1 : allItems.length));
+        notifyListeners();
+      }
+
+      // 4. Staff
+      _syncStatus = "Uploading staff...";
+      final allStaff = await db.getAllStaff();
+      for (int i = 0; i < allStaff.length; i++) {
+        await _firebaseService.syncStaff(allStaff[i]);
+        await db.updateSyncStatus('staff', allStaff[i].id!, 1);
+        _syncProgress = 0.45 + (0.1 * (i + 1) / (allStaff.isEmpty ? 1 : allStaff.length));
+        notifyListeners();
+      }
+
+      // 5. Suppliers
+      _syncStatus = "Uploading suppliers...";
+      final allSuppliers = await db.getAllSuppliers();
+      for (int i = 0; i < allSuppliers.length; i++) {
+        await _firebaseService.syncSupplier(allSuppliers[i]);
+        await db.updateSyncStatus('suppliers', allSuppliers[i].id!, 1);
+        _syncProgress = 0.55 + (0.05 * (i + 1) / (allSuppliers.isEmpty ? 1 : allSuppliers.length));
+        notifyListeners();
+      }
+
+      // 6. Units
+      _syncStatus = "Uploading units...";
+      final allUnits = await db.getAllUnits();
+      for (var unit in allUnits) {
+        await _firebaseService.syncUnit(unit);
+      }
+      _syncProgress = 0.65;
+      notifyListeners();
+
+      // 7. Transactions
+      _syncStatus = "Uploading transactions...";
+      final allTxs = await db.getAllTransactions();
+      for (int i = 0; i < allTxs.length; i++) {
+        await _firebaseService.syncTransaction(allTxs[i]);
+        await db.updateTransactionSyncStatus(allTxs[i].id!, 1);
+        _syncProgress = 0.65 + (0.35 * (i + 1) / (allTxs.isEmpty ? 1 : allTxs.length));
+        notifyListeners();
+      }
+
+      _syncStatus = "Sync Complete!";
+      _syncProgress = 1.0;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _syncStatus = "Sync Failed: $e";
+      notifyListeners();
+      return false;
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> fullRestoreFromServer(BuildContext context) async {
     if (_isSyncing) return false;
     
     _isSyncing = true;
     _syncProgress = 0.0;
     _syncStatus = "Connecting to secure cloud...";
-    _estimatedSecondsRemaining = 25; // Initial estimate
     notifyListeners();
 
-    // Start a dummy countdown timer for the estimated time
-    Timer? countdown;
-    countdown = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_estimatedSecondsRemaining > 2) {
-        _estimatedSecondsRemaining--;
-        notifyListeners();
-      } else {
-        countdown?.cancel();
-      }
-    });
-
     try {
-      // 1. Fetch data
-      _syncProgress = 0.1;
-      notifyListeners();
       final cloudData = await _firebaseService.fetchAllUserData();
       
-      _syncProgress = 0.25;
-      _syncStatus = "Cleaning local database for fresh restore...";
+      _syncProgress = 0.1;
+      _syncStatus = "Cleaning local database...";
       notifyListeners();
       await DatabaseHelper.instance.clearAllData();
 
-      // 3. Categories
-      _syncProgress = 0.35;
-      _syncStatus = "Restoring Product Categories...";
+      // 1. Profile
+      _syncStatus = "Restoring profile...";
+      if (cloudData['profile'] != null) {
+        final profile = Provider.of<ProfileProvider>(context, listen: false);
+        await profile.loadFromMap(cloudData['profile']);
+      }
+      _syncProgress = 0.2;
       notifyListeners();
+
+      // 2. Categories
+      _syncStatus = "Restoring categories...";
       final categories = cloudData['categories'] ?? [];
       for (var cat in categories) {
         await DatabaseHelper.instance.insertCategory(cat);
       }
-
-      // 4. Items
-      _syncProgress = 0.55;
-      _syncStatus = "Downloading Inventory Stock...";
+      _syncProgress = 0.35;
       notifyListeners();
+
+      // 3. Items
+      _syncStatus = "Restoring items...";
       final items = cloudData['items'] ?? [];
       for (var item in items) {
         await DatabaseHelper.instance.insertItem(item);
       }
-
-      // 5. Staff & Salaries
-      _syncProgress = 0.70;
-      _syncStatus = "Restoring Staff and Salary data...";
+      _syncProgress = 0.5;
       notifyListeners();
+
+      // 4. Staff
+      _syncStatus = "Restoring staff...";
       final staff = cloudData['staff'] ?? [];
       for (var s in staff) {
         await DatabaseHelper.instance.insertStaff(s);
       }
+      _syncProgress = 0.6;
+      notifyListeners();
 
-      // 6. Suppliers
-      _syncStatus = "Updating Supplier information...";
+      // 5. Suppliers
+      _syncStatus = "Restoring suppliers...";
       final suppliers = cloudData['suppliers'] ?? [];
       for (var sup in suppliers) {
         await DatabaseHelper.instance.insertSupplier(sup);
       }
-      
-      // 7. Transactions
-      _syncProgress = 0.85;
-      _syncStatus = "Finalizing Transaction History...";
+      _syncProgress = 0.7;
       notifyListeners();
+
+      // 6. Units
+      _syncStatus = "Restoring units...";
+      final units = cloudData['units'] ?? [];
+      for (var unit in units) {
+        await DatabaseHelper.instance.insertUnit(unit['name']);
+      }
+      _syncProgress = 0.75;
+      notifyListeners();
+
+      // 7. Purchase Reminders
+      _syncStatus = "Restoring reminders...";
+      final reminders = cloudData['purchase_reminders'] ?? [];
+      for (var r in reminders) {
+        final db = await DatabaseHelper.instance.database;
+        await db.insert('purchase_reminders', r.toMap());
+      }
+      _syncProgress = 0.8;
+      notifyListeners();
+
+      // 8. Transactions
+      _syncStatus = "Restoring transactions...";
       final transactions = cloudData['transactions'] ?? [];
-      for (var tx in transactions) {
-        await DatabaseHelper.instance.insertTransaction(tx);
+      for (int i = 0; i < transactions.length; i++) {
+        await DatabaseHelper.instance.insertTransaction(transactions[i]);
+        _syncProgress = 0.8 + (0.2 * (i + 1) / (transactions.isEmpty ? 1 : transactions.length));
+        notifyListeners();
       }
       
       _syncProgress = 1.0;
-      _estimatedSecondsRemaining = 0;
-      _syncStatus = "Data successfully restored!";
+      _syncStatus = "Restore Complete!";
       notifyListeners();
-      countdown.cancel();
 
       // Refresh providers
       if (context.mounted) {
@@ -180,13 +288,14 @@ class SyncProvider with ChangeNotifier {
         Provider.of<TransactionProvider>(context, listen: false).fetchTransactions();
         Provider.of<StaffProvider>(context, listen: false).fetchStaff();
         Provider.of<SupplierProvider>(context, listen: false).fetchSuppliers();
+        Provider.of<UnitProvider>(context, listen: false).fetchUnits();
+        Provider.of<PurchaseReminderProvider>(context, listen: false).fetchReminders();
       }
 
       return true;
     } catch (e) {
-      _syncStatus = "Restore Failed: Check internet connection";
-      debugPrint("Full Restore Error: $e");
-      countdown.cancel();
+      _syncStatus = "Restore Failed: $e";
+      notifyListeners();
       return false;
     } finally {
       _isSyncing = false;

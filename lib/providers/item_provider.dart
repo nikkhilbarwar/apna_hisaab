@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:intl/intl.dart';
 import '../models/item_model.dart';
+import '../models/category_model.dart';
 import '../core/database/database_helper.dart';
 import '../services/firebase_service.dart';
 
 class ItemProvider with ChangeNotifier {
   List<ItemModel> _items = [];
+  List<CategoryModel> _categories = [];
   final FirebaseService _firebaseService = FirebaseService();
   bool _isSyncing = false;
+
+  // Alert Tracking State
+  final Map<int, String> _dismissedItemsToday = {}; // itemId -> dateString
+  final Map<int, DateTime> _snoozedItems = {}; // itemId -> snoozeUntil
+  final Map<int, double> _lastAlertStockLevel = {}; // itemId -> stockLevelWhenAlerted
+
+  List<ItemModel> get allItems => _items;
 
   List<ItemModel> get items {
     List<ItemModel> sorted = List.from(_items);
@@ -15,16 +25,77 @@ class ItemProvider with ChangeNotifier {
     return sorted;
   }
 
-  List<ItemModel> get lowStockItems =>
-      _items.where((item) => item.lowStockAlert == 1 && item.currentStock <= item.minStock).toList();
+  bool isLowStock(ItemModel item) {
+    if (item.lowStockAlert == 0) return false;
+    
+    CategoryModel? cat;
+    try {
+      cat = _categories.firstWhere((c) => c.name == item.category);
+    } catch (_) {}
 
-  List<ItemModel> getItemsByCategory(String category) {
-    return items.where((item) => item.category == category).toList();
+    if (cat != null && cat.useCategoryStock == 1) {
+      return item.currentStock <= cat.lowStockLimit;
+    }
+    
+    return item.currentStock <= item.minStock;
+  }
+
+  List<ItemModel> get lowStockItems {
+    return _items.where((item) => isLowStock(item)).toList();
+  }
+
+  // Items that actually need an alert popup right now based on business logic
+  List<ItemModel> get pendingAlertItems {
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final now = DateTime.now();
+
+    return lowStockItems.where((item) {
+      // 1. If stock level changed since last dismissal, show again
+      if (_lastAlertStockLevel.containsKey(item.id) && _lastAlertStockLevel[item.id] != item.currentStock) {
+        _dismissedItemsToday.remove(item.id);
+        _snoozedItems.remove(item.id);
+      }
+
+      // 2. Don't alert if dismissed today
+      if (_dismissedItemsToday[item.id] == todayStr) return false;
+      
+      // 3. Don't alert if snoozed
+      if (_snoozedItems.containsKey(item.id)) {
+        if (now.isBefore(_snoozedItems[item.id]!)) return false;
+      }
+
+      return true;
+    }).toList();
+  }
+
+  void dismissAlertForToday(int itemId, double currentStock) {
+    _dismissedItemsToday[itemId] = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    _lastAlertStockLevel[itemId] = currentStock;
+    notifyListeners();
+  }
+
+  void snoozeAlert(int itemId, double currentStock, {int minutes = 60}) {
+    _snoozedItems[itemId] = DateTime.now().add(Duration(minutes: minutes));
+    _lastAlertStockLevel[itemId] = currentStock;
+    notifyListeners();
+  }
+
+  List<ItemModel> getItemsByCategory(String categoryName) {
+    if (categoryName == 'Uncategorized') {
+      final categoryNames = _categories.map((c) => c.name).toSet();
+      return _items.where((i) => i.category.isEmpty || !categoryNames.contains(i.category)).toList();
+    }
+    return _items.where((item) => item.category == categoryName).toList();
   }
 
   ItemProvider() {
-    fetchItems();
+    refreshData();
     _setupConnectivityListener();
+  }
+
+  Future<void> refreshData() async {
+    await fetchItems();
+    await fetchCategories();
   }
 
   void _setupConnectivityListener() {
@@ -41,6 +112,15 @@ class ItemProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint("Error fetching items: $e");
+    }
+  }
+
+  Future<void> fetchCategories() async {
+    try {
+      _categories = await DatabaseHelper.instance.getAllCategories();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error fetching categories: $e");
     }
   }
 

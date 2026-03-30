@@ -2,21 +2,26 @@ import 'package:flutter/material.dart';
 import '../../../providers/transaction_provider.dart';
 import '../../../providers/profile_provider.dart';
 import '../../../utils/app_strings.dart';
+import 'package:intl/intl.dart';
 
 class StatCard extends StatelessWidget {
   final TransactionProvider tx;
   final ProfileProvider profile;
+  final DateTimeRange? range;
 
-  const StatCard({super.key, required this.tx, required this.profile});
-
-  bool _isToday(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year && date.month == now.month && date.day == now.day;
-  }
+  const StatCard({super.key, required this.tx, required this.profile, this.range});
 
   @override
   Widget build(BuildContext context) {
-    final todayOrders = tx.transactions.where((t) => t.type == 'sale' && _isToday(t.date)).length;
+    final orderCount = tx.getOrderCountForRange(range);
+    final totalSales = tx.getSalesForRange(range);
+    final growth = tx.getSalesGrowthForRange(range);
+    final avgBill = tx.getAvgOrderValueForRange(range);
+    final profit = tx.getProfitForRange(range);
+
+    String dateLabel = range == null 
+        ? AppStrings.totalSalesToday 
+        : "${DateFormat('dd MMM').format(range!.start)} - ${DateFormat('dd MMM').format(range!.end)}";
 
     return Container(
       width: double.infinity,
@@ -52,19 +57,24 @@ class StatCard extends StatelessWidget {
                       children: [
                         Icon(Icons.auto_awesome, color: Colors.white.withOpacity(0.6), size: 14),
                         const SizedBox(width: 8),
-                        const Text(AppStrings.totalSalesToday, style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 1.5)),
+                        Text(dateLabel, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 1.5)),
                       ],
                     ),
                     const SizedBox(height: 4), 
-                    Text('${profile.currencySymbol}${tx.todaySales.toStringAsFixed(0)}', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -1.5)),
+                    Text(
+                      profile.showAmount 
+                        ? '${profile.currencySymbol}${totalSales.toStringAsFixed(0)}'
+                        : '${profile.currencySymbol}****', 
+                      style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -1.5)
+                    ),
                     const SizedBox(height: 4), 
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(color: Colors.black.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(tx.salesGrowth >= 0 ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded, size: 14, color: tx.salesGrowth >= 0 ? Colors.greenAccent : Colors.redAccent),
+                        Icon(growth >= 0 ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded, size: 14, color: growth >= 0 ? Colors.greenAccent : Colors.redAccent),
                         const SizedBox(width: 6),
-                        Text('${tx.salesGrowth.abs().toStringAsFixed(1)}% vs yesterday', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white)),
+                        Text('${growth.abs().toStringAsFixed(1)}% vs Yesterday', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white)),
                       ]),
                     ),
                   ],
@@ -77,11 +87,11 @@ class StatCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        _miniStat('Orders', todayOrders.toString()),
+                        _miniStat('Orders', orderCount.toString()),
                         _verticalDivider(),
-                        _miniStat('Avg Bill', '${profile.currencySymbol}${tx.avgOrderValue.toStringAsFixed(0)}'),
+                        _miniStat('Avg Bill', profile.showAmount ? '${profile.currencySymbol}${avgBill.toStringAsFixed(0)}' : '****'),
                         _verticalDivider(),
-                        _miniStat('Profit', '${profile.currencySymbol}${tx.profitToday.toStringAsFixed(0)}'),
+                        _miniStat('Profit', profile.showAmount ? '${profile.currencySymbol}${profit.toStringAsFixed(0)}' : '****'),
                       ],
                     ),
                   ],
@@ -92,10 +102,21 @@ class StatCard extends StatelessWidget {
           Positioned(
             top: 16,
             right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white24)),
-              child: const Icon(Icons.analytics_outlined, color: Colors.white, size: 22),
+            child: GestureDetector(
+              onTap: () => profile.toggleAmountVisibility(context),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15), 
+                  borderRadius: BorderRadius.circular(12), 
+                  border: Border.all(color: Colors.white24)
+                ),
+                child: Icon(
+                  profile.showAmount ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
             ),
           ),
         ],

@@ -6,6 +6,7 @@ import '../../providers/staff_provider.dart';
 import '../../models/staff_model.dart';
 import '../../providers/profile_provider.dart';
 import '../../utils/app_strings.dart';
+import '../../utils/report_helper.dart';
 
 class StaffScreen extends StatefulWidget {
   const StaffScreen({super.key});
@@ -365,22 +366,11 @@ class _StaffScreenState extends State<StaffScreen> {
               StatefulBuilder(
                 builder: (context, setStateSB) => InkWell(
                   onTap: () async {
-                    final date = await showDatePicker(
-                      context: context, 
-                      initialDate: selectedDate, 
-                      firstDate: DateTime(2020), 
+                    final date = await ReportHelper.showAppDatePicker(
+                      context, 
+                      selectedDate, 
+                      themeColor,
                       lastDate: DateTime.now(),
-                      builder: (context, child) {
-                        return Theme(
-                          data: Theme.of(context).copyWith(
-                            colorScheme: profileProvider.isDarkMode 
-                              ? ColorScheme.dark(primary: themeColor, onPrimary: Colors.white, surface: profileProvider.cardColor)
-                              : ColorScheme.light(primary: themeColor),
-                            dialogBackgroundColor: profileProvider.cardColor,
-                          ),
-                          child: child!,
-                        );
-                      }
                     );
                     if (date != null) setStateSB(() => selectedDate = date);
                   },
