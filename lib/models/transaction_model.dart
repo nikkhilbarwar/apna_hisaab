@@ -62,6 +62,9 @@ class TransactionModel {
               final String chk = (item['checked'] ?? false).toString();
               final String u = (item['unit'] ?? '').toString();
               final String it = (item['item_type'] ?? '').toString();
+              final String p = (item['price'] ?? '0').toString();
+              final String eq = (item['extra_qty'] ?? '0').toString();
+              final String ep = (item['extra_price'] ?? '0').toString();
               
               items.add({
                 'id': (item['id'] ?? '').toString(),
@@ -69,9 +72,9 @@ class TransactionModel {
                 'name': n,
                 'category': cat,
                 'variant': v,
-                'price': (item['price'] ?? '0').toString(),
-                'extra_qty': (item['extra_qty'] ?? '0').toString(),
-                'extra_price': (item['extra_price'] ?? '0').toString(),
+                'price': p,
+                'extra_qty': eq,
+                'extra_price': ep,
                 'serving_method': sm,
                 'table_number': tn,
                 'checked': chk,

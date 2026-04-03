@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
 import '../models/item_model.dart';
 import '../models/transaction_model.dart';
 import '../core/database/database_helper.dart';
@@ -44,8 +45,9 @@ class TransactionProvider with ChangeNotifier {
   Future<void> _initializeData() async {
     await fetchTransactions();
     await syncAllUnsynced();
-    // Reinstall Check: If transactions are empty, do a Master Restore
+    // Reinstall Check: If local transactions are empty, attempt a Master Restore
     if (_allTransactions.isEmpty) {
+      debugPrint("Local data empty, triggering auto-restore...");
       await masterRestoreFromCloud();
     }
   }
@@ -56,50 +58,80 @@ class TransactionProvider with ChangeNotifier {
       _isSyncing = true;
       notifyListeners();
       try {
-        debugPrint("Starting Master Restore...");
+        debugPrint("🚀 STARTING MASTER RESTORE FROM CLOUD...");
         
-        // 1. Restore Categories First (to prevent foreign key or logic issues)
+        // 1. Restore Categories (Hierarchy Level 1)
         final cloudCategories = await _firebaseService.fetchAllCategories();
         for (var cat in cloudCategories) {
           final localCats = await DatabaseHelper.instance.getAllCategories();
           if (!localCats.any((c) => c.id == cat.id || c.name == cat.name)) {
+            // CategoryModel currently doesn't have isSynced setter, handled by DB default
             await DatabaseHelper.instance.insertCategory(cat);
           }
         }
 
-        // 2. Restore Items
+        // 2. Restore Items (Hierarchy Level 2)
         final cloudItems = await _firebaseService.fetchAllItems();
         for (var item in cloudItems) {
           final localItems = await DatabaseHelper.instance.getAllItems();
           if (!localItems.any((i) => i.id == item.id || i.name == item.name)) {
+            item.isSynced = 1; 
             await DatabaseHelper.instance.insertItem(item);
           }
         }
 
-        // 3. Restore Transactions
+        // 3. Restore Transactions (Financial History)
         final cloudTxs = await _firebaseService.fetchAllTransactions();
+        debugPrint("Found ${cloudTxs.length} transactions in cloud.");
         if (cloudTxs.isNotEmpty) {
+          final localTxs = await DatabaseHelper.instance.getAllTransactions();
           for (var tx in cloudTxs) {
-            tx.status = 'completed';
-            final localTxs = await DatabaseHelper.instance.getAllTransactions();
             bool exists = localTxs.any((t) => t.id == tx.id || (t.date.isAtSameMomentAs(tx.date) && t.amount == tx.amount));
             if (!exists) {
+              tx.isSynced = 1;
               await DatabaseHelper.instance.insertTransaction(tx);
             }
           }
         }
         
-        // 4. Restore Staff & Suppliers
+        // 4. Restore Staff
         final cloudStaff = await _firebaseService.fetchAllStaff();
         for (var s in cloudStaff) {
            final localStaff = await DatabaseHelper.instance.getAllStaff();
-           if (!localStaff.any((ls) => ls.id == s.id)) await DatabaseHelper.instance.insertStaff(s);
+           if (!localStaff.any((ls) => ls.id == s.id)) {
+             s.isSynced = 1;
+             await DatabaseHelper.instance.insertStaff(s);
+           }
+        }
+
+        // 5. Restore Suppliers
+        final cloudSuppliers = await _firebaseService.fetchAllSuppliers();
+        for (var sup in cloudSuppliers) {
+           final localSuppliers = await DatabaseHelper.instance.getAllSuppliers();
+           if (!localSuppliers.any((ls) => ls.id == sup.id)) {
+             sup.isSynced = 1;
+             await DatabaseHelper.instance.insertSupplier(sup);
+           }
+        }
+
+        // 6. Restore Purchase Reminders
+        final cloudReminders = await _firebaseService.fetchAllPurchaseReminders();
+        for (var rem in cloudReminders) {
+           rem.isSynced = 1;
+           await DatabaseHelper.instance.database.then((db) => db.insert('purchase_reminders', rem.toMap(), conflictAlgorithm: ConflictAlgorithm.replace));
+        }
+
+        // 7. Restore Units
+        final cloudUnits = await _firebaseService.fetchAllUnits();
+        for (var unitData in cloudUnits) {
+           String? name = unitData['name'];
+           if (name != null) await DatabaseHelper.instance.insertUnit(name);
         }
 
         await fetchTransactions();
-        debugPrint("Master Restore Completed Successfully");
+        debugPrint("✅ Master Restore Completed Successfully");
       } catch (e) {
-        debugPrint("Master Restore error: $e");
+        debugPrint("❌ Master Restore error: $e");
       } finally {
         _isSyncing = false;
         notifyListeners();

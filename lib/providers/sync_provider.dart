@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sqflite/sqflite.dart';
 import '../services/firebase_service.dart';
 import '../core/database/database_helper.dart';
 import 'transaction_provider.dart';
@@ -217,6 +218,7 @@ class SyncProvider with ChangeNotifier {
       _syncStatus = "Restoring categories...";
       final categories = cloudData['categories'] ?? [];
       for (var cat in categories) {
+        // Mark as synced before insert
         await DatabaseHelper.instance.insertCategory(cat);
       }
       _syncProgress = 0.35;
@@ -226,6 +228,7 @@ class SyncProvider with ChangeNotifier {
       _syncStatus = "Restoring items...";
       final items = cloudData['items'] ?? [];
       for (var item in items) {
+        item.isSynced = 1;
         await DatabaseHelper.instance.insertItem(item);
       }
       _syncProgress = 0.5;
@@ -235,6 +238,7 @@ class SyncProvider with ChangeNotifier {
       _syncStatus = "Restoring staff...";
       final staff = cloudData['staff'] ?? [];
       for (var s in staff) {
+        s.isSynced = 1;
         await DatabaseHelper.instance.insertStaff(s);
       }
       _syncProgress = 0.6;
@@ -244,6 +248,7 @@ class SyncProvider with ChangeNotifier {
       _syncStatus = "Restoring suppliers...";
       final suppliers = cloudData['suppliers'] ?? [];
       for (var sup in suppliers) {
+        sup.isSynced = 1;
         await DatabaseHelper.instance.insertSupplier(sup);
       }
       _syncProgress = 0.7;
@@ -262,17 +267,20 @@ class SyncProvider with ChangeNotifier {
       _syncStatus = "Restoring reminders...";
       final reminders = cloudData['purchase_reminders'] ?? [];
       for (var r in reminders) {
+        r.isSynced = 1;
         final db = await DatabaseHelper.instance.database;
-        await db.insert('purchase_reminders', r.toMap());
+        await db.insert('purchase_reminders', r.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
       }
       _syncProgress = 0.8;
       notifyListeners();
 
       // 8. Transactions
       _syncStatus = "Restoring transactions...";
-      final transactions = cloudData['transactions'] ?? [];
+      final List<TransactionModel> transactions = cloudData['transactions'] ?? [];
       for (int i = 0; i < transactions.length; i++) {
-        await DatabaseHelper.instance.insertTransaction(transactions[i]);
+        final tx = transactions[i];
+        tx.isSynced = 1;
+        await DatabaseHelper.instance.insertTransaction(tx);
         _syncProgress = 0.8 + (0.2 * (i + 1) / (transactions.isEmpty ? 1 : transactions.length));
         notifyListeners();
       }

@@ -5,6 +5,7 @@ import '../../../models/transaction_model.dart';
 import '../../../providers/profile_provider.dart';
 import '../../../providers/transaction_provider.dart';
 import '../../../providers/item_provider.dart';
+import '../../../models/item_model.dart';
 import '../../../services/export_service.dart';
 import '../../daily_entry/entry_screen.dart';
 
@@ -48,6 +49,37 @@ class TransactionDetailSheet extends StatelessWidget {
     final txProvider = Provider.of<TransactionProvider>(context, listen: false);
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
 
+    // CRITICAL FIX: Plate Logic and Weighted Scaling
+    double transactionItemsRawSum = 0;
+    List<Map<String, dynamic>> contributions = [];
+    
+    for (var i in tx.parsedItems) {
+      double q = double.tryParse(i['qty'] ?? '0') ?? 0;
+      double p = double.tryParse(i['price'] ?? '0') ?? 0;
+      double eq = double.tryParse(i['extra_qty'] ?? '0') ?? 0;
+      double ep = double.tryParse(i['extra_price'] ?? '0') ?? 0;
+      
+      double itemRawBase = 0;
+      try {
+        final master = itemProvider.items.firstWhere((it) => it.name == i['name']);
+        if (master.halfPrice != null && master.halfPrice! > 0) {
+          int fullPlates = q.floor();
+          double remainder = q - fullPlates;
+          itemRawBase = (fullPlates * (master.price ?? 0)) + (remainder > 0 ? (master.halfPrice ?? 0) : 0);
+        } else {
+          itemRawBase = q * p;
+        }
+      } catch(_) {
+        itemRawBase = q * p;
+      }
+      
+      double lineRawValue = itemRawBase + (eq * ep);
+      transactionItemsRawSum += lineRawValue;
+      contributions.add({...i, 'rawValue': lineRawValue});
+    }
+    
+    double scale = (transactionItemsRawSum > 0) ? (tx.amount / transactionItemsRawSum) : 1.0;
+
     return Container(
       decoration: BoxDecoration(color: profile.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
@@ -55,7 +87,7 @@ class TransactionDetailSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
+          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -88,26 +120,29 @@ class TransactionDetailSheet extends StatelessWidget {
             constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.35),
             child: SingleChildScrollView(
               child: Column(
-                children: tx.parsedItems.map((item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(item['name'] ?? 'Item', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 16)),
-                            const SizedBox(height: 2),
-                            Text('${item['qty']} x ${profile.currencySymbol}${item['price']}${item['serving_method'] != null && item['serving_method'] != '' ? ' • ${item['serving_method']}' : ''}${item['table_number'] != null && item['table_number'] != '' ? ' • Table: ${item['table_number']}' : ''}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
-                          ],
+                children: contributions.map((item) {
+                  double itemFinalPrice = (item['rawValue'] as double) * scale;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(item['name'] ?? 'Item', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 16)),
+                              const SizedBox(height: 2),
+                              Text('${item['qty']} x ${profile.currencySymbol}${item['price']}${item['serving_method'] != null && item['serving_method'] != '' ? ' • ${item['serving_method']}' : ''}${item['table_number'] != null && item['table_number'] != '' ? ' • Table: ${item['table_number']}' : ''}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
+                            ],
+                          ),
                         ),
-                      ),
-                      Text('${profile.currencySymbol}${(double.tryParse(item['qty'].toString()) ?? 0) * (double.tryParse(item['price'].toString()) ?? 0)}', 
-                        style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 16)),
-                    ],
-                  ),
-                )).toList(),
+                        Text('${profile.currencySymbol}${profile.showAmount ? itemFinalPrice.toStringAsFixed(0) : "****"}', 
+                          style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 16)),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
             ),
           ),

@@ -15,10 +15,12 @@ class AuthWrapper extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: AuthService().authStateChanges,
       builder: (context, snapshot) {
+        // 1. Handle the initial waiting state during session restoration
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const _LoadingScreen();
         }
         
+        // 2. If we have a user, check their activation/admin status
         if (snapshot.hasData && snapshot.data != null) {
           final user = snapshot.data!;
           
@@ -29,17 +31,46 @@ class AuthWrapper extends StatelessWidget {
                              user.email == "anitamishra1714@gmail.com" ||
                              user.email == "missadvocate06@gmail.com";
               
+              // Ensure profile is loaded for this specific user
+              // Note: ProfileProvider.loadProfile() is triggered inside main/init
+              
               if (isAdmin || profile.isActivated) {
                 return const MainNavigation();
               } else {
+                // If not activated, double check if profile is still loading
+                if (profile.businessName == 'My Business' && !isAdmin) {
+                   // Brief loading state if profile hasn't synced yet
+                   return const _LoadingScreen();
+                }
                 return const ActivationScreen();
               }
             },
           );
         }
 
+        // 3. No active session found, go to Login
         return const LoginScreen();
       },
+    );
+  }
+}
+
+class _LoadingScreen extends StatelessWidget {
+  const _LoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Restoring Session...', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          ],
+        ),
+      ),
     );
   }
 }

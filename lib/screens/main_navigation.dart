@@ -15,7 +15,6 @@ import 'reports/reports_screen.dart';
 import 'staff/staff_screen.dart';
 import 'profile/profile_screen.dart';
 import 'admin/admin_panel_screen.dart';
-import 'admin/admin_login_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -281,12 +280,62 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
     final syncProvider = Provider.of<SyncProvider>(context);
     final themeColor = profile.themeColor;
     final user = FirebaseAuth.instance.currentUser;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= 600;
 
     final Color appBarContentColor = ThemeData.estimateBrightnessForColor(themeColor) == Brightness.dark 
         ? Colors.white 
         : Colors.black;
 
     final bool globalSyncing = txProvider.isSyncing || syncProvider.isSyncing;
+
+    // Common AppBar Actions
+    List<Widget> appBarActions = [
+      Stack(
+        alignment: Alignment.center,
+        children: [
+          IconButton(
+            icon: Icon(
+              globalSyncing ? Icons.cloud_sync_rounded : Icons.cloud_done_rounded, 
+              color: globalSyncing ? appBarContentColor.withOpacity(0.5) : Colors.greenAccent,
+              size: 26,
+            ),
+            onPressed: () => _showSyncStatus(context, txProvider, profile),
+            tooltip: "Sync Status",
+          ),
+          if (globalSyncing)
+            SizedBox(
+              width: 32, height: 32, 
+              child: CircularProgressIndicator(
+                strokeWidth: 2, 
+                color: appBarContentColor.withOpacity(0.8),
+                backgroundColor: appBarContentColor.withOpacity(0.1),
+              )
+            ),
+        ],
+      ),
+      if (_isSysAdmin)
+        IconButton(
+          icon: Icon(
+            Icons.admin_panel_settings, 
+            color: appBarContentColor == Colors.black ? Colors.deepOrange : Colors.orangeAccent,
+            size: 26,
+          ),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen())),
+          tooltip: "Admin Panel",
+        ),
+    ];
+
+    Widget body = TabBarView(
+      controller: _tabController,
+      physics: isTablet ? const NeverScrollableScrollPhysics() : null,
+      children: const [
+        DashboardScreen(),
+        StockScreen(),
+        ReportsScreen(),
+        StaffScreen(),
+      ],
+    );
 
     return PopScope(
       canPop: false,
@@ -304,7 +353,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
           toolbarHeight: 62,
           elevation: 0,
           backgroundColor: themeColor,
-          centerTitle: true,
+          centerTitle: !isTablet,
           leadingWidth: 80,
           leading: Padding(
             padding: const EdgeInsets.only(left: 12.0),
@@ -334,42 +383,8 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
           ),
           title: Text(profile.businessName.toUpperCase(), 
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1, color: appBarContentColor)),
-          actions: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    globalSyncing ? Icons.cloud_sync_rounded : Icons.cloud_done_rounded, 
-                    color: globalSyncing ? appBarContentColor.withOpacity(0.5) : Colors.greenAccent,
-                    size: 26,
-                  ),
-                  onPressed: () => _showSyncStatus(context, txProvider, profile),
-                  tooltip: "Sync Status",
-                ),
-                if (globalSyncing)
-                  SizedBox(
-                    width: 32, height: 32, 
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2, 
-                      color: appBarContentColor.withOpacity(0.8),
-                      backgroundColor: appBarContentColor.withOpacity(0.1),
-                    )
-                  ),
-              ],
-            ),
-            if (_isSysAdmin)
-              IconButton(
-                icon: Icon(
-                  Icons.admin_panel_settings, 
-                  color: appBarContentColor == Colors.black ? Colors.deepOrange : Colors.orangeAccent,
-                  size: 26,
-                ),
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen())),
-                tooltip: "Admin Panel",
-              ),
-          ],
-          bottom: PreferredSize(
+          actions: appBarActions,
+          bottom: isTablet ? null : PreferredSize(
             preferredSize: const Size.fromHeight(65),
             child: Column(
               children: [
@@ -396,15 +411,29 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
             ),
           ),
         ),
-        body: TabBarView(
-          controller: _tabController,
-          children: const [
-            DashboardScreen(),
-            StockScreen(),
-            ReportsScreen(),
-            StaffScreen(),
-          ],
-        ),
+        body: isTablet 
+          ? Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: _tabController.index,
+                  onDestinationSelected: (index) => _tabController.animateTo(index),
+                  labelType: NavigationRailLabelType.all,
+                  backgroundColor: profile.cardColor,
+                  selectedIconTheme: IconThemeData(color: themeColor),
+                  selectedLabelTextStyle: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 12),
+                  unselectedLabelTextStyle: TextStyle(color: profile.secondaryTextColor, fontSize: 11),
+                  destinations: const [
+                    NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: Text('Home')),
+                    NavigationRailDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2_rounded), label: Text('Stock')),
+                    NavigationRailDestination(icon: Icon(Icons.analytics_outlined), selectedIcon: Icon(Icons.analytics_rounded), label: Text('Reports')),
+                    NavigationRailDestination(icon: Icon(Icons.people_alt_outlined), selectedIcon: Icon(Icons.people_alt_rounded), label: Text('Staff')),
+                  ],
+                ),
+                const VerticalDivider(thickness: 1, width: 1),
+                Expanded(child: body),
+              ],
+            )
+          : body,
       ),
     );
   }

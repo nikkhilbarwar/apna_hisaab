@@ -7,6 +7,7 @@ import '../../providers/category_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/staff_provider.dart';
 import '../../providers/item_provider.dart';
+import '../../models/item_model.dart';
 import '../../services/export_service.dart';
 import '../../services/notification_service.dart';
 import '../../utils/report_helper.dart';
@@ -70,25 +71,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
           if (_currentIndex != 3) ...[
-             _buildFilters(context, profile),
-             _buildExecutiveSummary(totalRevenue, paidExpenses, netProfit, pendingSalary, profile),
-          ],
-          
-          Expanded(
-            child: IndexedStack(
-              index: _currentIndex,
-              children: [
-                _ReportList(type: 'sale', range: _selectedRange, category: _selectedCategory, paymentMode: _selectedPaymentMode),
-                _ReportList(type: 'purchase', range: _selectedRange, category: _selectedCategory, paymentMode: _selectedPaymentMode),
-                _StaffReportList(range: _selectedRange),
-                const _TrashList(),
-              ],
+            SliverToBoxAdapter(child: _buildFilters(context, profile)),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _StickySummaryHeader(
+                child: Container(
+                  color: profile.cardColor,
+                  child: _buildExecutiveSummary(totalRevenue, paidExpenses, netProfit, pendingSalary, profile),
+                ),
+              ),
             ),
-          ),
+          ],
         ],
+        body: IndexedStack(
+          index: _currentIndex,
+          children: [
+            _ReportList(type: 'sale', range: _selectedRange, category: _selectedCategory, paymentMode: _selectedPaymentMode),
+            _ReportList(type: 'purchase', range: _selectedRange, category: _selectedCategory, paymentMode: _selectedPaymentMode),
+            _StaffReportList(range: _selectedRange),
+            const _TrashList(),
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -122,10 +128,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildExecutiveSummary(double revenue, double expense, double profit, double pending, ProfileProvider profile) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      decoration: BoxDecoration(
-        color: profile.cardColor,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 10))],
-      ),
+      color: profile.cardColor,
       child: Column(
         children: [
           Container(
@@ -145,9 +148,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: Colors.orange.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(12),
@@ -156,10 +159,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('UPCOMING SALARY (PENDING)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.orange, letterSpacing: 0.5)),
+                const Text('UPCOMING SALARY (PENDING)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.orange, letterSpacing: 0.5)),
                 Text(
                   profile.showAmount ? '${profile.currencySymbol}${pending.toStringAsFixed(0)}' : '${profile.currencySymbol}****',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.orange),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.orange),
                 ),
               ],
             ),
@@ -346,6 +349,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 }
 
+class _StickySummaryHeader extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  _StickySummaryHeader({required this.child});
+
+  @override
+  double get minExtent => 145.0; // Summary + Banner Height
+  @override
+  double get maxExtent => 145.0;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return child;
+  }
+
+  @override
+  bool shouldRebuild(covariant _StickySummaryHeader oldDelegate) => false;
+}
+
 class _ReportList extends StatelessWidget {
   final String type;
   final DateTimeRange range;
@@ -445,28 +466,64 @@ class _ReportList extends StatelessWidget {
   Widget _buildAnalysisSummary(List<TransactionModel> txs, ProfileProvider profile, TransactionProvider provider, ItemProvider itemProvider, String reportType) {
     final split = provider.getPaymentSplit(txs);
     
-    // Grouping logic with Fallback
+    // Snapshot-based grouping logic
     Map<String, double> itemRevenue = {};
     Map<String, double> catRevenue = {};
 
     for (var tx in txs) {
-      for (var item in tx.parsedItems) {
-        String name = item['name'] ?? 'Unknown';
-        double q = double.tryParse(item['qty'] ?? '0') ?? 0;
-        double p = double.tryParse(item['price'] ?? '0') ?? 0;
-        double lineTotal = q * p;
+      double txActualTotal = tx.amount;
+      double transactionItemsRawSum = 0;
+      List<Map<String, dynamic>> itemLineContributions = [];
 
-        itemRevenue[name] = (itemRevenue[name] ?? 0) + lineTotal;
+      for (var itemMap in tx.parsedItems) {
+        String name = itemMap['name'] ?? 'Unknown';
+        double q = double.tryParse(itemMap['qty'] ?? '0') ?? 0;
+        double p = double.tryParse(itemMap['price'] ?? '0') ?? 0;
+        double eq = double.tryParse(itemMap['extra_qty'] ?? '0') ?? 0;
+        double ep = double.tryParse(itemMap['extra_price'] ?? '0') ?? 0;
 
-        // Fallback Category Resolution
-        String cat = item['category'] ?? '';
+        ItemModel? master;
+        try { master = itemProvider.items.firstWhere((i) => i.name == name); } catch (_) {}
+
+        double itemRawBase = 0;
+        if (master != null && master.halfPrice != null && master.halfPrice! > 0) {
+          // Plate logic: 1.0 = Full Price, 0.5 = Half Price
+          int fullPlates = q.floor();
+          double remainder = q - fullPlates;
+          itemRawBase = (fullPlates * (master.price ?? 0)) + (remainder > 0 ? (master.halfPrice ?? 0) : 0);
+        } else {
+          // Linear logic
+          itemRawBase = q * p;
+        }
+
+        double lineRawValue = itemRawBase + (eq * ep);
+        transactionItemsRawSum += lineRawValue;
+
+        itemLineContributions.add({
+          'name': name,
+          'category': itemMap['category'] ?? '',
+          'rawValue': lineRawValue,
+        });
+      }
+
+      // Scaling handles portions AND discounts perfectly by using Weighted Contribution
+      double scale = transactionItemsRawSum > 0 ? (txActualTotal / transactionItemsRawSum) : 1.0;
+
+      for (var contrib in itemLineContributions) {
+        double scaledValue = contrib['rawValue'] * scale;
+        String name = contrib['name'];
+        String cat = contrib['category'];
+
+        itemRevenue[name] = (itemRevenue[name] ?? 0) + scaledValue;
+
+        // Category Resolution
         if (cat == '' || cat == 'Sales' || cat == 'General' || cat == 'purchase' || cat == 'sale') {
            try {
              final master = itemProvider.items.firstWhere((i) => i.name == name);
              cat = master.category;
            } catch(_) { cat = 'Uncategorized'; }
         }
-        catRevenue[cat] = (catRevenue[cat] ?? 0) + lineTotal;
+        catRevenue[cat] = (catRevenue[cat] ?? 0) + scaledValue;
       }
     }
 
@@ -546,6 +603,38 @@ class _ReportList extends StatelessWidget {
   }
 
   void _showDetails(BuildContext context, TransactionModel tx, ProfileProvider profile) {
+    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+    
+    // Calculate accurate contributions for display
+    double transactionItemsRawSum = 0;
+    List<Map<String, dynamic>> contributions = [];
+    for (var i in tx.parsedItems) {
+      double q = double.tryParse(i['qty'] ?? '0') ?? 0;
+      double p = double.tryParse(i['price'] ?? '0') ?? 0;
+      double eq = double.tryParse(i['extra_qty'] ?? '0') ?? 0;
+      double ep = double.tryParse(i['extra_price'] ?? '0') ?? 0;
+      
+      double itemRawBase = 0;
+      try {
+        final master = itemProvider.items.firstWhere((it) => it.name == i['name']);
+        if (master.halfPrice != null && master.halfPrice! > 0) {
+          int fullPlates = q.floor();
+          double remainder = q - fullPlates;
+          itemRawBase = (fullPlates * (master.price ?? 0)) + (remainder > 0 ? (master.halfPrice ?? 0) : 0);
+        } else {
+          itemRawBase = q * p;
+        }
+      } catch(_) {
+        itemRawBase = q * p;
+      }
+      
+      double lineRawValue = itemRawBase + (eq * ep);
+      transactionItemsRawSum += lineRawValue;
+      contributions.add({...i, 'rawValue': lineRawValue});
+    }
+    
+    double scale = transactionItemsRawSum > 0 ? (tx.amount / transactionItemsRawSum) : 1.0;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -576,28 +665,31 @@ class _ReportList extends StatelessWidget {
             const Divider(height: 40),
             Text('ITEMS LIST', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)),
             const SizedBox(height: 12),
-            ...tx.parsedItems.map((i) => Padding(
-              padding: const EdgeInsets.only(bottom: 12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text('${i['name']}${i['variant'] != '' ? ' (${i['variant']})' : ''} x ${i['qty']}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14))),
-                      Text(profile.showAmount ? '${profile.currencySymbol}${i['price']}' : '${profile.currencySymbol}****', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w900)),
-                    ],
-                  ),
-                  if (i['serving_method'] != null && i['serving_method'] != '')
-                    Container(
-                      margin: const EdgeInsets.only(top: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(4)),
-                      child: Text(i['serving_method']!.toUpperCase(), style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: profile.themeColor)),
+            ...contributions.map((i) {
+              double itemFinalPrice = (i['rawValue'] as double) * scale;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(child: Text('${i['name']}${i['variant'] != '' ? ' (${i['variant']})' : ''} x ${i['qty']}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14))),
+                        Text(profile.showAmount ? '${profile.currencySymbol}${itemFinalPrice.toStringAsFixed(1)}' : '${profile.currencySymbol}****', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w900)),
+                      ],
                     ),
-                ],
-              ),
-            )),
+                    if (i['serving_method'] != null && i['serving_method'] != '')
+                      Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(4)),
+                        child: Text(i['serving_method']!.toUpperCase(), style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: profile.themeColor)),
+                      ),
+                  ],
+                ),
+              );
+            }),
             const Divider(height: 40),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

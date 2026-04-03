@@ -35,6 +35,7 @@ class ProfileProvider with ChangeNotifier {
   bool _expenseBlocked = false;
   
   StreamSubscription? _licenseSub;
+  StreamSubscription? _authSub;
 
   String get businessName => _businessName;
   String get ownerName => _ownerName;
@@ -86,7 +87,25 @@ class ProfileProvider with ChangeNotifier {
   }
 
   ProfileProvider() {
+    // 1. Initial Load
     loadProfile();
+    
+    // 2. CRITICAL FIX: Listen to Auth changes to reload profile when session is restored
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null) {
+        debugPrint("Auth State Change: User detected, loading profile...");
+        loadProfile();
+      } else {
+        _resetToDefaults();
+      }
+    });
+  }
+
+  void _resetToDefaults() {
+    _businessName = 'My Business';
+    _isActivated = false;
+    _licenseKey = '';
+    notifyListeners();
   }
 
   String _getUKey(String key) {
@@ -96,7 +115,10 @@ class ProfileProvider with ChangeNotifier {
 
   Future<void> loadProfile() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      debugPrint("Profile Load: No user logged in yet.");
+      return;
+    }
     final uid = user.uid;
 
     try {
@@ -363,6 +385,7 @@ class ProfileProvider with ChangeNotifier {
   @override
   void dispose() {
     _licenseSub?.cancel();
+    _authSub?.cancel();
     super.dispose();
   }
 }

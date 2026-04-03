@@ -671,6 +671,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final txProvider = Provider.of<TransactionProvider>(context, listen: false);
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
 
+    // CRITICAL FIX: Calculate accurate contributions for display matching grand total
+    double transactionItemsRawSum = 0;
+    List<Map<String, dynamic>> contributions = [];
+    for (var i in tx.parsedItems) {
+      double q = double.tryParse(i['qty'] ?? '0') ?? 0;
+      double p = double.tryParse(i['price'] ?? '0') ?? 0;
+      double eq = double.tryParse(i['extra_qty'] ?? '0') ?? 0;
+      double ep = double.tryParse(i['extra_price'] ?? '0') ?? 0;
+      
+      double itemRawBase = 0;
+      try {
+        final master = itemProvider.items.firstWhere((it) => it.name == i['name']);
+        if (master.halfPrice != null && master.halfPrice! > 0) {
+          int fullPlates = q.floor();
+          double remainder = q - fullPlates;
+          itemRawBase = (fullPlates * (master.price ?? 0)) + (remainder > 0 ? (master.halfPrice ?? 0) : 0);
+        } else {
+          itemRawBase = q * p;
+        }
+      } catch(_) {
+        itemRawBase = q * p;
+      }
+      
+      double lineRawValue = itemRawBase + (eq * ep);
+      transactionItemsRawSum += lineRawValue;
+      contributions.add({...i, 'rawValue': lineRawValue});
+    }
+    
+    double scale = (transactionItemsRawSum > 0) ? (tx.amount / transactionItemsRawSum) : 1.0;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -697,19 +727,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
               constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
               child: SingleChildScrollView(
                 child: Column(
-                  children: tx.parsedItems.map((item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(item['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
-                          Text('${item['qty']} x ${profile.currencySymbol}${item['price']} • ${item['serving_method'] ?? 'Dine-in'}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
-                        ]),
-                        Text('${profile.currencySymbol}${profile.showAmount ? (double.parse(item['qty'] ?? '0') * double.parse(item['price'] ?? '0')).toStringAsFixed(0) : "****"}', style: const TextStyle(fontWeight: FontWeight.w900)),
-                      ],
-                    ),
-                  )).toList(),
+                  children: contributions.map((item) {
+                    double itemFinalPrice = (item['rawValue'] as double) * scale;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(item['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
+                            Text('${item['qty']} x ${profile.currencySymbol}${item['price']} • ${item['serving_method'] ?? 'Dine-in'}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
+                          ]),
+                          Text('${profile.currencySymbol}${profile.showAmount ? itemFinalPrice.toStringAsFixed(0) : "****"}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 ),
               ),
             ),
