@@ -4,7 +4,7 @@
 
 ## 📱 App Screenshots
 
-| Dashboard | Sales Entry | Reports | Stock |
+| Dashboard | Password/Biometric | Reports | Stock |
 | :---: | :---: | :---: | :---: |
 | ![Dashboard](assets/screenshots/photo_6231065418793684421_y.jpg) | ![Sales](assets/screenshots/photo_6231065418793684422_y.jpg) | ![Reports](assets/screenshots/photo_6231065418793684423_y.jpg) | ![Stock](assets/screenshots/photo_6231065418793684424_y.jpg) |
 
