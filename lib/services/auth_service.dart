@@ -74,4 +74,27 @@ class AuthService {
       print("Sign-Out Error: $e");
     }
   }
+
+  /// Silently sign in the user if they were previously signed in with Google.
+  /// This helps in session persistence across app restarts.
+  Future<void> handleSilentSignIn() async {
+    try {
+      // 1. Check if user is already in Firebase (Standard Persistence)
+      if (_auth.currentUser != null) return;
+
+      // 2. If not in Firebase, check if Google has a session
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signInSilently();
+      if (googleUser != null) {
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final AuthCredential credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+        await _auth.signInWithCredential(credential);
+        print("Silent Login Success: Firebase session restored via Google");
+      }
+    } catch (e) {
+      print("Silent Sign-In Error: $e");
+    }
+  }
 }

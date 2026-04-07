@@ -98,7 +98,11 @@ class ProfileProvider with ChangeNotifier {
       if (user != null) {
         loadProfile();
       } else {
-        _resetToDefaults();
+        // Only reset if we are sure there is no user and we are not in initializing state
+        // FirebaseAuth.instance.currentUser is a synchronous way to check
+        if (FirebaseAuth.instance.currentUser == null) {
+          _resetToDefaults();
+        }
       }
     });
   }

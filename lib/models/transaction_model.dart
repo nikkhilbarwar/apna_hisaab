@@ -234,26 +234,34 @@ class TransactionModel {
   }
 
   factory TransactionModel.fromMap(Map<String, dynamic> map) {
+    DateTime parsedDate;
+    try {
+      parsedDate = map['date'] != null ? DateTime.parse(map['date'].toString()) : DateTime.now();
+    } catch (e) {
+      parsedDate = DateTime.now();
+      debugPrint("TransactionModel: Date parsing error, using now()");
+    }
+
     return TransactionModel(
-      id: map['id'] as int?,
-      itemId: map['item_id'] as int?,
-      type: map['type'] as String? ?? 'sale',
-      category: map['category'] as String? ?? 'General',
-      description: map['description'] as String? ?? '',
+      id: (map['id'] as num?)?.toInt(),
+      itemId: (map['item_id'] as num?)?.toInt(),
+      type: map['type']?.toString() ?? 'sale',
+      category: map['category']?.toString() ?? 'General',
+      description: map['description']?.toString() ?? '',
       amount: (map['amount'] as num? ?? 0).toDouble(),
       paidAmount: (map['paid_amount'] as num? ?? 0).toDouble(),
       quantity: (map['quantity'] as num? ?? 0).toDouble(),
-      unit: map['unit'] as String? ?? 'pcs',
+      unit: map['unit']?.toString() ?? 'pcs',
       rate: (map['rate'] as num? ?? 0).toDouble(),
-      paymentMode: map['payment_mode'] as String? ?? 'Cash',
-      date: map['date'] != null ? DateTime.parse(map['date'] as String) : DateTime.now(),
-      isSynced: map['is_synced'] as int? ?? 0,
+      paymentMode: map['payment_mode']?.toString() ?? 'Cash',
+      date: parsedDate,
+      isSynced: (map['is_synced'] as num? ?? 0).toInt(),
       cashAmount: (map['cash_amount'] as num? ?? 0).toDouble(),
       upiAmount: (map['upi_amount'] as num? ?? 0).toDouble(),
-      isDeleted: map['is_deleted'] as int? ?? 0,
-      deletedAt: map['deleted_at'] != null ? DateTime.parse(map['deleted_at'] as String) : null,
-      customerContact: map['customer_contact'] as String? ?? '',
-      status: map['status'] as String? ?? 'completed',
+      isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
+      deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
+      customerContact: map['customer_contact']?.toString() ?? '',
+      status: map['status']?.toString() ?? 'completed',
     );
   }
 }

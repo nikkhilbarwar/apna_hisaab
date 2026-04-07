@@ -28,8 +28,12 @@ class UnitProvider with ChangeNotifier {
 
   Future<void> _insertDefaultUnits() async {
     List<String> defaults = ['Plate', "Pc's", 'Packet', 'kg', 'gm', 'liter', 'ml'];
+    final existingUnits = _units.map((u) => u.name.toLowerCase()).toSet();
+    
     for (var name in defaults) {
-      await addUnit(name);
+      if (!existingUnits.contains(name.toLowerCase())) {
+        await addUnit(name);
+      }
     }
   }
 

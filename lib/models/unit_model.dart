@@ -19,9 +19,9 @@ class UnitModel {
 
   factory UnitModel.fromMap(Map<String, dynamic> map) {
     return UnitModel(
-      id: map['id'],
-      name: map['name'],
-      isSynced: map['is_synced'] ?? 0,
+      id: (map['id'] as num?)?.toInt(),
+      name: map['name']?.toString() ?? '',
+      isSynced: (map['is_synced'] as num? ?? 0).toInt(),
     );
   }
 }

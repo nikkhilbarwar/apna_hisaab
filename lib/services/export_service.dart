@@ -182,8 +182,9 @@ class ExportService {
       qrImage = pw.MemoryImage(File(qrPath).readAsBytesSync());
     }
 
-    // ACCURATE REPAIR: Use snapshots directly
     final snapshots = tx.itemSnapshots;
+    final isPurchase = tx.type.toLowerCase() == 'purchase';
+    
     double subtotal = 0;
     for (var s in snapshots) {
       subtotal += s.lineTotal;
@@ -211,32 +212,32 @@ class ExportService {
                   pw.Text(businessName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
                   if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
                   if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7)),
-                  if (tx.token.isNotEmpty) 
+                  if (!isPurchase && tx.token.isNotEmpty) 
                     pw.Align(
                       alignment: pw.Alignment.centerRight,
                       child: pw.Text("TOKEN: ${tx.token}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                     ),
-                  //pw.SizedBox(height: 5),
                 ],
               ),
             ),
-            //pw.SizedBox(height: 5),
             pw.Divider(thickness: 0.5),
-            pw.Center(child: pw.Text("TAX INVOICE", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1))),
+            pw.Center(child: pw.Text(isPurchase ? "PURCHASE VOUCHER" : "TAX INVOICE", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1))),
             pw.Divider(thickness: 0.5),
             
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                pw.Text("Bill No: ${tx.id}", style: const pw.TextStyle(fontSize: 8)),
+                pw.Text(isPurchase ? "Voucher No: ${tx.id}" : "Bill No: ${tx.id}", style: const pw.TextStyle(fontSize: 8)),
                 pw.Text("Date: ${DateFormat('dd-MM-yy HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 8)),
               ],
             ),
-            // Table Number
-            if (snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0') 
+            // Table Number (Hide for purchase)
+            if (!isPurchase && snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0') 
               pw.Text("TABLE: ${snapshots.first.tableNumber}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
 
-            if (tx.customerContact.isNotEmpty) pw.Text("Cust Contact: ${tx.customerContact}", style: const pw.TextStyle(fontSize: 8)),
+            if (tx.customerContact.isNotEmpty) 
+              pw.Text(isPurchase ? "Supplier: ${tx.customerContact}" : "Cust Contact: ${tx.customerContact}", style: const pw.TextStyle(fontSize: 8)),
+            
             pw.Divider(thickness: 0.5),
             
             pw.Row(
@@ -248,16 +249,10 @@ class ExportService {
             ),
             pw.SizedBox(height: 4),
             ...snapshots.map((item) {
-              // Handle 0.5 for Half items
-              String qtyStr = item.qty == 0.5 ? "Half" : (item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString());
-              
-              // Clean name from redundant (Half)/(Full)
+              String qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString();
               String cleanName = item.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
-
-              // Variant Display Logic: Hide if Full or Empty or Half
               String variant = item.variant.trim();
               bool hideVariant = variant.toLowerCase() == 'full' || variant.toLowerCase() == 'none' || variant.isEmpty || variant.toLowerCase() == 'half';
-              
               String displayName = hideVariant ? cleanName : "$cleanName ($variant)";
 
               return pw.Padding(
@@ -265,25 +260,18 @@ class ExportService {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-            pw.Row(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Expanded(
-                  flex: 4, 
-                  child: pw.Text(displayName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                ),
-                pw.Expanded(flex: 2, child: pw.Text(qtyStr, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                pw.Expanded(flex: 2, child: pw.Text(item.lineTotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
-              ],
-            ),
+                    pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Expanded(flex: 4, child: pw.Text(displayName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+                        pw.Expanded(flex: 2, child: pw.Text("$qtyStr ${item.unit}", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                        pw.Expanded(flex: 2, child: pw.Text(item.lineTotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                      ],
+                    ),
                     pw.Row(
                       children: [
                         pw.SizedBox(width: 5),
-                        pw.Text("@ ${item.price.toStringAsFixed(0)} | ${item.servingMethod}", 
-                            style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
-                        if (item.extraQty > 0)
-                          pw.Text(" | + Extra PC'S: ${item.extraQty % 1 == 0 ? item.extraQty.toInt() : item.extraQty} @ ${item.extraPrice.toStringAsFixed(0)}", 
-                            style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
+                        pw.Text("@ ${item.price.toStringAsFixed(0)}", style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
                       ],
                     ),
                   ],
@@ -304,18 +292,28 @@ class ExportService {
                 pw.Text("GRAND TOTAL: ${tx.amount.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
               ],
             ),
-            pw.Divider(thickness: 0.5),
-            //pw.SizedBox(height: 2),
+            
+            if (isPurchase) ...[
+              pw.SizedBox(height: 2),
+              pw.Text("Payment Mode: ${tx.paymentMode}", style: const pw.TextStyle(fontSize: 8)),
+              if (tx.paymentMode == 'Credit') ...[
+                pw.Text("Paid: Rs. ${tx.paidAmount.toStringAsFixed(0)}", style: const pw.TextStyle(fontSize: 8)),
+                pw.Text("Balance: Rs. ${tx.remainingCredit.toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+              ],
+              pw.SizedBox(height: 10),
+              pw.Divider(thickness: 0.5),
+              pw.Center(child: pw.Text("Receiver Signature", style: const pw.TextStyle(fontSize: 7))),
+              pw.SizedBox(height: 5),
+            ],
 
-            if (qrImage != null) 
+            pw.Divider(thickness: 0.5),
+
+            if (!isPurchase && qrImage != null) 
               pw.Center(
                 child: pw.Column(
                   children: [
                     pw.SizedBox(height: 3),
-                    pw.Container(
-                      width: 80, height: 80,
-                      child: pw.Image(qrImage),
-                    ),
+                    pw.Container(width: 80, height: 80, child: pw.Image(qrImage)),
                     pw.SizedBox(height: 2),
                     pw.Text(qrLabel.isNotEmpty ? qrLabel : "Scan for Payment/Review", style: const pw.TextStyle(fontSize: 6)),
                     pw.SizedBox(height: 3),
@@ -323,7 +321,7 @@ class ExportService {
                 ),
               ),
 
-            pw.Center(child: pw.Text("Thank You! Visit Again", style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic))),
+            pw.Center(child: pw.Text(isPurchase ? "Stock Inward Successful" : "Thank You! Visit Again", style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic))),
             pw.SizedBox(height: 4),
             
             pw.Divider(thickness: 0.5),

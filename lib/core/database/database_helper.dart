@@ -332,9 +332,17 @@ class DatabaseHelper {
     return await db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<int> insertUnit(String name) async {
+  Future<int> insertUnit(String name, {int? id, int isSynced = 0}) async {
     final db = await instance.database;
-    return await db.insert('units', {'name': name, 'is_synced': 0}, conflictAlgorithm: ConflictAlgorithm.ignore);
+    return await db.insert(
+      'units', 
+      {
+        if (id != null) 'id': id,
+        'name': name, 
+        'is_synced': isSynced
+      }, 
+      conflictAlgorithm: ConflictAlgorithm.replace
+    );
   }
   Future<List<Map<String, dynamic>>> getAllUnits() async {
     final db = await instance.database;

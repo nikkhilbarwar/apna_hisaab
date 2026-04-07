@@ -63,7 +63,16 @@ class FirebaseService {
   Future<List<TransactionModel>> fetchAllTransactions() async {
     try {
       final snapshot = await _collection('transactions').get();
-      return snapshot.docs.map((doc) => TransactionModel.fromMap(doc.data() as Map<String, dynamic>)).toList();
+      List<TransactionModel> txs = [];
+      for (var doc in snapshot.docs) {
+        try {
+          final data = doc.data() as Map<String, dynamic>;
+          txs.add(TransactionModel.fromMap(data));
+        } catch (e) {
+          print("Skipping a corrupt transaction doc: ${doc.id}, Error: $e");
+        }
+      }
+      return txs;
     } catch (e) {
       print("Error fetching transactions from Firebase: $e");
       return [];

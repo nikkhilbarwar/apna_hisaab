@@ -25,13 +25,15 @@ class PrintService {
     // Normalize status for reliable checking
     final status = tx.status.toLowerCase().trim();
     final isPendingStatus = status == 'pending' || status == 'draft';
+    final isPurchase = tx.type.toLowerCase() == 'purchase';
 
-    // 1. Handle Bill Printing
+    // 1. Handle Bill/Purchase Voucher Printing
     // Logic: Print if (Manual Reprint) OR (Auto-Print is ON AND it's NOT a pending order)
     bool shouldPrintBill = isManualReprint || (profile.isAutoPrintEnabled && !isPendingStatus);
     
     if (shouldPrintBill && printerProv.billPrinter.isEnabled) {
       if (printerProv.billPrinter.type == AppPrinterType.pdf) {
+        // PDF logic for Purchase will be handled in ExportService similarly if needed
         await ExportService().saveBillAsPdf(tx, profile.businessName, masterItems: items, qrPath: profile.qrPath, qrLabel: profile.qrLabel);
       } else {
         await _printToDevice(
@@ -44,14 +46,14 @@ class PrintService {
           qrPath: profile.qrPath,
           qrLabel: profile.qrLabel,
           isKot: false,
+          isPurchase: isPurchase,
         );
       }
     }
 
     // 2. Handle KOT Printing
-    // Auto-print KOT for BOTH Pending and Completed orders if enabled.
-    // We don't print KOT on manual reprints typically.
-    if (profile.isAutoPrintEnabled && printerProv.kotPrinter.isEnabled && !isManualReprint) {
+    // CRITICAL: NEVER print KOT for Purchase entries
+    if (!isPurchase && profile.isAutoPrintEnabled && printerProv.kotPrinter.isEnabled && !isManualReprint) {
       if (printerProv.kotPrinter.type == AppPrinterType.pdf) {
         await ExportService().saveKotAsPdf(tx, profile.businessName);
       } else {
@@ -78,6 +80,7 @@ class PrintService {
     String qrPath = "",
     String qrLabel = "",
     required bool isKot,
+    bool isPurchase = false,
   }) async {
     final profile = await CapabilityProfile.load();
     final paperSize = config.paperWidth == 58 ? PaperSize.mm58 : PaperSize.mm80;
@@ -86,6 +89,8 @@ class PrintService {
 
     if (isKot) {
       bytes += _generateKotBytes(generator, tx, businessName, address, contact);
+    } else if (isPurchase) {
+      bytes += _generatePurchaseBytes(generator, tx, businessName, address, contact);
     } else {
       bytes += _generateBillBytes(generator, tx, businessName, address, contact, masterItems, qrPath, qrLabel, config.paperWidth);
     }
@@ -286,6 +291,76 @@ class PrintService {
 
     bytes += generator.hr();
     bytes += generator.text(DateFormat('dd-MM-yyyy').format(tx.date), styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.feed(2);
+    bytes += generator.cut();
+    return bytes;
+  }
+
+  /// --- New Purchase Voucher Layout ---
+  List<int> _generatePurchaseBytes(Generator generator, TransactionModel tx, String businessName, String address, String contact) {
+    List<int> bytes = [];
+    
+    bytes += generator.text(businessName.toUpperCase(), 
+        styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2));
+    if (address.isNotEmpty) bytes += generator.text(address, styles: const PosStyles(align: PosAlign.center));
+    if (contact.isNotEmpty) bytes += generator.text("PH: $contact", styles: const PosStyles(align: PosAlign.center));
+    
+    bytes += generator.hr();
+    bytes += generator.text("STOCK INWARD / PURCHASE VOUCHER", styles: const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.hr();
+
+    String voucherId = tx.id?.toString() ?? '0';
+    String shortId = voucherId.length > 5 ? voucherId.substring(voucherId.length - 5) : voucherId;
+
+    bytes += generator.row([
+      PosColumn(text: "Voucher No: $shortId", width: 6, styles: const PosStyles(bold: true)),
+      PosColumn(text: DateFormat('dd-MM-yy HH:mm').format(tx.date), width: 6, styles: const PosStyles(align: PosAlign.right)),
+    ]);
+
+    // Supplier Info
+    if (tx.customerContact.isNotEmpty) {
+      bytes += generator.text("SUPPLIER: ${tx.customerContact}", styles: const PosStyles(bold: true));
+    }
+
+    bytes += generator.hr();
+    bytes += generator.row([
+      PosColumn(text: "ITEM DESCRIPTION", width: 8, styles: const PosStyles(bold: true)),
+      PosColumn(text: "TOTAL", width: 4, styles: const PosStyles(align: PosAlign.right, bold: true)),
+    ]);
+    bytes += generator.hr();
+
+    for (var i in tx.itemSnapshots) {
+      String qtyStr = i.qty % 1 == 0 ? i.qty.toInt().toString() : i.qty.toString();
+      
+      // Clean name
+      String cleanName = i.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
+      String variant = i.variant.trim();
+      bool hideVariant = variant.toLowerCase() == 'full' || variant.toLowerCase() == 'none' || variant.isEmpty;
+      String displayName = hideVariant ? cleanName : "$cleanName ($variant)";
+
+      bytes += generator.text(displayName, styles: const PosStyles(bold: true));
+      bytes += generator.row([
+        PosColumn(text: "$qtyStr ${i.unit} x ${i.price.toStringAsFixed(0)}", width: 8),
+        PosColumn(text: i.lineTotal.toStringAsFixed(0), width: 4, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    }
+
+    bytes += generator.hr();
+    bytes += generator.row([
+      PosColumn(text: "TOTAL AMOUNT", width: 6, styles: const PosStyles(bold: true)),
+      PosColumn(text: "Rs. ${tx.amount.toStringAsFixed(0)}", width: 6, styles: const PosStyles(align: PosAlign.right, bold: true, height: PosTextSize.size1)),
+    ]);
+    
+    bytes += generator.text("Payment Mode: ${tx.paymentMode}");
+    if (tx.paymentMode == 'Credit') {
+      bytes += generator.text("Paid: Rs. ${tx.paidAmount.toStringAsFixed(0)}");
+      bytes += generator.text("Balance: Rs. ${tx.remainingCredit.toStringAsFixed(0)}", styles: const PosStyles(bold: true));
+    }
+
+    bytes += generator.feed(2);
+    bytes += generator.text("__________________________", styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.text("Receiver Signature", styles: const PosStyles(align: PosAlign.center));
+
     bytes += generator.feed(2);
     bytes += generator.cut();
     return bytes;

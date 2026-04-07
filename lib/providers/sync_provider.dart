@@ -276,37 +276,63 @@ class SyncProvider with ChangeNotifier {
       // 8. Transactions
       _syncStatus = "Restoring transactions...";
       final List<TransactionModel> transactions = cloudData['transactions'] ?? [];
+      print("SyncProvider: Found ${transactions.length} transactions on cloud.");
+      
+      final db = await DatabaseHelper.instance.database;
       for (int i = 0; i < transactions.length; i++) {
         final tx = transactions[i];
         tx.isSynced = 1;
-        await DatabaseHelper.instance.insertTransaction(tx);
+        // Using raw insert with Replace to ensure no ID conflicts block the restore
+        await db.insert(
+          'transactions', 
+          tx.toMap(), 
+          conflictAlgorithm: ConflictAlgorithm.replace
+        );
         _syncProgress = 0.8 + (0.2 * (i + 1) / (transactions.isEmpty ? 1 : transactions.length));
         notifyListeners();
       }
       
-      _syncProgress = 1.0;
-      _syncStatus = "Restore Complete!";
-      notifyListeners();
+      _progress(1.0, "Restore Complete!");
 
-      // Refresh providers
+      // CRITICAL: Refresh ALL providers to show new data immediately
       if (context.mounted) {
-        Provider.of<CategoryProvider>(context, listen: false).fetchCategories();
-        Provider.of<ItemProvider>(context, listen: false).fetchItems();
-        Provider.of<TransactionProvider>(context, listen: false).fetchTransactions();
-        Provider.of<StaffProvider>(context, listen: false).fetchStaff();
-        Provider.of<SupplierProvider>(context, listen: false).fetchSuppliers();
-        Provider.of<UnitProvider>(context, listen: false).fetchUnits();
-        Provider.of<PurchaseReminderProvider>(context, listen: false).fetchReminders();
+        final t = Provider.of<TransactionProvider>(context, listen: false);
+        final i = Provider.of<ItemProvider>(context, listen: false);
+        final c = Provider.of<CategoryProvider>(context, listen: false);
+        final s = Provider.of<StaffProvider>(context, listen: false);
+        final sup = Provider.of<SupplierProvider>(context, listen: false);
+        final u = Provider.of<UnitProvider>(context, listen: false);
+        final r = Provider.of<PurchaseReminderProvider>(context, listen: false);
+        final p = Provider.of<ProfileProvider>(context, listen: false);
+
+        await Future.wait([
+          t.fetchTransactions(),
+          i.fetchItems(),
+          c.fetchCategories(),
+          s.fetchStaff(),
+          sup.fetchSuppliers(),
+          u.fetchUnits(),
+          r.fetchReminders(),
+          p.loadProfile(),
+        ]);
+        
+        print("SyncProvider: All Providers refreshed with restored data.");
       }
 
       return true;
     } catch (e) {
-      _syncStatus = "Restore Failed: $e";
-      notifyListeners();
+      _progress(0.0, "Restore Failed: $e");
+      print("SyncProvider Error: $e");
       return false;
     } finally {
       _isSyncing = false;
       notifyListeners();
     }
+  }
+
+  void _progress(double p, String s) {
+    _syncProgress = p;
+    _syncStatus = s;
+    notifyListeners();
   }
 }

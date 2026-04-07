@@ -44,11 +44,9 @@ class TransactionProvider with ChangeNotifier {
 
   Future<void> _initializeData() async {
     await fetchTransactions();
+    // Do not trigger masterRestoreFromCloud here anymore. 
+    // AuthWrapper handles it globally now.
     await syncAllUnsynced();
-    if (_allTransactions.isEmpty) {
-      debugPrint("Local data empty, triggering auto-restore...");
-      await masterRestoreFromCloud();
-    }
   }
 
   Future<void> masterRestoreFromCloud() async {

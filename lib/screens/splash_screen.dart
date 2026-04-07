@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/profile_provider.dart';
+import '../services/auth_service.dart';
 import 'auth/auth_wrapper.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -31,7 +32,15 @@ class _SplashScreenState extends State<SplashScreen> {
       debugPrint("Permission request error: $e");
     }
     
-    // 2. Wait for 2 seconds to show the branding
+    // 2. Silently attempt Google Sign-In restoration if applicable
+    try {
+      final authService = AuthService();
+      await authService.handleSilentSignIn();
+    } catch (e) {
+       debugPrint("Silent Sign-in error: $e");
+    }
+
+    // 3. Wait for 2 seconds to show the branding
     await Future.delayed(const Duration(seconds: 2));
     
     if (mounted) {
