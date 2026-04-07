@@ -12,6 +12,8 @@ class ProfileProvider with ChangeNotifier {
   String _contact = '';
   String _address = '';
   String _logoPath = '';
+  String _qrPath = '';
+  String _qrLabel = 'Scan for Payment/Review'; 
   bool _isCloudSyncEnabled = true;
   String _currencySymbol = '₹';
   int _themeColorValue = 0xFF5E35B1;
@@ -43,6 +45,8 @@ class ProfileProvider with ChangeNotifier {
   String get contact => _contact;
   String get address => _address;
   String get logoPath => _logoPath;
+  String get qrPath => _qrPath;
+  String get qrLabel => _qrLabel;
   bool get isCloudSyncEnabled => _isCloudSyncEnabled;
   String get currencySymbol => _currencySymbol;
   int get totalTables => _totalTables;
@@ -126,6 +130,8 @@ class ProfileProvider with ChangeNotifier {
       _contact = prefs.getString('contact_$uid') ?? '';
       _address = prefs.getString('address_$uid') ?? '';
       _logoPath = prefs.getString('logo_path_$uid') ?? '';
+      _qrPath = prefs.getString('qr_path_$uid') ?? '';
+      _qrLabel = prefs.getString('qr_label_$uid') ?? 'Scan for Payment/Review';
       _isCloudSyncEnabled = prefs.getBool('cloud_sync_$uid') ?? true;
       _currencySymbol = prefs.getString('currency_$uid') ?? '₹';
       _themeColorValue = prefs.getInt('theme_color_$uid') ?? 0xFF5E35B1;
@@ -316,13 +322,15 @@ class ProfileProvider with ChangeNotifier {
     if (value) _syncToFirebase();
   }
 
-  Future<void> updateProfile({String? businessName, String? ownerName, String? contact, String? address, String? logoPath, bool? isCloudSyncEnabled, String? currencySymbol, double? taxPercentage, int? totalTables}) async {
+  Future<void> updateProfile({String? businessName, String? ownerName, String? contact, String? address, String? logoPath, String? qrPath, String? qrLabel, bool? isCloudSyncEnabled, String? currencySymbol, double? taxPercentage, int? totalTables}) async {
     final prefs = await SharedPreferences.getInstance();
     if (businessName != null) { _businessName = businessName; await prefs.setString(_getUKey('business_name'), businessName); }
     if (ownerName != null) { _ownerName = ownerName; await prefs.setString(_getUKey('owner_name'), ownerName); }
     if (contact != null) { _contact = contact; await prefs.setString(_getUKey('contact'), contact); }
     if (address != null) { _address = address; await prefs.setString(_getUKey('address'), address); }
     if (logoPath != null) { _logoPath = logoPath; await prefs.setString(_getUKey('logo_path'), logoPath); }
+    if (qrPath != null) { _qrPath = qrPath; await prefs.setString(_getUKey('qr_path'), qrPath); }
+    if (qrLabel != null) { _qrLabel = qrLabel; await prefs.setString(_getUKey('qr_label'), qrLabel); }
     if (isCloudSyncEnabled != null) { _isCloudSyncEnabled = isCloudSyncEnabled; await prefs.setBool(_getUKey('cloud_sync'), isCloudSyncEnabled); }
     if (currencySymbol != null) { _currencySymbol = currencySymbol; await prefs.setString(_getUKey('currency'), currencySymbol); }
     if (taxPercentage != null) { _taxPercentage = taxPercentage; await prefs.setDouble(_getUKey('tax_percentage'), taxPercentage); }
@@ -337,6 +345,9 @@ class ProfileProvider with ChangeNotifier {
       'owner_name': _ownerName,
       'contact': _contact,
       'address': _address,
+      'logo_path': _logoPath,
+      'qr_path': _qrPath,
+      'qr_label': _qrLabel,
       'currency': _currencySymbol,
       'theme_color': _themeColorValue,
       'tax_percentage': _taxPercentage,
@@ -362,6 +373,8 @@ class ProfileProvider with ChangeNotifier {
     if (map['owner_name'] != null) { _ownerName = map['owner_name']; await prefs.setString('owner_name_$uid', _ownerName); }
     if (map['contact'] != null) { _contact = map['contact']; await prefs.setString('contact_$uid', _contact); }
     if (map['address'] != null) { _address = map['address']; await prefs.setString('address_$uid', _address); }
+    if (map['qr_path'] != null) { _qrPath = map['qr_path']; await prefs.setString('qr_path_$uid', _qrPath); }
+    if (map['qr_label'] != null) { _qrLabel = map['qr_label']; await prefs.setString('qr_label_$uid', _qrLabel); }
     if (map['currency'] != null) { _currencySymbol = map['currency']; await prefs.setString('currency_$uid', _currencySymbol); }
     if (map['theme_color'] != null) { _themeColorValue = map['theme_color']; await prefs.setInt('theme_color_$uid', _themeColorValue); }
     if (map['tax_percentage'] != null) { _taxPercentage = (map['tax_percentage'] as num).toDouble(); await prefs.setDouble('tax_percentage_$uid', _taxPercentage); }

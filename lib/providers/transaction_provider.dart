@@ -235,35 +235,107 @@ class TransactionProvider with ChangeNotifier {
     return Map.fromEntries(sortedEntries.take(5));
   }
 
-  Future<void> addTransaction(TransactionModel tx, ItemProvider itemProvider) async {
+  Future<int> _getNextTokenNumber() async {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day, 0, 0, 0).toIso8601String();
+    
+    final db = await DatabaseHelper.instance.database;
+    final result = await db.rawQuery(
+      "SELECT COUNT(*) as count FROM transactions WHERE date >= ? AND is_deleted = 0", 
+      [todayStart]
+    );
+    
+    int count = Sqflite.firstIntValue(result) ?? 0;
+    return count + 1;
+  }
+
+  String _extractToken(String desc) {
+    if (!desc.contains("Token: ")) return "";
     try {
-      tx.status = _normalizeStatus(tx.status).isEmpty ? 'completed' : _normalizeStatus(tx.status);
-      int id = await DatabaseHelper.instance.insertTransaction(tx);
-      tx.id = id;
-      await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
-      await fetchTransactions();
-      _syncSingleTransaction(tx);
-    } catch (e) {
-      debugPrint("Error adding transaction: $e");
+      return desc.split("Token: ").last.split(" | ").first.trim();
+    } catch (_) {
+      return "";
     }
   }
 
-  Future<void> updateTransaction(TransactionModel tx, ItemProvider itemProvider, {TransactionModel? oldTx}) async {
+  Future<void> _ensureToken(TransactionModel tx, {TransactionModel? oldTx}) async {
+    // 1. If oldTx has token, preserve it
+    if (oldTx != null) {
+      String oldToken = _extractToken(oldTx.description);
+      if (oldToken.isNotEmpty && !_extractToken(tx.description).isNotEmpty) {
+        _injectToken(tx, oldToken);
+        return;
+      }
+    }
+
+    // 2. If tx doesn't have token, assign new one
+    if (_extractToken(tx.description).isEmpty) {
+      int token = await _getNextTokenNumber();
+      _injectToken(tx, token.toString());
+    }
+  }
+
+  void _injectToken(TransactionModel tx, String token) {
+    if (tx.description.contains("Token: ")) return;
+    
+    List<String> parts = tx.description.split(" | ");
+    String jsonPart = parts.first;
+    List<String> metadata = parts.length > 1 ? parts.sublist(1) : [];
+    
+    metadata.insert(0, "Token: $token");
+    tx.description = "$jsonPart | ${metadata.join(' | ')}";
+  }
+
+  Future<TransactionModel?> addTransaction(TransactionModel tx, ItemProvider itemProvider) async {
+    try {
+      tx.status = _normalizeStatus(tx.status).isEmpty ? 'completed' : _normalizeStatus(tx.status);
+      
+      // Assign Token
+      await _ensureToken(tx);
+
+      int id = await DatabaseHelper.instance.insertTransaction(tx);
+      
+      // Nuclear Refetch: Query DB to get the object with auto-generated ID and Token
+      final dbTxs = await DatabaseHelper.instance.getAllTransactions();
+      final savedTx = dbTxs.firstWhere((t) => t.id == id);
+      
+      await _applyStockEffect(savedTx, itemProvider, isAddingEffect: true);
+      await fetchTransactions();
+      _syncSingleTransaction(savedTx);
+      return savedTx;
+    } catch (e) {
+      debugPrint("Error adding transaction: $e");
+      return null;
+    }
+  }
+
+  Future<TransactionModel?> updateTransaction(TransactionModel tx, ItemProvider itemProvider, {TransactionModel? oldTx}) async {
     try {
       tx.status = _normalizeStatus(tx.status).isEmpty ? 'completed' : _normalizeStatus(tx.status);
       tx.isSynced = 0;
+
+      // Preserve or Assign Token
+      await _ensureToken(tx, oldTx: oldTx);
+
       if (oldTx != null) await _applyStockEffect(oldTx, itemProvider, isAddingEffect: false);
       await DatabaseHelper.instance.updateTransaction(tx);
-      await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
+      
+      // Nuclear Refetch
+      final dbTxs = await DatabaseHelper.instance.getAllTransactions();
+      final savedTx = dbTxs.firstWhere((t) => t.id == tx.id);
+      
+      await _applyStockEffect(savedTx, itemProvider, isAddingEffect: true);
 
-      if (tx.status == 'completed' && tx.id != null) {
-        await NotificationService().cancelOrderReminders(tx.id!);
+      if (savedTx.status == 'completed' && savedTx.id != null) {
+        await NotificationService().cancelOrderReminders(savedTx.id!);
       }
 
       await fetchTransactions();
-      _syncSingleTransaction(tx);
+      _syncSingleTransaction(savedTx);
+      return savedTx;
     } catch (e) {
       debugPrint("Error updating transaction: $e");
+      return null;
     }
   }
 

@@ -45,6 +45,8 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   @override
   void initState() {
     super.initState();
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    
     if (widget.existingTransaction != null) {
       _paymentMode = widget.existingTransaction!.paymentMode;
       _contactController.text = widget.existingTransaction!.customerContact;
@@ -56,11 +58,13 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       final items = widget.existingTransaction!.parsedItems;
       if (items.isNotEmpty) {
         _globalServingMethod = items.first['serving_method'] ?? 'Dine-in';
-        _selectedTable = items.first['table_number'] ?? '1';
+        _selectedTable = items.first['table_number'] ?? (profile.totalTables > 0 ? '1' : '');
       }
     } else if (widget.cart.isNotEmpty) {
       _globalServingMethod = widget.cart.first.servingMethod;
-      _selectedTable = widget.cart.first.tableNumber;
+      _selectedTable = widget.cart.first.tableNumber.isEmpty && profile.totalTables > 0 ? '1' : widget.cart.first.tableNumber;
+    } else {
+      _selectedTable = profile.totalTables > 0 ? '1' : '';
     }
     _syncPaidAmount();
   }
@@ -121,10 +125,10 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     } else {
       base = c.quantity * c.price;
     }
-    
+
     // Logic Fix: Extras multiplication
     double totalExtra = c.extraPieces > 0 ? (c.extraPieces * c.extraPrice) : c.extraPrice;
-    
+
     return base + totalExtra;
   }
 
@@ -229,10 +233,10 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                       const SizedBox(height: 2),
                       Text('FINANCIAL DETAILS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
                       const SizedBox(height: 12),
-                      
+
                       _entryField(_discountController, 'Add Discount (₹)', Icons.local_offer_rounded, themeColor, profileProvider, onChanged: (_) => _syncPaidAmount()),
                       const SizedBox(height: 24),
-                      
+
                       Text('PAYMENT METHOD', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
                       const SizedBox(height: 12),
                       _buildPaymentMethodSelector(themeColor, profileProvider),
@@ -566,7 +570,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         elevation: 0,
                       ),
-                      child: Text(widget.existingTransaction != null ? 'UPDATE PENDING' : 'PENDING', 
+                      child: Text(widget.existingTransaction != null ? 'UPDATE PENDING' : 'PENDING',
                         style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
                     ),
                   ),
@@ -630,32 +634,34 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            decoration: BoxDecoration(
-              color: profile.scaffoldColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedTable,
-                isExpanded: true,
-                icon: Icon(Icons.keyboard_arrow_down, size: 18, color: profile.themeColor),
-                style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold, fontSize: 13),
-                dropdownColor: profile.cardColor,
-                items: List.generate(profile.totalTables, (i) => (i + 1).toString())
-                    .map((t) => DropdownMenuItem(value: t, child: Text('T-$t')))
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) setState(() => _selectedTable = val);
-                },
+        if (profile.totalTables > 0) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                color: profile.scaffoldColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedTable.isEmpty && profile.totalTables > 0 ? '1' : _selectedTable,
+                  isExpanded: true,
+                  icon: Icon(Icons.keyboard_arrow_down, size: 18, color: profile.themeColor),
+                  style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold, fontSize: 13),
+                  dropdownColor: profile.cardColor,
+                  items: List.generate(profile.totalTables, (i) => (i + 1).toString())
+                      .map((t) => DropdownMenuItem(value: t, child: Text('T-$t')))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedTable = val);
+                  },
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -707,8 +713,8 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         'unit': e.unit,
         'variant': e.variant,
         'price': e.price,
-        'full_price': e.item.price ?? 0, // CRITICAL FIX: Save master full price
-        'half_price': e.item.halfPrice ?? 0, // CRITICAL FIX: Save master half price
+        'full_price': e.item.price ?? 0,
+        'half_price': e.item.halfPrice ?? 0,
         'extra_qty': e.extraPieces,
         'extra_price': e.extraPrice,
         'serving_method': e.servingMethod,
@@ -741,16 +747,15 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         status: isPending ? 'pending' : 'completed',
       );
 
+      TransactionModel? savedTx;
       if (widget.existingTransaction == null) {
-        await txProvider.addTransaction(txData, itemProvider);
-        if (!isPending && profile.isAutoPrintEnabled) {
-           await PrintService().printSmart(context, txData);
-        }
+        savedTx = await txProvider.addTransaction(txData, itemProvider);
       } else {
-        await txProvider.updateTransaction(txData, itemProvider, oldTx: widget.existingTransaction);
-        if (!isPending && profile.isAutoPrintEnabled) {
-           await PrintService().printSmart(context, txData);
-        }
+        savedTx = await txProvider.updateTransaction(txData, itemProvider, oldTx: widget.existingTransaction);
+      }
+
+      if (profile.isAutoPrintEnabled && savedTx != null) {
+         await PrintService().printSmart(context, savedTx);
       }
 
       if (mounted) {

@@ -697,7 +697,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: ListTile(
         onLongPress: () => _toggleSelection(tx.id!),
-        onTap: () => _showTransactionActions(context, tx, profile),
+        onTap: () {
+          if (_selectedIds.isNotEmpty) {
+            _toggleSelection(tx.id!);
+          } else {
+            _showTransactionActions(context, tx, profile);
+          }
+        },
         leading: isSelected ? const Icon(Icons.check_circle, color: Colors.red) : Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(color: (isSale ? Colors.green : Colors.red).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 class TransactionItemSnapshot {
   final int id;
@@ -41,10 +42,10 @@ class TransactionItemSnapshot {
       int fullPortions = qty.floor();
       double remainder = qty - fullPortions;
       base = (fullPortions * fullPrice) + (remainder > 0 ? halfPrice : 0);
-    } 
+    }
     // 2. Check Old Logic (Fallback)
     else {
-      // Logic Fix: Trust the price saved in the snapshot. 
+      // Logic Fix: Trust the price saved in the snapshot.
       // If it's an old 'half' entry with qty 0.5, price is already the portion price.
       // We only normalize if the user explicitly meant for 'price' to be a 'per-unit' rate.
       if (variant.toLowerCase() == 'half' && qty == 0.5) {
@@ -53,10 +54,10 @@ class TransactionItemSnapshot {
         base = qty * price;
       }
     }
-    
+
     // Extras Logic: (Qty * Price)
     double totalExtra = (extraQty > 0) ? (extraQty * extraPrice) : extraPrice;
-    
+
     return base + totalExtra;
   }
 
@@ -123,6 +124,11 @@ class TransactionModel {
     this.status = 'completed',
   });
 
+  String get token {
+    final match = RegExp(r'Token:\s*(\d+)').firstMatch(description);
+    return match?.group(1) ?? "";
+  }
+
   double get remainingCredit => paymentMode == 'Credit' ? amount - paidAmount : 0.0;
 
   List<TransactionItemSnapshot> get itemSnapshots {
@@ -130,23 +136,19 @@ class TransactionModel {
     try {
       if (description.isEmpty) return [];
 
-      String cleanJson = description;
-      if (description.contains(' | ')) {
-        cleanJson = description.split(' | ').first;
-      }
-
-      if (cleanJson.startsWith('[') || cleanJson.startsWith('{')) {
+      final jsonStart = description.indexOf('[');
+      final jsonEnd = description.lastIndexOf(']');
+      if (jsonStart != -1 && jsonEnd != -1) {
+        final cleanJson = description.substring(jsonStart, jsonEnd + 1);
         final dynamic decoded = jsonDecode(cleanJson);
         if (decoded is List) {
           for (var item in decoded) {
-            if (item is Map) {
-              snapshots.add(TransactionItemSnapshot.fromMap(item));
-            }
+            if (item is Map) snapshots.add(TransactionItemSnapshot.fromMap(item));
           }
         }
       }
     } catch (e) {
-      // Parsing failed
+      debugPrint("KOT Parsing Error: $e");
     }
     return snapshots;
   }
@@ -187,7 +189,7 @@ class TransactionModel {
      if (description.contains(' | Subtotal: ₹')) {
       return double.tryParse(description.split(' | Subtotal: ₹').last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
     }
-    return amount; 
+    return amount;
   }
 
   double get taxValue {

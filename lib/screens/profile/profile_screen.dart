@@ -18,6 +18,7 @@ import '../../services/export_service.dart';
 import '../../utils/app_strings.dart';
 import '../auth/login_screen.dart';
 import '../auth/activation_screen.dart';
+import 'printer_settings_screen.dart';
 import 'widgets/business_card.dart';
 import 'widgets/profile_action_card.dart';
 
@@ -53,7 +54,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  Future<void> _pickAndCropImage(ProfileProvider profile) async {
+  Future<void> _pickAndCropImage(ProfileProvider profile, {bool isLogo = true}) async {
     try {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
       if (image == null) return;
@@ -63,7 +64,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
         uiSettings: [
           AndroidUiSettings(
-            toolbarTitle: 'Crop Logo',
+            toolbarTitle: isLogo ? 'Crop Logo' : 'Crop QR Code',
             toolbarColor: profile.themeColor,
             toolbarWidgetColor: Colors.white,
             statusBarColor: profile.themeColor, 
@@ -76,7 +77,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             activeControlsWidgetColor: profile.themeColor,
           ),
           IOSUiSettings(
-            title: 'Crop Logo',
+            title: isLogo ? 'Crop Logo' : 'Crop QR Code',
             aspectRatioLockEnabled: true,
             resetButtonHidden: false,
             doneButtonTitle: 'Done',
@@ -86,7 +87,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       if (croppedFile != null && mounted) {
-        profile.updateProfile(logoPath: croppedFile.path);
+        if (isLogo) {
+          profile.updateProfile(logoPath: croppedFile.path);
+        } else {
+          // Ask for QR Label
+          final String? selectedLabel = await showDialog<String>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: profile.cardColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: const Text("QR Code Type", style: TextStyle(fontWeight: FontWeight.bold)),
+              content: const Text("Select what this QR code is for:"),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, "Scan for Payment"),
+                  child: const Text("PAYMENT"),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, "Scan for Review"),
+                  child: const Text("REVIEW"),
+                ),
+              ],
+            ),
+          );
+
+          if (selectedLabel != null) {
+            profile.updateProfile(qrPath: croppedFile.path, qrLabel: selectedLabel);
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -699,15 +727,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     profile: profile,
                   ),
                   ProfileActionCard(
-                    title: "Direct Print",
-                    subtitle: "Auto print after completing bill",
+                    title: "Payment / Review QR",
+                    subtitle: profile.qrPath.isNotEmpty ? "QR Code uploaded" : "Upload QR for Bill",
+                    icon: Icons.qr_code_2_rounded,
+                    onTap: () => _pickAndCropImage(profile, isLogo: false),
+                    trailing: profile.qrPath.isNotEmpty 
+                      ? IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () => profile.updateProfile(qrPath: ""),
+                        )
+                      : null,
+                    profile: profile,
+                  ),
+                  ProfileActionCard(
+                    title: "Printer Settings",
+                    subtitle: "Configure Bill and KOT printers",
                     icon: Icons.print_outlined,
-                    trailing: Switch(
-                      value: profile.isAutoPrintEnabled,
-                      activeColor: themeColor,
-                      onChanged: (val) => profile.toggleAutoPrint(val),
-                    ),
-                    onTap: () => profile.toggleAutoPrint(!profile.isAutoPrintEnabled),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const PrinterSettingsScreen()),
+                      );
+                    },
                     profile: profile,
                   ),
                   ProfileActionCard(

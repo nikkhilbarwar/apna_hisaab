@@ -398,7 +398,7 @@ class _HistoryList extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Bill #${tx.id}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.themeColor)),
+                    Text('Bill #${tx.id}${tx.token.isNotEmpty ? " | TOKEN: ${tx.token}" : ""}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.themeColor)),
                     Text(tx.type == 'sale' ? 'Sale Details' : 'Expense Details', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: profile.textColor)),
                   ],
                 ),
@@ -423,7 +423,7 @@ class _HistoryList extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('${item['name']} (${item['variant']})', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
-                        Text('${item['qty']} x ${profile.currencySymbol}${item['price']}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
+                        Text('${item['qty']} x ${profile.currencySymbol}${item['price']}${ (double.tryParse(item['extra_qty'] ?? '0') ?? 0) > 0 ? " + Extra: ${item['extra_qty']}" : ""}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
                       ],
                     ),
                   ),

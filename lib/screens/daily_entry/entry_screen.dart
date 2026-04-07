@@ -107,6 +107,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
       if (existingIndex != -1) {
         _cart[existingIndex].quantity += step;
       } else {
+        final profile = Provider.of<ProfileProvider>(context, listen: false);
         _cart.add(CartItem(
           item: item, 
           quantity: step, 
@@ -114,7 +115,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
           variant: variant, 
           unit: unit,
           servingMethod: _isSellingType ? 'Dine-in' : 'N/A',
-          tableNumber: '1'
+          tableNumber: profile.totalTables > 0 ? '1' : ''
         ));
       }
     });

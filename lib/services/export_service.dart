@@ -44,11 +44,8 @@ class ExportService {
     final items = tx.itemSnapshots;
     if (items.isEmpty) return tx.category;
     return items.map((i) {
-      String qtyStr = i.qty % 1 == 0 ? i.qty.toInt().toString() : i.qty.toString();
-      if (i.variant.toLowerCase() == 'half') {
-        return "${i.name} (Half) x$qtyStr";
-      }
-      return "${i.name} x$qtyStr";
+      String qtyStr = i.qty == 0.5 ? "Half" : (i.qty % 1 == 0 ? i.qty.toInt().toString() : i.qty.toString());
+      return "${i.name} x$qtyStr".trim();
     }).join(", ");
   }
 
@@ -166,7 +163,7 @@ class ExportService {
   }
 
   /// Save Bill as PDF and return path
-  Future<String?> saveBillAsPdf(TransactionModel tx, String businessName, {List<ItemModel>? masterItems}) async {
+  Future<String?> saveBillAsPdf(TransactionModel tx, String businessName, {List<ItemModel>? masterItems, String qrPath = "", String qrLabel = ""}) async {
     final pdf = pw.Document();
     final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
     final prefs = await SharedPreferences.getInstance();
@@ -178,6 +175,11 @@ class ExportService {
     pw.MemoryImage? logoImage;
     if (logoPath.isNotEmpty && File(logoPath).existsSync()) {
       logoImage = pw.MemoryImage(File(logoPath).readAsBytesSync());
+    }
+    
+    pw.MemoryImage? qrImage;
+    if (qrPath.isNotEmpty && File(qrPath).existsSync()) {
+      qrImage = pw.MemoryImage(File(qrPath).readAsBytesSync());
     }
 
     // ACCURATE REPAIR: Use snapshots directly
@@ -209,10 +211,17 @@ class ExportService {
                   pw.Text(businessName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
                   if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
                   if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7)),
+                  if (tx.token.isNotEmpty) 
+                    pw.Align(
+                      alignment: pw.Alignment.centerRight,
+                      child: pw.Text("TOKEN: ${tx.token}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    ),
+                  //pw.SizedBox(height: 5),
                 ],
               ),
             ),
-            pw.SizedBox(height: 5),
+            //pw.SizedBox(height: 5),
+            pw.Divider(thickness: 0.5),
             pw.Center(child: pw.Text("TAX INVOICE", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1))),
             pw.Divider(thickness: 0.5),
             
@@ -220,44 +229,63 @@ class ExportService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text("Bill No: ${tx.id}", style: const pw.TextStyle(fontSize: 8)),
-                pw.Text("Date: ${DateFormat('dd-MM-yyyy HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 8)),
+                pw.Text("Date: ${DateFormat('dd-MM-yy HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 8)),
               ],
             ),
+            // Table Number
+            if (snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0') 
+              pw.Text("TABLE: ${snapshots.first.tableNumber}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+
             if (tx.customerContact.isNotEmpty) pw.Text("Cust Contact: ${tx.customerContact}", style: const pw.TextStyle(fontSize: 8)),
             pw.Divider(thickness: 0.5),
             
             pw.Row(
               children: [
                 pw.Expanded(flex: 4, child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                pw.Expanded(flex: 1, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
+                pw.Expanded(flex: 2, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
                 pw.Expanded(flex: 2, child: pw.Text("TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
               ],
             ),
             pw.SizedBox(height: 4),
             ...snapshots.map((item) {
-              String qStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString();
-              String qtyDisplay = item.variant.toLowerCase() == 'half' ? "$qStr (Half)" : qStr;
+              // Handle 0.5 for Half items
+              String qtyStr = item.qty == 0.5 ? "Half" : (item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString());
+              
+              // Clean name from redundant (Half)/(Full)
+              String cleanName = item.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
+
+              // Variant Display Logic: Hide if Full or Empty or Half
+              String variant = item.variant.trim();
+              bool hideVariant = variant.toLowerCase() == 'full' || variant.toLowerCase() == 'none' || variant.isEmpty || variant.toLowerCase() == 'half';
+              
+              String displayName = hideVariant ? cleanName : "$cleanName ($variant)";
 
               return pw.Padding(
                 padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                child: pw.Row(
+                child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Expanded(
-                      flex: 4, 
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(item.name, style: const pw.TextStyle(fontSize: 8)),
-                          pw.Text("@ ${item.price.toStringAsFixed(0)} | ${item.servingMethod}", 
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  flex: 4, 
+                  child: pw.Text(displayName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                ),
+                pw.Expanded(flex: 2, child: pw.Text(qtyStr, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                pw.Expanded(flex: 2, child: pw.Text(item.lineTotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+              ],
+            ),
+                    pw.Row(
+                      children: [
+                        pw.SizedBox(width: 5),
+                        pw.Text("@ ${item.price.toStringAsFixed(0)} | ${item.servingMethod}", 
                             style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
-                          if (item.servingMethod == 'Dine-in' && item.tableNumber != '')
-                            pw.Text("Table: ${item.tableNumber}", style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
-                        ],
-                      ),
+                        if (item.extraQty > 0)
+                          pw.Text(" | + Extra PC'S: ${item.extraQty % 1 == 0 ? item.extraQty.toInt() : item.extraQty} @ ${item.extraPrice.toStringAsFixed(0)}", 
+                            style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
+                      ],
                     ),
-                    pw.Expanded(flex: 1, child: pw.Text(qtyDisplay, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                    pw.Expanded(flex: 2, child: pw.Text(item.lineTotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
                   ],
                 ),
               );
@@ -277,10 +305,26 @@ class ExportService {
               ],
             ),
             pw.Divider(thickness: 0.5),
-            pw.SizedBox(height: 10),
-            
+            //pw.SizedBox(height: 2),
+
+            if (qrImage != null) 
+              pw.Center(
+                child: pw.Column(
+                  children: [
+                    pw.SizedBox(height: 3),
+                    pw.Container(
+                      width: 80, height: 80,
+                      child: pw.Image(qrImage),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(qrLabel.isNotEmpty ? qrLabel : "Scan for Payment/Review", style: const pw.TextStyle(fontSize: 6)),
+                    pw.SizedBox(height: 3),
+                  ],
+                ),
+              ),
+
             pw.Center(child: pw.Text("Thank You! Visit Again", style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic))),
-            pw.SizedBox(height: 15),
+            pw.SizedBox(height: 4),
             
             pw.Divider(thickness: 0.5),
             pw.Center(child: pw.Text("POWERED BY: The Griller Zone", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800))),
@@ -300,6 +344,9 @@ class ExportService {
       final pdfBytes = await pdf.save();
       await file.writeAsBytes(pdfBytes);
       
+      // Critical Fix: Add a small delay to ensure file system sync
+      await Future.delayed(const Duration(milliseconds: 300));
+
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdfBytes,
         name: "Bill_${tx.id}",
@@ -308,6 +355,134 @@ class ExportService {
       return path;
     } catch (e) {
       print("Bill PDF Error: $e");
+      return null;
+    }
+  }
+
+  /// Save KOT as PDF and return path
+  Future<String?> saveKotAsPdf(TransactionModel tx, String businessName) async {
+    final pdf = pw.Document();
+    final snapshots = tx.itemSnapshots;
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    final prefs = await SharedPreferences.getInstance();
+    
+    final address = prefs.getString('address_$uid') ?? "";
+    final contact = prefs.getString('contact_$uid') ?? "";
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        build: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Header: Restaurant Details
+            pw.Center(
+              child: pw.Column(
+                children: [
+                  pw.Text(businessName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                  if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
+                  if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7)),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 5),
+            pw.Divider(thickness: 0.5),
+            pw.Center(child: pw.Text("KITCHEN ORDER", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+            
+            // Token: Large and Bold
+            if (tx.token.isNotEmpty) ...[
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              pw.Center(child: pw.Text("TOKEN: ${tx.token}", style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold))),
+              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+            ],
+            
+            pw.SizedBox(height: 5),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text("Order No: #${tx.id}", style: const pw.TextStyle(fontSize: 9)),
+                pw.Text("Time: ${DateFormat('HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 9)),
+              ],
+            ),
+            
+            // Table Number
+            if (snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0') ...[
+              pw.SizedBox(height: 5),
+              pw.Center(child: pw.Text("TABLE: ${snapshots.first.tableNumber}", style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
+            ],
+
+            pw.Divider(thickness: 0.5),
+            ...snapshots.map((item) {
+              // Handle 0.5 for Half items
+              String qtyStr;
+              if (item.qty == 0.5) {
+                qtyStr = "Half";
+              } else {
+                qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString();
+              }
+              
+              // Clean name from redundant (Half)/(Full)
+              String cleanName = item.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
+
+              String v = item.variant.trim().toLowerCase();
+              bool hideV = v == 'full' || v == 'none' || v == '' || v == 'half';
+              String variantDisplay = hideV ? "" : "(${item.variant})";
+
+              return pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 3),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: pw.Text("[ ] $qtyStr x $cleanName $variantDisplay",
+                            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    if (item.extraQty > 0)
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(left: 15),
+                        child: pw.Text("+ EXTRA PC'S: ${item.extraQty % 1 == 0 ? item.extraQty.toInt() : item.extraQty}", 
+                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                      ),
+                    if (item.servingMethod.toLowerCase() == 'takeaway')
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(left: 15),
+                        child: pw.Text("[ TAKEAWAY ]", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                      ),
+                  ],
+                ),
+              );
+            }),
+            pw.Divider(thickness: 0.5),
+            pw.SizedBox(height: 5),
+            pw.Center(child: pw.Text(DateFormat('dd-MM-yyyy').format(tx.date), style: const pw.TextStyle(fontSize: 8))),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final dir = await _getReportDirectory();
+      final fileName = "KOT_${tx.id}_${DateTime.now().millisecondsSinceEpoch}.pdf";
+      final path = "${dir.path}/$fileName";
+      final file = File(path);
+      final pdfBytes = await pdf.save();
+      await file.writeAsBytes(pdfBytes);
+      
+      // Critical Fix: Add a small delay to ensure file system sync
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        name: "KOT_${tx.id}",
+      );
+
+      return path;
+    } catch (e) {
+      print("KOT PDF Error: $e");
       return null;
     }
   }
