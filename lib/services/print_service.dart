@@ -22,21 +22,20 @@ class PrintService {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final items = Provider.of<ItemProvider>(context, listen: false).items;
     
-    // Normalize status for reliable checking
     final status = tx.status.toLowerCase().trim();
     final isPendingStatus = status == 'pending' || status == 'draft';
     final isPurchase = tx.type.toLowerCase() == 'purchase';
 
-    // 1. Handle Bill/Purchase Voucher Printing
-    // Logic: Print if (Manual Reprint) OR (Auto-Print is ON AND it's NOT a pending order)
+    // List of print tasks to run
+    List<Future> tasks = [];
+
+    // 1. Bill/Purchase Task
     bool shouldPrintBill = isManualReprint || (profile.isAutoPrintEnabled && !isPendingStatus);
-    
     if (shouldPrintBill && printerProv.billPrinter.isEnabled) {
       if (printerProv.billPrinter.type == AppPrinterType.pdf) {
-        // PDF logic for Purchase will be handled in ExportService similarly if needed
-        await ExportService().saveBillAsPdf(tx, profile.businessName, masterItems: items, qrPath: profile.qrPath, qrLabel: profile.qrLabel);
+        tasks.add(ExportService().saveBillAsPdf(tx, profile.businessName, masterItems: items, qrPath: profile.qrPath, qrLabel: profile.qrLabel));
       } else {
-        await _printToDevice(
+        tasks.add(_printToDevice(
           tx: tx,
           config: printerProv.billPrinter,
           businessName: profile.businessName,
@@ -47,17 +46,16 @@ class PrintService {
           qrLabel: profile.qrLabel,
           isKot: false,
           isPurchase: isPurchase,
-        );
+        ));
       }
     }
 
-    // 2. Handle KOT Printing
-    // CRITICAL: NEVER print KOT for Purchase entries
+    // 2. KOT Task
     if (!isPurchase && profile.isAutoPrintEnabled && printerProv.kotPrinter.isEnabled && !isManualReprint) {
       if (printerProv.kotPrinter.type == AppPrinterType.pdf) {
-        await ExportService().saveKotAsPdf(tx, profile.businessName);
+        tasks.add(ExportService().saveKotAsPdf(tx, profile.businessName));
       } else {
-        await _printToDevice(
+        tasks.add(_printToDevice(
           tx: tx,
           config: printerProv.kotPrinter,
           businessName: profile.businessName,
@@ -65,7 +63,17 @@ class PrintService {
           contact: profile.contact,
           masterItems: items,
           isKot: true,
-        );
+        ));
+      }
+    }
+
+    // Execute all tasks (For PDF, this might still show sequentially in some OS, but logic is cleaner)
+    if (tasks.isNotEmpty) {
+      if (isManualReprint) {
+        await Future.wait(tasks);
+      } else {
+        // Don't await in background to avoid UI lag, but wait for PDF if that's the only one
+        Future.wait(tasks);
       }
     }
   }
@@ -148,6 +156,11 @@ class PrintService {
       bytes += generator.text("TABLE: $table", styles: const PosStyles(bold: true));
     }
 
+    bytes += generator.row([
+      PosColumn(text: "ITEM", width: 6, styles: const PosStyles(bold: true)),
+      PosColumn(text: "QTY", width: 3, styles: const PosStyles(bold: true, align: PosAlign.center)),
+      PosColumn(text: "TOTAL", width: 3, styles: const PosStyles(bold: true, align: PosAlign.right)),
+    ]);
     bytes += generator.hr();
 
     for (var i in tx.itemSnapshots) {
@@ -155,38 +168,54 @@ class PrintService {
       double p = i.price;
       double eq = i.extraQty;
       double ep = i.extraPrice;
-      
       double lineTotal = i.lineTotal;
 
-      // Qty Display Logic (Remove 0.5)
       String qtyStr = q == 0.5 ? "Half" : (q % 1 == 0 ? q.toInt().toString() : q.toString());
-
-      // Clean name from redundant (Half)/(Full)
       String cleanName = i.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
-
-      // Variant Display Logic: Hide if Full or Empty
       String variant = i.variant.trim();
       bool hideVariant = variant.toLowerCase() == 'full' || variant.toLowerCase() == 'none' || variant.isEmpty || variant.toLowerCase() == 'half';
-      
       String displayName = hideVariant ? cleanName : "$cleanName ($variant)";
 
-      bytes += generator.text(displayName, styles: const PosStyles(bold: true));
-      
+      // Row 1: Name, Qty, Total
       bytes += generator.row([
-        PosColumn(text: "$qtyStr x ${p.toStringAsFixed(0)}", width: 8),
-        PosColumn(text: lineTotal.toStringAsFixed(0), width: 4, styles: const PosStyles(align: PosAlign.right)),
+        PosColumn(text: displayName, width: 6, styles: const PosStyles(bold: true)),
+        PosColumn(text: qtyStr, width: 3, styles: const PosStyles(align: PosAlign.center)),
+        PosColumn(text: lineTotal.toStringAsFixed(0), width: 3, styles: const PosStyles(align: PosAlign.right)),
       ]);
 
+      // Row 2: @ Rate | Method | Extras
+      List<String> details = [];
+      details.add("@ ${p.toStringAsFixed(0)}");
+      if (i.servingMethod.isNotEmpty) details.add(i.servingMethod);
       if (eq > 0) {
         String exStr = eq % 1 == 0 ? eq.toInt().toString() : eq.toString();
-        bytes += generator.text("  + Extra PC'S: $exStr @ ${ep.toStringAsFixed(0)}");
+        details.add("+ Extra PC'S: $exStr @ ${ep.toStringAsFixed(0)}");
       }
+      bytes += generator.text("  ${details.join(' | ')}", styles: const PosStyles(height: PosTextSize.size1, width: PosTextSize.size1));
     }
 
     bytes += generator.hr();
+
+    // Summary Section
+    double subtotal = tx.itemSnapshots.fold(0, (sum, item) => sum + item.lineTotal);
+    double discount = tx.discountValue;
+
     bytes += generator.row([
-      PosColumn(text: "GRAND TOTAL", width: 6, styles: const PosStyles(bold: true, height: PosTextSize.size2)),
-      PosColumn(text: "Rs. ${tx.amount.toStringAsFixed(0)}", width: 6, styles: const PosStyles(align: PosAlign.right, bold: true, height: PosTextSize.size2)),
+      PosColumn(text: "Subtotal", width: 8),
+      PosColumn(text: subtotal.toStringAsFixed(0), width: 4, styles: const PosStyles(align: PosAlign.right)),
+    ]);
+
+    if (discount > 0) {
+      bytes += generator.row([
+        PosColumn(text: "Discount", width: 8),
+        PosColumn(text: "-${discount.toStringAsFixed(0)}", width: 4, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    }
+
+    bytes += generator.feed(1);
+    bytes += generator.row([
+      PosColumn(text: "ITEM COUNT: ${tx.itemSnapshots.length}", width: 5, styles: const PosStyles(bold: true)),
+      PosColumn(text: "GRAND TOTAL: ${tx.amount.toStringAsFixed(0)}", width: 7, styles: const PosStyles(align: PosAlign.right, bold: true, height: PosTextSize.size2, width: PosTextSize.size2)),
     ]);
     bytes += generator.hr();
 

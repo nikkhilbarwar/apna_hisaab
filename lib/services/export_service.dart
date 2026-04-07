@@ -42,7 +42,14 @@ class ExportService {
 
   String _getCleanDescription(TransactionModel tx) {
     final items = tx.itemSnapshots;
-    if (items.isEmpty) return tx.category;
+    if (items.isEmpty) {
+      // JSON hata kar saaf description nikaalein
+      String cleanDesc = tx.description.replaceAll(RegExp(r'\[.*\]'), '').trim();
+      if (cleanDesc.contains('|')) {
+        cleanDesc = cleanDesc.split('|').first.trim();
+      }
+      return cleanDesc.isNotEmpty ? cleanDesc : tx.category;
+    }
     return items.map((i) {
       String qtyStr = i.qty == 0.5 ? "Half" : (i.qty % 1 == 0 ? i.qty.toInt().toString() : i.qty.toString());
       return "${i.name} x$qtyStr".trim();
@@ -186,13 +193,18 @@ class ExportService {
     final isPurchase = tx.type.toLowerCase() == 'purchase';
     
     double subtotal = 0;
-    for (var s in snapshots) {
-      subtotal += s.lineTotal;
+    if (snapshots.isNotEmpty) {
+      for (var s in snapshots) {
+        subtotal += s.lineTotal;
+      }
+    } else {
+      subtotal = tx.amount + tx.discountValue - tx.taxValue;
     }
 
     double discount = tx.discountValue;
-    double taxAmount = tx.amount - (subtotal - discount);
-    if (taxAmount.abs() < 1.0) taxAmount = 0; // Handle rounding noise
+    double totalAfterDiscount = subtotal - discount;
+    double taxAmount = tx.amount - totalAfterDiscount;
+    if (taxAmount.abs() < 0.1) taxAmount = 0; 
 
     pdf.addPage(
       pw.Page(
@@ -248,36 +260,57 @@ class ExportService {
               ],
             ),
             pw.SizedBox(height: 4),
-            ...snapshots.map((item) {
-              String qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString();
-              String cleanName = item.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
-              String variant = item.variant.trim();
-              bool hideVariant = variant.toLowerCase() == 'full' || variant.toLowerCase() == 'none' || variant.isEmpty || variant.toLowerCase() == 'half';
-              String displayName = hideVariant ? cleanName : "$cleanName ($variant)";
-
-              return pw.Padding(
+            if (snapshots.isEmpty)
+              pw.Padding(
                 padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                child: pw.Row(
                   children: [
-                    pw.Row(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Expanded(flex: 4, child: pw.Text(displayName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-                        pw.Expanded(flex: 2, child: pw.Text("$qtyStr ${item.unit}", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                        pw.Expanded(flex: 2, child: pw.Text(item.lineTotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
-                      ],
-                    ),
-                    pw.Row(
-                      children: [
-                        pw.SizedBox(width: 5),
-                        pw.Text("@ ${item.price.toStringAsFixed(0)}", style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
-                      ],
-                    ),
+                    pw.Expanded(flex: 4, child: pw.Text(tx.category, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+                    pw.Expanded(flex: 2, child: pw.Text("1", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                    pw.Expanded(flex: 2, child: pw.Text(subtotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
                   ],
                 ),
-              );
-            }),
+              )
+            else
+              ...snapshots.map((item) {
+                String qtyStr = item.qty == 0.5 ? "Half" : (item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString());
+                String cleanName = item.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
+                String variant = item.variant.trim();
+                bool hideVariant = variant.toLowerCase() == 'full' || variant.toLowerCase() == 'none' || variant.isEmpty || variant.toLowerCase() == 'half';
+                String displayName = hideVariant ? cleanName : "$cleanName ($variant)";
+
+                // Sub-detail line: @ Rate | Method | Extras
+                List<String> details = [];
+                details.add("@ ${item.price.toStringAsFixed(0)}");
+                if (item.servingMethod.isNotEmpty) details.add(item.servingMethod);
+                if (item.extraQty > 0) {
+                  String exQty = item.extraQty % 1 == 0 ? item.extraQty.toInt().toString() : item.extraQty.toString();
+                  details.add("+ Extra PC'S: $exQty @ ${item.extraPrice.toStringAsFixed(0)}");
+                }
+                String detailString = details.join(" | ");
+
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Expanded(flex: 4, child: pw.Text(displayName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+                          pw.Expanded(flex: 2, child: pw.Text(qtyStr, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                          pw.Expanded(flex: 2, child: pw.Text(item.lineTotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                        ],
+                      ),
+                      if (detailString.isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(left: 5),
+                          child: pw.Text(detailString, style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
+                        ),
+                    ],
+                  ),
+                );
+              }),
             pw.Divider(thickness: 0.5),
             
             _buildPdfBreakdownRow("Subtotal", subtotal.toStringAsFixed(0)),
