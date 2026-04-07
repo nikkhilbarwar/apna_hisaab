@@ -15,7 +15,6 @@ import '../models/staff_model.dart';
 import '../models/category_model.dart';
 import '../models/supplier_model.dart';
 import '../models/transaction_model.dart';
-import '../models/purchase_reminder_model.dart';
 import 'profile_provider.dart';
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';

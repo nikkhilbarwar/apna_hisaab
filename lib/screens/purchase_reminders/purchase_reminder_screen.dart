@@ -5,7 +5,6 @@ import '../../models/purchase_reminder_model.dart';
 import '../../providers/purchase_reminder_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/category_provider.dart';
-import '../../providers/item_provider.dart';
 import '../../utils/report_helper.dart';
 import '../daily_entry/entry_screen.dart';
 

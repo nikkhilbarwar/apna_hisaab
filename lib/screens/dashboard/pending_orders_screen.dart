@@ -16,7 +16,7 @@ class PendingOrdersScreen extends StatefulWidget {
 
 class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
   bool _isLoading = true;
-  final Set<int> _selectedIds = {}; // Track selected transaction IDs
+  final Set<int> _selectedIds = {}; 
 
   @override
   void initState() {
@@ -129,6 +129,9 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
     final secondaryTextColor = profile.secondaryTextColor;
     final cardColor = profile.cardColor;
 
+    final items = order.parsedItems;
+    final double discount = order.discountValue;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -172,18 +175,45 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Text(order.category, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+                      Text(order.category.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: themeColor, letterSpacing: 1)),
                       const SizedBox(height: 8),
-                      ...order.parsedItems.take(3).map((item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          children: [
-                            Icon(Icons.circle, size: 6, color: themeColor.withValues(alpha: 0.5)),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(item['display'] ?? '', style: TextStyle(color: secondaryTextColor, fontSize: 13))),
-                          ],
+                      
+                      // Enhanced Item List with Extras
+                      ...items.take(4).map((item) {
+                        double exQty = double.tryParse(item['extra_qty'] ?? '0') ?? 0;
+                        double exPrice = double.tryParse(item['extra_price'] ?? '0') ?? 0;
+                        bool hasExtras = exQty > 0 || exPrice > 0;
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.circle, size: 6, color: themeColor.withValues(alpha: 0.5)),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: Text(item['display'] ?? '', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.bold))),
+                                ],
+                              ),
+                              if (hasExtras)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 14, top: 2),
+                                  child: Text(
+                                    '+ Extra: ${exQty > 0 ? '${exQty.toInt()} x ' : ''}${profile.currencySymbol}${exPrice.toInt()}',
+                                    style: TextStyle(color: Colors.blue.shade700, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      }),
+                      if (items.length > 4) 
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: Text('+ ${items.length - 4} more items', style: TextStyle(color: secondaryTextColor, fontSize: 10, fontStyle: FontStyle.italic)),
                         ),
-                      )),
+
                       const Divider(height: 24),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -191,15 +221,34 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('EST. TOTAL', style: TextStyle(color: secondaryTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                              Text('${profile.currencySymbol}${order.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: themeColor)),
+                              Row(
+                                children: [
+                                  Text('TOTAL DUE', style: TextStyle(color: secondaryTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  if (discount > 0) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                                      child: Text('- ${profile.currencySymbol}${discount.toStringAsFixed(0)} OFF', style: const TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              Text('${profile.currencySymbol}${order.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: textColor)),
                             ],
                           ),
                           if (_selectedIds.isEmpty)
-                            ElevatedButton(
+                            ElevatedButton.icon(
                               onPressed: () => _openPendingOrder(context, order),
-                              style: ElevatedButton.styleFrom(backgroundColor: themeColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
-                              child: const Text('OPEN CART', style: TextStyle(fontWeight: FontWeight.bold)),
+                              icon: const Icon(Icons.shopping_cart_checkout_rounded, size: 16),
+                              label: const Text('OPEN BILL'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: themeColor, 
+                                foregroundColor: Colors.white, 
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), 
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                elevation: 0
+                              ),
                             ),
                         ],
                       ),
@@ -228,11 +277,17 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.pending_actions_rounded, size: 80, color: profile.secondaryTextColor.withValues(alpha: 0.2)),
-            const SizedBox(height: 16),
-            Text('No pending orders', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold, fontSize: 16)),
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.05), shape: BoxShape.circle),
+              child: Icon(Icons.pending_actions_rounded, size: 80, color: profile.themeColor.withOpacity(0.2)),
+            ),
+            const SizedBox(height: 24),
+            Text('No Pending Orders', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.w900, fontSize: 20)),
+            const SizedBox(height: 8),
+            Text('Saved drafts and open tables will appear here', style: TextStyle(color: profile.secondaryTextColor, fontSize: 13), textAlign: TextAlign.center),
           ],
         ),
       ),

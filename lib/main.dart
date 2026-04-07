@@ -13,6 +13,7 @@ import 'providers/supplier_provider.dart';
 import 'providers/sync_provider.dart';
 import 'providers/unit_provider.dart';
 import 'providers/purchase_reminder_provider.dart';
+import 'providers/printer_provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/export_service.dart';
 import 'services/notification_service.dart';
@@ -118,6 +119,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => UnitProvider()..fetchUnits()),
           ChangeNotifierProvider(create: (_) => SyncProvider()),
           ChangeNotifierProvider(create: (_) => PurchaseReminderProvider()..fetchReminders()),
+          ChangeNotifierProvider(create: (_) => PrinterProvider()),
         ],
         child: const MyApp(),
       ),

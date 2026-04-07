@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:excel/excel.dart';
@@ -18,28 +17,225 @@ class ReportHelper {
     Color themeColor,
     {DateTime? firstDate, DateTime? lastDate}
   ) async {
-    return await showDateRangePicker(
+    DateTimeRange selectedRange = initialRange ?? DateTimeRange(start: DateTime.now(), end: DateTime.now());
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF1A1D2D) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF2D3436);
+    final secondaryTextColor = isDark ? Colors.white70 : const Color(0xFF636E72);
+
+    return await showModalBottomSheet<DateTimeRange>(
       context: context,
-      initialDateRange: initialRange,
-      firstDate: firstDate ?? DateTime(2020),
-      lastDate: lastDate ?? DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) => _buildPickerTheme(context, child, themeColor),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          decoration: BoxDecoration(
+            color: surfaceColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2))),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('SELECT DATE RANGE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: textColor, letterSpacing: 1)),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.close_rounded, color: textColor)),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _dateTile(
+                      label: 'FROM',
+                      date: selectedRange.start,
+                      onTap: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate: selectedRange.start,
+                          firstDate: firstDate ?? DateTime(2020),
+                          lastDate: selectedRange.end,
+                          builder: (context, child) => _buildPickerTheme(context, child, themeColor),
+                        );
+                        if (d != null) setModalState(() => selectedRange = DateTimeRange(start: d, end: selectedRange.end));
+                      },
+                      themeColor: themeColor,
+                      isDark: isDark,
+                      textColor: textColor,
+                      secondaryTextColor: secondaryTextColor,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Icon(Icons.arrow_forward_rounded, color: themeColor.withOpacity(0.5), size: 16),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _dateTile(
+                      label: 'TO',
+                      date: selectedRange.end,
+                      onTap: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate: selectedRange.end,
+                          firstDate: selectedRange.start,
+                          lastDate: lastDate ?? DateTime.now(),
+                          builder: (context, child) => _buildPickerTheme(context, child, themeColor),
+                        );
+                        if (d != null) setModalState(() => selectedRange = DateTimeRange(start: selectedRange.start, end: d));
+                      },
+                      themeColor: themeColor,
+                      isDark: isDark,
+                      textColor: textColor,
+                      secondaryTextColor: secondaryTextColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _quickChip('Today', () => setModalState(() {
+                    final now = DateTime.now();
+                    selectedRange = DateTimeRange(start: DateTime(now.year, now.month, now.day), end: DateTime(now.year, now.month, now.day, 23, 59));
+                  }), themeColor, isDark),
+                  _quickChip('Yesterday', () => setModalState(() {
+                    final d = DateTime.now().subtract(const Duration(days: 1));
+                    selectedRange = DateTimeRange(start: DateTime(d.year, d.month, d.day), end: DateTime(d.year, d.month, d.day, 23, 59));
+                  }), themeColor, isDark),
+                  _quickChip('Last 7 Days', () => setModalState(() {
+                    final end = DateTime.now();
+                    final start = end.subtract(const Duration(days: 6));
+                    selectedRange = DateTimeRange(start: DateTime(start.year, start.month, start.day), end: end);
+                  }), themeColor, isDark),
+                  _quickChip('This Month', () => setModalState(() {
+                    final now = DateTime.now();
+                    selectedRange = DateTimeRange(start: DateTime(now.year, now.month, 1), end: now);
+                  }), themeColor, isDark),
+                ],
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, selectedRange),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: themeColor,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 55),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  elevation: 0,
+                ),
+                child: const Text('APPLY FILTER', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  /// Wraps the standard showDatePicker with the new UI theme
+  static Widget _dateTile({required String label, required DateTime date, required VoidCallback onTap, required Color themeColor, required bool isDark, required Color textColor, required Color secondaryTextColor}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF8F9FE),
+          borderRadius: BorderRadius.circular(16),
+          //border: Border.all(color: themeColor.withOpacity(0.1)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: secondaryTextColor, letterSpacing: 1)),
+            const SizedBox(height: 4),
+            Text(DateFormat('dd MMM yyyy').format(date), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: textColor)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _quickChip(String label, VoidCallback onTap, Color themeColor, bool isDark) {
+    return ActionChip(
+      label: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+      onPressed: onTap,
+      backgroundColor: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+      side: BorderSide(color: themeColor.withOpacity(0.1)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    );
+  }
+
+  /// Wraps the standard showDatePicker with a custom Bottom Sheet UI
   static Future<DateTime?> showAppDatePicker(
     BuildContext context, 
     DateTime initialDate, 
     Color themeColor,
     {DateTime? firstDate, DateTime? lastDate}
   ) async {
-    return await showDatePicker(
+    DateTime selectedDate = initialDate;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF1A1D2D) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF2D3436);
+    final secondaryTextColor = isDark ? Colors.white70 : const Color(0xFF636E72);
+
+    return await showModalBottomSheet<DateTime>(
       context: context,
-      initialDate: initialDate,
-      firstDate: firstDate ?? DateTime(2020),
-      lastDate: lastDate ?? DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) => _buildPickerTheme(context, child, themeColor),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          decoration: BoxDecoration(
+            color: surfaceColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2))),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('SELECT DATE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: textColor, letterSpacing: 1)),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.close_rounded, color: textColor)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Theme(
+                data: Theme.of(context).copyWith(
+                  colorScheme: isDark 
+                    ? ColorScheme.dark(primary: themeColor, onPrimary: Colors.white, surface: surfaceColor, onSurface: textColor)
+                    : ColorScheme.light(primary: themeColor, onPrimary: Colors.white, surface: surfaceColor, onSurface: textColor),
+                ),
+                child: CalendarDatePicker(
+                  initialDate: selectedDate,
+                  firstDate: firstDate ?? DateTime(2020),
+                  lastDate: lastDate ?? DateTime.now().add(const Duration(days: 365)),
+                  onDateChanged: (date) => setModalState(() => selectedDate = date),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, selectedDate),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: themeColor,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 55),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  elevation: 0,
+                ),
+                child: const Text('CONFIRM DATE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

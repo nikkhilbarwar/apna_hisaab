@@ -35,7 +35,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final txProvider = Provider.of<TransactionProvider>(context);
     final staffProvider = Provider.of<StaffProvider>(context);
 
-    // Dynamic Filter Logic: respects tab, date, category, and payment mode
+    // Filter transactions globally based on date range
     final allSales = txProvider.getFilteredTransactions(
       type: 'sale', 
       range: _selectedRange, 
@@ -194,8 +194,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final themeColor = profile.themeColor;
 
     return Container(
-      padding: const EdgeInsets.all(16),
-      color: profile.cardColor,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      decoration: BoxDecoration(
+        color: profile.cardColor,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          )
+        ],
+      ),
       child: Column(
         children: [
           Row(
@@ -211,24 +221,31 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     );
                     if (r != null) setState(() => _selectedRange = r);
                   },
+                  borderRadius: BorderRadius.circular(15),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                     decoration: BoxDecoration(
-                      color: profile.scaffoldColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+                      gradient: LinearGradient(
+                        colors: [themeColor.withOpacity(0.12), themeColor.withOpacity(0.05)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: themeColor.withOpacity(0.2)),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.calendar_today, size: 14, color: themeColor),
-                        const SizedBox(width: 8),
+                        Icon(Icons.calendar_month_rounded, size: 18, color: themeColor),
+                        const SizedBox(width: 10),
                         Text(
                           DateFormat('dd MMM').format(_selectedRange.start) == DateFormat('dd MMM').format(_selectedRange.end)
                             ? DateFormat('dd MMM yyyy').format(_selectedRange.start)
                             : '${DateFormat('dd MMM').format(_selectedRange.start)} - ${DateFormat('dd MMM').format(_selectedRange.end)}',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: profile.textColor),
+                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: profile.textColor, letterSpacing: 0.5),
                         ),
+                        const SizedBox(width: 6),
+                        Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: themeColor.withOpacity(0.5)),
                       ],
                     ),
                   ),
@@ -236,7 +253,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -340,7 +357,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _exportTile(IconData icon, String title, Color color, VoidCallback onTap, ProfileProvider profile) {
     return ListTile(
       onTap: onTap,
-      leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
+      leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
       title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14)),
       trailing: const Icon(Icons.file_download_outlined, size: 18),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -354,7 +371,7 @@ class _StickySummaryHeader extends SliverPersistentHeaderDelegate {
   _StickySummaryHeader({required this.child});
 
   @override
-  double get minExtent => 145.0; // Summary + Banner Height
+  double get minExtent => 145.0; 
   @override
   double get maxExtent => 145.0;
 
@@ -428,102 +445,147 @@ class _ReportList extends StatelessWidget {
           );
         }
         if (index == 1) {
-          return _buildAnalysisSummary(filtered, profile, txProvider, itemProvider, type);
+          return _buildAnalysisSummary(context, filtered, profile, txProvider, itemProvider, type);
         }
         
         final tx = filtered[index - 2];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: profile.cardColor,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
-          ),
-          child: ListTile(
-            onTap: () => _showDetails(context, tx, profile),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            leading: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: (tx.type == 'sale' ? Colors.green : Colors.red).withValues(alpha: 0.1), shape: BoxShape.circle),
-              child: Icon(tx.type == 'sale' ? Icons.south_west_rounded : Icons.north_east_rounded, color: tx.type == 'sale' ? Colors.green : Colors.red, size: 18),
+        
+        // Date Header Logic: Detect when day changes
+        bool showDateHeader = false;
+        if (index == 2) {
+          showDateHeader = true;
+        } else {
+          final prevTx = filtered[index - 3];
+          if (DateFormat('ddMMyyyy').format(tx.date) != DateFormat('ddMMyyyy').format(prevTx.date)) {
+            showDateHeader = true;
+          }
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (showDateHeader)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 16, 0, 12),
+                child: Row(
+                  children: [
+                    Container(width: 4, height: 14, decoration: BoxDecoration(color: profile.themeColor, borderRadius: BorderRadius.circular(2))),
+                    const SizedBox(width: 8),
+                    Text(
+                      _getDateLabel(tx.date),
+                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.textColor, letterSpacing: 0.5),
+                    ),
+                  ],
+                ),
+              ),
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: profile.cardColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+              ),
+              child: ListTile(
+                onTap: () => _showDetails(context, tx, profile),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: (tx.type == 'sale' || tx.type == 'income' ? Colors.green : Colors.red).withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: Icon(tx.type == 'sale' || tx.type == 'income' ? Icons.south_west_rounded : Icons.north_east_rounded, color: tx.type == 'sale' || tx.type == 'income' ? Colors.green : Colors.red, size: 18),
+                ),
+                title: Text(tx.type == 'sale' || tx.type == 'income' ? _getCleanItemNames(tx) : tx.category, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text('${DateFormat('hh:mm a').format(tx.date)} • ${tx.paymentMode}', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
+                trailing: Text('${profile.currencySymbol}${profile.showAmount ? tx.amount.toStringAsFixed(0) : "****"}', style: TextStyle(fontWeight: FontWeight.w900, color: tx.type == 'sale' || tx.type == 'income' ? Colors.green.shade700 : Colors.red.shade700, fontSize: 14)),
+              ),
             ),
-            title: Text(tx.type == 'sale' ? _getCleanItemNames(tx) : tx.category, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text('${DateFormat('dd MMM, hh:mm a').format(tx.date)} • ${tx.paymentMode}', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
-            trailing: Text('${profile.currencySymbol}${profile.showAmount ? tx.amount.toStringAsFixed(0) : "****"}', style: TextStyle(fontWeight: FontWeight.w900, color: tx.type == 'sale' ? Colors.green.shade700 : Colors.red.shade700, fontSize: 14)),
-          ),
+          ],
         );
       },
     );
   }
 
+  String _getDateLabel(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final d = DateTime(date.year, date.month, date.day);
+
+    if (d == today) return "TODAY";
+    if (d == yesterday) return "YESTERDAY";
+    return DateFormat('dd MMMM yyyy').format(date).toUpperCase();
+  }
+
   String _getCleanItemNames(TransactionModel tx) {
     final items = tx.parsedItems;
-    if (items.isEmpty) return 'Sale Entry';
+    if (items.isEmpty) return 'Entry';
     if (items.length == 1) return items.first['name'] ?? 'Item';
     return '${items.first['name']} + ${items.length - 1} more';
   }
 
-  Widget _buildAnalysisSummary(List<TransactionModel> txs, ProfileProvider profile, TransactionProvider provider, ItemProvider itemProvider, String reportType) {
+  Widget _buildAnalysisSummary(BuildContext context, List<TransactionModel> txs, ProfileProvider profile, TransactionProvider provider, ItemProvider itemProvider, String reportType) {
     final split = provider.getPaymentSplit(txs);
     
-    // Snapshot-based grouping logic
     Map<String, double> itemRevenue = {};
     Map<String, double> catRevenue = {};
+    Map<String, List<Map<String, dynamic>>> catAuditHistory = {};
 
     for (var tx in txs) {
-      double txActualTotal = tx.amount;
-      double transactionItemsRawSum = 0;
-      List<Map<String, dynamic>> itemLineContributions = [];
-
-      for (var itemMap in tx.parsedItems) {
-        String name = itemMap['name'] ?? 'Unknown';
-        double q = double.tryParse(itemMap['qty'] ?? '0') ?? 0;
-        double p = double.tryParse(itemMap['price'] ?? '0') ?? 0;
-        double eq = double.tryParse(itemMap['extra_qty'] ?? '0') ?? 0;
-        double ep = double.tryParse(itemMap['extra_price'] ?? '0') ?? 0;
-
-        ItemModel? master;
-        try { master = itemProvider.items.firstWhere((i) => i.name == name); } catch (_) {}
-
-        double itemRawBase = 0;
-        if (master != null && master.halfPrice != null && master.halfPrice! > 0) {
-          // Plate logic: 1.0 = Full Price, 0.5 = Half Price
-          int fullPlates = q.floor();
-          double remainder = q - fullPlates;
-          itemRawBase = (fullPlates * (master.price ?? 0)) + (remainder > 0 ? (master.halfPrice ?? 0) : 0);
-        } else {
-          // Linear logic
-          itemRawBase = q * p;
-        }
-
-        double lineRawValue = itemRawBase + (eq * ep);
-        transactionItemsRawSum += lineRawValue;
-
-        itemLineContributions.add({
-          'name': name,
-          'category': itemMap['category'] ?? '',
-          'rawValue': lineRawValue,
+      final snapshots = tx.itemSnapshots;
+      
+      if (snapshots.isEmpty) {
+        // Fallback: If no item snapshots, use Transaction's own category and amount
+        String cat = tx.category;
+        if (cat.isEmpty || cat.toLowerCase() == 'sale') cat = 'General';
+        
+        catRevenue[cat] = (catRevenue[cat] ?? 0) + tx.amount;
+        
+        catAuditHistory[cat] ??= [];
+        catAuditHistory[cat]!.add({
+          'time': DateFormat('hh:mm a').format(tx.date),
+          'date': DateFormat('dd MMM').format(tx.date),
+          'name': tx.type == 'sale' ? 'Quick Sale' : tx.category,
+          'qty': 1.0,
+          'price': tx.amount,
+          'variant': 'Full',
+          'extraQty': 0.0,
+          'extraPrice': 0.0,
+          'serving': 'N/A',
+          'mode': tx.paymentMode,
+          'total': tx.amount,
         });
+        continue;
       }
 
-      // Scaling handles portions AND discounts perfectly by using Weighted Contribution
-      double scale = transactionItemsRawSum > 0 ? (txActualTotal / transactionItemsRawSum) : 1.0;
-
-      for (var contrib in itemLineContributions) {
-        double scaledValue = contrib['rawValue'] * scale;
-        String name = contrib['name'];
-        String cat = contrib['category'];
-
-        itemRevenue[name] = (itemRevenue[name] ?? 0) + scaledValue;
-
-        // Category Resolution
-        if (cat == '' || cat == 'Sales' || cat == 'General' || cat == 'purchase' || cat == 'sale') {
+      for (var s in snapshots) {
+        String name = s.name;
+        String cat = s.category;
+        
+        // Resolve "General" Category using Item Menu Lookup
+        if (cat == '' || cat.toLowerCase() == 'general' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'sale') {
            try {
              final master = itemProvider.items.firstWhere((i) => i.name == name);
              cat = master.category;
-           } catch(_) { cat = 'Uncategorized'; }
+           } catch(_) { cat = 'General'; }
         }
-        catRevenue[cat] = (catRevenue[cat] ?? 0) + scaledValue;
+        
+        double val = s.lineTotal;
+        itemRevenue[name] = (itemRevenue[name] ?? 0) + val;
+        catRevenue[cat] = (catRevenue[cat] ?? 0) + val;
+        
+        catAuditHistory[cat] ??= [];
+        catAuditHistory[cat]!.add({
+          'time': DateFormat('hh:mm a').format(tx.date),
+          'date': DateFormat('dd MMM').format(tx.date),
+          'name': s.name,
+          'qty': s.qty,
+          'price': s.price,
+          'variant': s.variant,
+          'extraQty': s.extraQty,
+          'extraPrice': s.extraPrice,
+          'serving': s.servingMethod,
+          'mode': tx.paymentMode,
+          'total': s.lineTotal,
+        });
       }
     }
 
@@ -545,11 +607,12 @@ class _ReportList extends StatelessWidget {
         const SizedBox(height: 24),
         _sectionHeader('CATEGORY-WISE SALES', profile),
         const SizedBox(height: 12),
-        _summaryBox(sortedCats, profile),
+        // PROFESSIONAL AUDIT CLICK
+        _summaryBox(sortedCats, profile, (catName) => _showCategoryDetails(context, catName, catRevenue[catName]!, catAuditHistory[catName]!, profile)),
         const SizedBox(height: 24),
         _sectionHeader('ITEM-WISE SALES', profile),
         const SizedBox(height: 12),
-        _summaryBox(sortedItems.take(10).toList(), profile),
+        _summaryBox(sortedItems.take(10).toList(), profile, null),
         const SizedBox(height: 24),
         _sectionHeader('TRANSACTION LOG', profile),
         const SizedBox(height: 12),
@@ -557,11 +620,130 @@ class _ReportList extends StatelessWidget {
     );
   }
 
+  void _showCategoryDetails(BuildContext context, String catName, double total, List<Map<String, dynamic>> history, ProfileProvider profile) {
+    int halfCount = 0;
+    int fullCount = 0;
+    for (var sale in history) {
+      if (sale['variant'].toString().toLowerCase() == 'half') halfCount++;
+      if (sale['variant'].toString().toLowerCase() == 'full') fullCount++;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: BoxDecoration(color: profile.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
+            Text('CATEGORY AUDIT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.secondaryTextColor, letterSpacing: 1.5)),
+            const SizedBox(height: 8),
+            Text(catName.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 28, color: profile.textColor)),
+            Text('Total Revenue: ${profile.currencySymbol}${total.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.themeColor, fontSize: 16)),
+            const Divider(height: 40),
+            
+            Row(
+              children: [
+                _insightStat('Full Portions', '$fullCount', Colors.blue),
+                const SizedBox(width: 12),
+                _insightStat('Half Portions', '$halfCount', Colors.orange),
+              ],
+            ),
+            const SizedBox(height: 32),
+            Text('DETAILED SALES HISTORY', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: history.length,
+                itemBuilder: (context, i) {
+                  final sale = history[i];
+                  String qLabel = sale['qty'] == 0.5 ? "Half" : (sale['qty'] == 1.0 ? "Full" : sale['qty'].toStringAsFixed(1));
+                  bool hasExtras = sale['extraQty'] > 0 || sale['extraPrice'] > 0;
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: profile.scaffoldColor.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(sale['name'], style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 14)),
+                                Text('${sale['date']} at ${sale['time']}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            Text('${profile.currencySymbol}${sale['total'].toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, color: profile.themeColor, fontSize: 16)),
+                          ],
+                        ),
+                        const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(height: 1, thickness: 0.5)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('$qLabel x ${profile.currencySymbol}${sale['price'].toStringAsFixed(0)} • ${sale['mode']}', style: TextStyle(fontSize: 11, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                              child: Text(sale['serving'].toString().toUpperCase(), style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: profile.themeColor)),
+                            ),
+                          ],
+                        ),
+                        if (hasExtras)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                Icon(Icons.add_circle_outline_rounded, size: 12, color: Colors.blue.shade600),
+                                const SizedBox(width: 6),
+                                Text('Extra: ${sale['extraQty'].toInt()} x ${profile.currencySymbol}${sale['extraPrice'].toInt()}', 
+                                  style: TextStyle(fontSize: 11, color: profile.textColor, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _insightStat(String label, String val, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: color.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.1))),
+        child: Column(
+          children: [
+            Text(val, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color)),
+            Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _sectionHeader(String title, ProfileProvider profile) {
     return Text(title, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: profile.secondaryTextColor, letterSpacing: 1));
   }
 
-  Widget _summaryBox(List<MapEntry<String, double>> entries, ProfileProvider profile) {
+  Widget _summaryBox(List<MapEntry<String, double>> entries, ProfileProvider profile, Function(String)? onTap) {
     return Container(
       decoration: BoxDecoration(
         color: profile.cardColor,
@@ -569,13 +751,17 @@ class _ReportList extends StatelessWidget {
         border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
       ),
       child: Column(
-        children: entries.map((e) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Expanded(child: Text(e.key, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: profile.textColor))),
-              Text('${profile.currencySymbol}${e.value.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: profile.themeColor)),
-            ],
+        children: entries.map((e) => InkWell(
+          onTap: onTap != null ? () => onTap(e.key) : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(child: Text(e.key, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: profile.textColor))),
+                Text('${profile.currencySymbol}${e.value.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: profile.themeColor)),
+                if (onTap != null) const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+              ],
+            ),
           ),
         )).toList(),
       ),
@@ -603,37 +789,14 @@ class _ReportList extends StatelessWidget {
   }
 
   void _showDetails(BuildContext context, TransactionModel tx, ProfileProvider profile) {
-    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
-    
-    // Calculate accurate contributions for display
-    double transactionItemsRawSum = 0;
-    List<Map<String, dynamic>> contributions = [];
-    for (var i in tx.parsedItems) {
-      double q = double.tryParse(i['qty'] ?? '0') ?? 0;
-      double p = double.tryParse(i['price'] ?? '0') ?? 0;
-      double eq = double.tryParse(i['extra_qty'] ?? '0') ?? 0;
-      double ep = double.tryParse(i['extra_price'] ?? '0') ?? 0;
-      
-      double itemRawBase = 0;
-      try {
-        final master = itemProvider.items.firstWhere((it) => it.name == i['name']);
-        if (master.halfPrice != null && master.halfPrice! > 0) {
-          int fullPlates = q.floor();
-          double remainder = q - fullPlates;
-          itemRawBase = (fullPlates * (master.price ?? 0)) + (remainder > 0 ? (master.halfPrice ?? 0) : 0);
-        } else {
-          itemRawBase = q * p;
-        }
-      } catch(_) {
-        itemRawBase = q * p;
-      }
-      
-      double lineRawValue = itemRawBase + (eq * ep);
-      transactionItemsRawSum += lineRawValue;
-      contributions.add({...i, 'rawValue': lineRawValue});
+    final snapshots = tx.itemSnapshots;
+    double calculatedSubtotal = 0;
+    for (var s in snapshots) {
+      calculatedSubtotal += s.lineTotal;
     }
-    
-    double scale = transactionItemsRawSum > 0 ? (tx.amount / transactionItemsRawSum) : 1.0;
+
+    double discount = tx.discountValue;
+    double taxAmount = tx.taxValue;
 
     showModalBottomSheet(
       context: context,
@@ -651,55 +814,103 @@ class _ReportList extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('BILL DETAILS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.secondaryTextColor, letterSpacing: 1.5)),
-                if (tx.parsedItems.isNotEmpty && tx.parsedItems.first['table_number'] != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                    child: Text('TABLE: ${tx.parsedItems.first['table_number']}', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w900, fontSize: 10)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (tx.status == 'pending' ? Colors.orange : Colors.green).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
                   ),
+                  child: Text(tx.status.toUpperCase(), style: TextStyle(color: tx.status == 'pending' ? Colors.orange : Colors.green, fontWeight: FontWeight.bold, fontSize: 10)),
+                ),
               ],
             ),
             const SizedBox(height: 20),
             _detailRow('Date/Time', DateFormat('dd MMM yyyy, hh:mm a').format(tx.date), profile),
             _detailRow('Payment Mode', tx.paymentMode, profile),
             const Divider(height: 40),
-            Text('ITEMS LIST', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)),
-            const SizedBox(height: 12),
-            ...contributions.map((i) {
-              double itemFinalPrice = (i['rawValue'] as double) * scale;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12.0),
+            Text('ITEMS BREAKDOWN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)),
+            const SizedBox(height: 16),
+            
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.35),
+              child: SingleChildScrollView(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(child: Text('${i['name']}${i['variant'] != '' ? ' (${i['variant']})' : ''} x ${i['qty']}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 14))),
-                        Text(profile.showAmount ? '${profile.currencySymbol}${itemFinalPrice.toStringAsFixed(1)}' : '${profile.currencySymbol}****', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w900)),
-                      ],
-                    ),
-                    if (i['serving_method'] != null && i['serving_method'] != '')
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(4)),
-                        child: Text(i['serving_method']!.toUpperCase(), style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: profile.themeColor)),
+                  children: snapshots.map((s) {
+                    String qLabel = s.qty == 0.5 ? "Half" : (s.qty == 1.0 ? "Full" : s.qty.toStringAsFixed(1));
+                    bool hasExtras = s.extraQty > 0 || s.extraPrice > 0;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: profile.scaffoldColor.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)
                       ),
-                  ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(s.name, style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 15)),
+                                    const SizedBox(height: 4),
+                                    Text('$qLabel x ${profile.currencySymbol}${s.price.toStringAsFixed(0)} • ${s.variant}', 
+                                      style: TextStyle(color: profile.secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text('${profile.currencySymbol}${s.lineTotal.toStringAsFixed(0)}',
+                                    style: TextStyle(fontWeight: FontWeight.w900, color: profile.themeColor, fontSize: 16)),
+                                  Text('Total', style: TextStyle(fontSize: 9, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ],
+                          ),
+                          if (hasExtras) ...[
+                            const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(height: 1, thickness: 0.5)),
+                            Row(
+                              children: [
+                                Icon(Icons.add_circle_outline_rounded, size: 14, color: Colors.blue.shade600),
+                                const SizedBox(width: 8),
+                                Text('Extra Qty: ${s.extraQty.toInt()} • Extra Rs: ${profile.currencySymbol}${s.extraPrice.toInt()}',
+                                  style: TextStyle(fontSize: 12, color: profile.textColor, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 ),
-              );
-            }),
+              ),
+            ),
+            
             const Divider(height: 40),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('GRAND TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.textColor)),
-                Text(profile.showAmount ? '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}' : '${profile.currencySymbol}****', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, color: profile.themeColor)),
-              ],
+            _rowBreakdown('Subtotal', '${profile.currencySymbol}${calculatedSubtotal.toStringAsFixed(0)}', profile),
+            if (discount > 0) _rowBreakdown('Discount', '- ${profile.currencySymbol}${discount.toStringAsFixed(0)}', profile, color: Colors.green),
+            if (taxAmount > 0) _rowBreakdown('Tax', '${profile.currencySymbol}${taxAmount.toStringAsFixed(0)}', profile),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(20), border: Border.all(color: profile.themeColor.withValues(alpha: 0.1))),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('GRAND TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.textColor)),
+                  Text(profile.showAmount ? '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}' : '${profile.currencySymbol}****', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, color: profile.themeColor)),
+                ],
+              ),
             ),
             const SizedBox(height: 32),
-            if (tx.type == 'sale')
+            if (tx.type == 'sale' || tx.type == 'income')
               ElevatedButton.icon(
                 onPressed: () async {
                   final exportService = ExportService();
@@ -708,16 +919,21 @@ class _ReportList extends StatelessWidget {
                 },
                 icon: const Icon(Icons.print_rounded),
                 label: const Text('REPRINT BILL', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: profile.themeColor,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: profile.themeColor, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
               ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _rowBreakdown(String l, String v, ProfileProvider profile, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(l, style: TextStyle(color: profile.secondaryTextColor, fontSize: 13, fontWeight: FontWeight.bold)),
+        Text(v, style: TextStyle(fontWeight: FontWeight.w900, color: color ?? profile.textColor, fontSize: 14))
+      ]),
     );
   }
 

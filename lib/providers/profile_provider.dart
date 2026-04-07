@@ -19,6 +19,7 @@ class ProfileProvider with ChangeNotifier {
   bool _isDarkMode = false;
   int _totalTables = 20;
   bool _showAmount = true;
+  bool _isAutoPrintEnabled = false; 
 
   // Security Settings
   String _customPin = '';
@@ -46,6 +47,7 @@ class ProfileProvider with ChangeNotifier {
   String get currencySymbol => _currencySymbol;
   int get totalTables => _totalTables;
   bool get showAmount => _showAmount;
+  bool get isAutoPrintEnabled => _isAutoPrintEnabled;
   
   String get customPin => _customPin;
   bool get isPinEnabled => _isPinEnabled;
@@ -70,9 +72,9 @@ class ProfileProvider with ChangeNotifier {
 
   List<BoxShadow> get themeShadow {
     if (_isDarkMode) {
-      return [BoxShadow(color: themeColor.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 4))];
+      return [BoxShadow(color: themeColor.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 4))];
     }
-    return [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2))];
+    return [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2))];
   }
 
   int get remainingDays {
@@ -87,13 +89,9 @@ class ProfileProvider with ChangeNotifier {
   }
 
   ProfileProvider() {
-    // 1. Initial Load
     loadProfile();
-    
-    // 2. CRITICAL FIX: Listen to Auth changes to reload profile when session is restored
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
-        debugPrint("Auth State Change: User detected, loading profile...");
         loadProfile();
       } else {
         _resetToDefaults();
@@ -105,6 +103,9 @@ class ProfileProvider with ChangeNotifier {
     _businessName = 'My Business';
     _isActivated = false;
     _licenseKey = '';
+    _isAutoPrintEnabled = false;
+    _isPinEnabled = false;
+    _isBiometricEnabled = false;
     notifyListeners();
   }
 
@@ -115,10 +116,7 @@ class ProfileProvider with ChangeNotifier {
 
   Future<void> loadProfile() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      debugPrint("Profile Load: No user logged in yet.");
-      return;
-    }
+    if (user == null) return;
     final uid = user.uid;
 
     try {
@@ -135,6 +133,7 @@ class ProfileProvider with ChangeNotifier {
       _isDarkMode = prefs.getBool('is_dark_mode_$uid') ?? false;
       _totalTables = prefs.getInt('total_tables_$uid') ?? 20;
       _showAmount = prefs.getBool('show_amount_$uid') ?? true;
+      _isAutoPrintEnabled = prefs.getBool('auto_print_$uid') ?? false;
 
       _customPin = prefs.getString('custom_pin_$uid') ?? '';
       _isPinEnabled = prefs.getBool('is_pin_enabled_$uid') ?? false;
@@ -157,6 +156,14 @@ class ProfileProvider with ChangeNotifier {
     } catch (e) {
       debugPrint("Profile Load Error: $e");
     }
+  }
+
+  Future<void> toggleAutoPrint(bool value) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    _isAutoPrintEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_print_$uid', value);
+    notifyListeners();
   }
 
   Future<bool> authenticate(BuildContext context) async {
@@ -336,6 +343,7 @@ class ProfileProvider with ChangeNotifier {
       'is_dark_mode': _isDarkMode,
       'total_tables': _totalTables,
       'show_amount': _showAmount,
+      'auto_print': _isAutoPrintEnabled,
       'custom_pin': _customPin,
       'is_pin_enabled': _isPinEnabled,
       'is_biometric_enabled': _isBiometricEnabled,
@@ -356,10 +364,11 @@ class ProfileProvider with ChangeNotifier {
     if (map['address'] != null) { _address = map['address']; await prefs.setString('address_$uid', _address); }
     if (map['currency'] != null) { _currencySymbol = map['currency']; await prefs.setString('currency_$uid', _currencySymbol); }
     if (map['theme_color'] != null) { _themeColorValue = map['theme_color']; await prefs.setInt('theme_color_$uid', _themeColorValue); }
-    if (map['tax_percentage'] != null) { _taxPercentage = map['tax_percentage'].toDouble(); await prefs.setDouble('tax_percentage_$uid', _taxPercentage); }
+    if (map['tax_percentage'] != null) { _taxPercentage = (map['tax_percentage'] as num).toDouble(); await prefs.setDouble('tax_percentage_$uid', _taxPercentage); }
     if (map['is_dark_mode'] != null) { _isDarkMode = map['is_dark_mode']; await prefs.setBool('is_dark_mode_$uid', _isDarkMode); }
     if (map['total_tables'] != null) { _totalTables = map['total_tables']; await prefs.setInt('total_tables_$uid', _totalTables); }
     if (map['show_amount'] != null) { _showAmount = map['show_amount']; await prefs.setBool('show_amount_$uid', _showAmount); }
+    if (map['auto_print'] != null) { _isAutoPrintEnabled = map['auto_print']; await prefs.setBool('auto_print_$uid', _isAutoPrintEnabled); }
     if (map['custom_pin'] != null) { _customPin = map['custom_pin']; await prefs.setString('custom_pin_$uid', _customPin); }
     if (map['is_pin_enabled'] != null) { _isPinEnabled = map['is_pin_enabled']; await prefs.setBool('is_pin_enabled_$uid', _isPinEnabled); }
     if (map['is_biometric_enabled'] != null) { _isBiometricEnabled = map['is_biometric_enabled']; await prefs.setBool('is_biometric_enabled_$uid', _isBiometricEnabled); }
@@ -455,7 +464,7 @@ class _PinEntryDialogState extends State<_PinEntryDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(4, (index) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8), // Increased spacing
+              padding: const EdgeInsets.symmetric(horizontal: 8), 
               child: SizedBox(
                 width: 55,
                 child: TextField(
@@ -473,7 +482,7 @@ class _PinEntryDialogState extends State<_PinEntryDialog> {
                     filled: true,
                     fillColor: widget.scaffoldColor,
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: widget.themeColor.withValues(alpha: 0.1), width: 1)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: widget.themeColor.withOpacity(0.1), width: 1)),
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: widget.themeColor, width: 2)),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                   ),

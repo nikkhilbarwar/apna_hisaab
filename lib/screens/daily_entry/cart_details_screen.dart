@@ -6,8 +6,7 @@ import '../../providers/transaction_provider.dart';
 import '../../providers/item_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/cart_item.dart';
-import '../../models/item_model.dart';
-import '../../services/notification_service.dart';
+import '../../services/print_service.dart';
 
 class CartDetailsScreen extends StatefulWidget {
   final List<CartItem> cart;
@@ -30,7 +29,6 @@ class CartDetailsScreen extends StatefulWidget {
 }
 
 class _CartDetailsScreenState extends State<CartDetailsScreen> {
-  final TextEditingController _amountController = TextEditingController();
   final TextEditingController _paidAmountController = TextEditingController();
   final TextEditingController _discountController = TextEditingController(text: '0');
   final TextEditingController _contactController = TextEditingController();
@@ -64,12 +62,11 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       _globalServingMethod = widget.cart.first.servingMethod;
       _selectedTable = widget.cart.first.tableNumber;
     }
-    _calculateTotal();
+    _syncPaidAmount();
   }
 
   @override
   void dispose() {
-    _amountController.dispose();
     _paidAmountController.dispose();
     _discountController.dispose();
     _contactController.dispose();
@@ -78,41 +75,57 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     super.dispose();
   }
 
-  void _calculateTotal() {
+  // Calculated properties for real-time UI refresh
+  double get _currentSubtotal {
     double subtotal = 0;
     for (var cartItem in widget.cart) {
       subtotal += _getItemTotalPrice(cartItem);
     }
+    return subtotal;
+  }
 
+  double get _currentGrandTotal {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
-    double taxAmount = subtotal * (profile.taxPercentage / 100);
-    double discount = double.tryParse(_discountController.text) ?? 0;
-    double grandTotal = subtotal + taxAmount - discount;
-    if (grandTotal < 0) grandTotal = 0;
+    double sub = _currentSubtotal;
+    double tax = sub * (profile.taxPercentage / 100);
+    double disc = double.tryParse(_discountController.text) ?? 0;
+    double total = sub + tax - disc;
+    return total < 0 ? 0 : total;
+  }
 
-    _amountController.text = grandTotal.toStringAsFixed(0);
-
-    if (_paymentMode != 'Credit' && _paymentMode != 'Split') {
-      _paidAmountController.text = grandTotal.toStringAsFixed(0);
-    }
-
-    if (_paymentMode == 'Split' && _cashSplitController.text.isEmpty && _upiSplitController.text.isEmpty) {
-      _cashSplitController.text = grandTotal.toStringAsFixed(0);
-      _upiSplitController.text = '0';
-    }
+  void _syncPaidAmount() {
+    setState(() {
+      double total = _currentGrandTotal;
+      if (_paymentMode != 'Credit' && _paymentMode != 'Split') {
+        _paidAmountController.text = total.toStringAsFixed(0);
+      }
+      if (_paymentMode == 'Split') {
+        double cash = double.tryParse(_cashSplitController.text) ?? total;
+        if (cash > total) cash = total;
+        _cashSplitController.text = cash.toStringAsFixed(0);
+        _upiSplitController.text = (total - cash).toStringAsFixed(0);
+      }
+    });
   }
 
   double _getItemTotalPrice(CartItem c) {
-    final item = c.item;
-    final q = c.quantity;
-    
-    // Babu Ji: For Sales, use master portion logic. For Purchases, use manual cart price.
-    if (_isSellingType && item.halfPrice != null && item.halfPrice! > 0) {
-      int fullPlates = q.floor();
-      double halfRem = q - fullPlates;
-      return (fullPlates * (item.price ?? 0)) + (halfRem > 0 ? item.halfPrice! : 0) + c.extraPrice;
+    double base;
+    final double fullP = c.item.price ?? 0;
+    final double hPrice = (c.item.halfPrice != null && c.item.halfPrice! > 0) ? c.item.halfPrice! : fullP;
+
+    // Rule: (Portions * FullPrice) + (Remainder * HalfPrice)
+    if (_isSellingType && hPrice > 0 && hPrice < fullP) {
+      int fullPlates = c.quantity.floor();
+      double remainder = c.quantity - fullPlates;
+      base = (fullPlates * fullP) + (remainder > 0 ? hPrice : 0);
+    } else {
+      base = c.quantity * c.price;
     }
-    return (q * c.price) + c.extraPrice;
+    
+    // Logic Fix: Extras multiplication
+    double totalExtra = c.extraPieces > 0 ? (c.extraPieces * c.extraPrice) : c.extraPrice;
+    
+    return base + totalExtra;
   }
 
   void _showManualQuantityDialog(CartItem cartItem) {
@@ -143,7 +156,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                 } else {
                   widget.cart.remove(cartItem);
                 }
-                _calculateTotal();
+                _syncPaidAmount();
               });
               Navigator.pop(context);
             },
@@ -198,11 +211,10 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
             children: [
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 16),
                       _buildSummaryCard(profileProvider),
                       const SizedBox(height: 24),
                       Row(
@@ -215,7 +227,13 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                       const SizedBox(height: 12),
                       _buildItemsList(profileProvider),
                       const SizedBox(height: 2),
-                      Text('PAYMENT DETAILS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
+                      Text('FINANCIAL DETAILS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
+                      const SizedBox(height: 12),
+                      
+                      _entryField(_discountController, 'Add Discount (₹)', Icons.local_offer_rounded, themeColor, profileProvider, onChanged: (_) => _syncPaidAmount()),
+                      const SizedBox(height: 24),
+                      
+                      Text('PAYMENT METHOD', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
                       const SizedBox(height: 12),
                       _buildPaymentMethodSelector(themeColor, profileProvider),
                       const SizedBox(height: 16),
@@ -224,10 +242,12 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                           children: [
                             Expanded(
                               child: _entryField(_cashSplitController, 'Cash Paid', Icons.money_rounded, Colors.green, profileProvider, onChanged: (val) {
-                                double total = double.tryParse(_amountController.text) ?? 0;
+                                double total = _currentGrandTotal;
                                 double cash = double.tryParse(val) ?? 0;
                                 if (cash > total) cash = total;
-                                _upiSplitController.text = (total - cash).toStringAsFixed(0);
+                                setState(() {
+                                  _upiSplitController.text = (total - cash).toStringAsFixed(0);
+                                });
                               }),
                             ),
                             const SizedBox(width: 12),
@@ -245,8 +265,6 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                           padding: const EdgeInsets.only(top: 12),
                           child: _entryField(_paidAmountController, 'Paid Amount (Deposit)', Icons.account_balance_wallet_rounded, themeColor, profileProvider),
                         ),
-                      const SizedBox(height: 8),
-                      _entryField(_discountController, 'Add Discount (₹)', Icons.local_offer_rounded, themeColor, profileProvider, onChanged: (_) => _calculateTotal()),
                       const SizedBox(height: 180),
                     ],
                   ),
@@ -261,11 +279,10 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   }
 
   Widget _buildSummaryCard(ProfileProvider profile) {
-    double subtotal = 0;
-    for (var cartItem in widget.cart) {
-      subtotal += _getItemTotalPrice(cartItem);
-    }
-    double taxAmount = subtotal * (profile.taxPercentage / 100);
+    double sub = _currentSubtotal;
+    double tax = sub * (profile.taxPercentage / 100);
+    double disc = double.tryParse(_discountController.text) ?? 0;
+    double total = _currentGrandTotal;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -280,19 +297,19 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       ),
       child: Column(
         children: [
-          _summaryRow('Subtotal', '${profile.currencySymbol}${subtotal.toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
+          _summaryRow('Subtotal', '${profile.currencySymbol}${sub.toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
           if (profile.taxPercentage > 0)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
-              child: _summaryRow('Tax (${profile.taxPercentage}%)', '${profile.currencySymbol}${taxAmount.toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
+              child: _summaryRow('Tax (${profile.taxPercentage}%)', '${profile.currencySymbol}${tax.toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
             ),
           const SizedBox(height: 8),
-          _summaryRow('Discount', '- ${profile.currencySymbol}${_discountController.text}', Colors.white.withValues(alpha: 0.9)),
+          _summaryRow('Discount', '- ${profile.currencySymbol}${disc.toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Divider(color: Colors.white24, height: 1),
           ),
-          _summaryRow('Grand Total', '${profile.currencySymbol}${_amountController.text}', Colors.white, isBold: true),
+          _summaryRow('Grand Total', '${profile.currencySymbol}${total.toStringAsFixed(0)}', Colors.white, isBold: true),
         ],
       ),
     );
@@ -315,7 +332,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       itemCount: widget.cart.length,
       itemBuilder: (context, index) {
         final c = widget.cart[index];
-        final bool hasHalf = _isSellingType && c.item.halfPrice != null && c.item.halfPrice! > 0;
+        final bool isHalf = c.quantity == 0.5 && c.variant.toLowerCase() == 'half';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -334,18 +351,18 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(c.item.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: profile.textColor)),
-                        Text('${c.variant} | ${c.item.category}', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
+                        Text('${isHalf ? 'Half' : c.variant} | ${c.item.category}', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
                       ],
                     ),
                   ),
                   _qtyBtn(Icons.remove, profile, () => setState(() {
-                    double step = hasHalf ? 0.5 : 1.0;
+                    double step = c.variant.toLowerCase() == 'half' ? 0.5 : 1.0;
                     if (c.quantity > step) {
                       c.quantity -= step;
                     } else {
                       widget.cart.removeAt(index);
                     }
-                    _calculateTotal();
+                    _syncPaidAmount();
                   })),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -353,16 +370,16 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                       onTap: () => _showManualQuantityDialog(c),
                       child: Column(
                         children: [
-                          Text('${c.quantity.toStringAsFixed(1)}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13)),
+                          Text(isHalf ? 'Half' : '${c.quantity.toStringAsFixed(1)}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13)),
                           Text(c.unit, style: TextStyle(fontSize: 8, color: profile.secondaryTextColor)),
                         ],
                       ),
                     ),
                   ),
                   _qtyBtn(Icons.add, profile, () => setState(() {
-                    double step = hasHalf ? 0.5 : 1.0;
+                    double step = c.variant.toLowerCase() == 'half' ? 0.5 : 1.0;
                     c.quantity += step;
-                    _calculateTotal();
+                    _syncPaidAmount();
                   })),
                   const SizedBox(width: 10),
                   Text('${profile.currencySymbol}${_getItemTotalPrice(c).toStringAsFixed(0)}',
@@ -373,10 +390,10 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: _smallEntryField('Price', profile, (val) {
+                    child: _smallEntryField('Edit Price', profile, (val) {
                       setState(() {
                         c.price = double.tryParse(val) ?? c.price;
-                        _calculateTotal();
+                        _syncPaidAmount();
                       });
                     }, initial: c.price.toStringAsFixed(0)),
                   ),
@@ -385,6 +402,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     child: _smallEntryField('Ex Qty', profile, (val) {
                       setState(() {
                         c.extraPieces = double.tryParse(val) ?? 0;
+                        _syncPaidAmount();
                       });
                     }, initial: c.extraPieces > 0 ? c.extraPieces.toInt().toString() : ''),
                   ),
@@ -393,7 +411,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     child: _smallEntryField('Ex Rs', profile, (val) {
                       setState(() {
                         c.extraPrice = double.tryParse(val) ?? 0;
-                        _calculateTotal();
+                        _syncPaidAmount();
                       });
                     }, initial: c.extraPrice > 0 ? c.extraPrice.toInt().toString() : ''),
                   ),
@@ -419,7 +437,10 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   Widget _servingCheckbox(CartItem item, String method, ProfileProvider profile) {
     bool isSelected = item.servingMethod == method;
     return InkWell(
-      onTap: () => setState(() => item.servingMethod = method),
+      onTap: () {
+        setState(() => item.servingMethod = method);
+        _syncPaidAmount();
+      },
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
@@ -496,7 +517,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
             child: GestureDetector(
               onTap: () => setState(() {
                 _paymentMode = mode;
-                _calculateTotal();
+                _syncPaidAmount();
               }),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -641,10 +662,12 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
 
   Widget _upiSplitField(ProfileProvider profileProvider) {
     return _entryField(_upiSplitController, 'UPI Paid', Icons.qr_code_rounded, Colors.blue, profileProvider, onChanged: (val) {
-      double total = double.tryParse(_amountController.text) ?? 0;
+      double total = _currentGrandTotal;
       double upi = double.tryParse(val) ?? 0;
       if (upi > total) upi = total;
-      _cashSplitController.text = (total - upi).toStringAsFixed(0);
+      setState(() {
+        _cashSplitController.text = (total - upi).toStringAsFixed(0);
+      });
     });
   }
 
@@ -667,13 +690,14 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   }
 
   Future<void> _handleSave({bool isPending = false}) async {
-    final totalAmt = double.tryParse(_amountController.text) ?? 0;
-    if (totalAmt <= 0) return;
+    final totalAmt = _currentGrandTotal;
+    if (totalAmt < 0) return;
 
     setState(() => _isLoading = true);
     try {
       final txProvider = Provider.of<TransactionProvider>(context, listen: false);
       final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+      final profile = Provider.of<ProfileProvider>(context, listen: false);
 
       String description = jsonEncode(widget.cart.map((e) => {
         'id': e.item.id,
@@ -683,11 +707,19 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         'unit': e.unit,
         'variant': e.variant,
         'price': e.price,
+        'full_price': e.item.price ?? 0, // CRITICAL FIX: Save master full price
+        'half_price': e.item.halfPrice ?? 0, // CRITICAL FIX: Save master half price
         'extra_qty': e.extraPieces,
         'extra_price': e.extraPrice,
-        'serving_method': e.servingMethod, 
+        'serving_method': e.servingMethod,
         'table_number': _selectedTable,
       }).toList());
+
+      double sub = _currentSubtotal;
+      double taxAmt = sub * (profile.taxPercentage / 100);
+      double discAmt = double.tryParse(_discountController.text) ?? 0;
+
+      description += " | Subtotal: ₹$sub | Tax: ₹${taxAmt.toStringAsFixed(0)} | Discount: ₹${discAmt.toStringAsFixed(0)}";
 
       double paidAmt = totalAmt;
       if (_paymentMode == 'Credit') {
@@ -711,24 +743,13 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
 
       if (widget.existingTransaction == null) {
         await txProvider.addTransaction(txData, itemProvider);
-        if (isPending && txData.id != null) {
-          await NotificationService().scheduleRepeatingReminder(
-            txData.id!,
-            'Pending Order Reminder',
-            'Order for ${txData.customerContact.isNotEmpty ? txData.customerContact : "Customer"} (₹${totalAmt.toStringAsFixed(0)}) is still pending.',
-          );
+        if (!isPending && profile.isAutoPrintEnabled) {
+           await PrintService().printSmart(context, txData);
         }
       } else {
         await txProvider.updateTransaction(txData, itemProvider, oldTx: widget.existingTransaction);
-        if (!isPending && txData.id != null) {
-          await NotificationService().cancelOrderReminders(txData.id!);
-        } else if (isPending && txData.id != null) {
-           await NotificationService().cancelOrderReminders(txData.id!);
-           await NotificationService().scheduleRepeatingReminder(
-            txData.id!,
-            'Pending Order Reminder',
-            'Order for ${txData.customerContact.isNotEmpty ? txData.customerContact : "Customer"} (₹${totalAmt.toStringAsFixed(0)}) is still pending.',
-          );
+        if (!isPending && profile.isAutoPrintEnabled) {
+           await PrintService().printSmart(context, txData);
         }
       }
 

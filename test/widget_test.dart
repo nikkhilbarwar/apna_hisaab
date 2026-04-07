@@ -1,8 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:apna_hisaab/main.dart';
-import 'package:apna_hisaab/providers/transaction_provider.dart';
-import 'package:apna_hisaab/providers/item_provider.dart';
-import 'package:apna_hisaab/providers/staff_provider.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {

@@ -45,7 +45,6 @@ class TransactionProvider with ChangeNotifier {
   Future<void> _initializeData() async {
     await fetchTransactions();
     await syncAllUnsynced();
-    // Reinstall Check: If local transactions are empty, attempt a Master Restore
     if (_allTransactions.isEmpty) {
       debugPrint("Local data empty, triggering auto-restore...");
       await masterRestoreFromCloud();
@@ -59,30 +58,25 @@ class TransactionProvider with ChangeNotifier {
       notifyListeners();
       try {
         debugPrint("🚀 STARTING MASTER RESTORE FROM CLOUD...");
-        
-        // 1. Restore Categories (Hierarchy Level 1)
+
         final cloudCategories = await _firebaseService.fetchAllCategories();
         for (var cat in cloudCategories) {
           final localCats = await DatabaseHelper.instance.getAllCategories();
           if (!localCats.any((c) => c.id == cat.id || c.name == cat.name)) {
-            // CategoryModel currently doesn't have isSynced setter, handled by DB default
             await DatabaseHelper.instance.insertCategory(cat);
           }
         }
 
-        // 2. Restore Items (Hierarchy Level 2)
         final cloudItems = await _firebaseService.fetchAllItems();
         for (var item in cloudItems) {
           final localItems = await DatabaseHelper.instance.getAllItems();
           if (!localItems.any((i) => i.id == item.id || i.name == item.name)) {
-            item.isSynced = 1; 
+            item.isSynced = 1;
             await DatabaseHelper.instance.insertItem(item);
           }
         }
 
-        // 3. Restore Transactions (Financial History)
         final cloudTxs = await _firebaseService.fetchAllTransactions();
-        debugPrint("Found ${cloudTxs.length} transactions in cloud.");
         if (cloudTxs.isNotEmpty) {
           final localTxs = await DatabaseHelper.instance.getAllTransactions();
           for (var tx in cloudTxs) {
@@ -93,8 +87,7 @@ class TransactionProvider with ChangeNotifier {
             }
           }
         }
-        
-        // 4. Restore Staff
+
         final cloudStaff = await _firebaseService.fetchAllStaff();
         for (var s in cloudStaff) {
            final localStaff = await DatabaseHelper.instance.getAllStaff();
@@ -104,7 +97,6 @@ class TransactionProvider with ChangeNotifier {
            }
         }
 
-        // 5. Restore Suppliers
         final cloudSuppliers = await _firebaseService.fetchAllSuppliers();
         for (var sup in cloudSuppliers) {
            final localSuppliers = await DatabaseHelper.instance.getAllSuppliers();
@@ -114,14 +106,12 @@ class TransactionProvider with ChangeNotifier {
            }
         }
 
-        // 6. Restore Purchase Reminders
         final cloudReminders = await _firebaseService.fetchAllPurchaseReminders();
         for (var rem in cloudReminders) {
            rem.isSynced = 1;
            await DatabaseHelper.instance.database.then((db) => db.insert('purchase_reminders', rem.toMap(), conflictAlgorithm: ConflictAlgorithm.replace));
         }
 
-        // 7. Restore Units
         final cloudUnits = await _firebaseService.fetchAllUnits();
         for (var unitData in cloudUnits) {
            String? name = unitData['name'];
@@ -139,7 +129,6 @@ class TransactionProvider with ChangeNotifier {
     }
   }
 
-  // Keep existing restoreFromCloud for manual UI triggers
   Future<void> restoreFromCloud() async => await masterRestoreFromCloud();
 
   void _setupConnectivityListener() {
@@ -200,16 +189,15 @@ class TransactionProvider with ChangeNotifier {
         final endLimit = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
         matchDate = tx.date.isAtSameMomentAs(start) || (tx.date.isAfter(start) && tx.date.isBefore(endLimit));
       }
-      
+
       bool matchCategory = category == null || category == 'All';
       if (!matchCategory && category != null) {
-        // Root Fix: Check transaction-level category OR any item-level category
         bool txCategoryMatch = tx.category.toLowerCase() == category.toLowerCase();
         bool itemCategoryMatch = tx.parsedItems.any((i) => (i['category'] ?? '').toLowerCase() == category.toLowerCase());
         matchCategory = txCategoryMatch || itemCategoryMatch;
       }
 
-      bool matchItem = itemName == null || itemName.isEmpty || tx.parsedItems.any((i) => 
+      bool matchItem = itemName == null || itemName.isEmpty || tx.parsedItems.any((i) =>
           (i['name'] ?? '').toLowerCase().contains(itemName.toLowerCase()));
 
       return matchType && matchDelete && matchStatus && matchDate && matchCategory && matchItem;
@@ -228,7 +216,7 @@ class TransactionProvider with ChangeNotifier {
         upi += tx.amount;
       } else if (tx.paymentMode == 'Credit') {
         credit += (tx.amount - tx.paidAmount);
-        cash += tx.paidAmount; 
+        cash += tx.paidAmount;
       }
     }
     return {'Cash': cash, 'UPI': upi, 'Credit': credit};
@@ -267,7 +255,7 @@ class TransactionProvider with ChangeNotifier {
       if (oldTx != null) await _applyStockEffect(oldTx, itemProvider, isAddingEffect: false);
       await DatabaseHelper.instance.updateTransaction(tx);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
-      
+
       if (tx.status == 'completed' && tx.id != null) {
         await NotificationService().cancelOrderReminders(tx.id!);
       }
@@ -285,7 +273,15 @@ class TransactionProvider with ChangeNotifier {
       if (index == -1) return;
 
       final tx = _allTransactions[index];
-      final List<dynamic> items = jsonDecode(tx.description);
+      
+      String cleanJson = tx.description;
+      String metadata = "";
+      if (tx.description.contains(' | ')) {
+        cleanJson = tx.description.split(' | ').first;
+        metadata = tx.description.substring(tx.description.indexOf(' | '));
+      }
+
+      final List<dynamic> items = jsonDecode(cleanJson);
       for (var item in items) {
         if (item is Map && item['name'] == itemName) {
           item['checked'] = isChecked;
@@ -293,7 +289,7 @@ class TransactionProvider with ChangeNotifier {
         }
       }
 
-      tx.description = jsonEncode(items);
+      tx.description = jsonEncode(items) + metadata;
       tx.isSynced = 0;
       await DatabaseHelper.instance.updateTransaction(tx);
       notifyListeners();
@@ -312,52 +308,83 @@ class TransactionProvider with ChangeNotifier {
       final tx = TransactionModel.fromMap(originalTx.toMap());
       bool isSale = tx.type.toLowerCase() == 'sale' || tx.type.toLowerCase() == 'income';
 
-      final List<dynamic> items = jsonDecode(tx.description);
-      int itemIndex = items.indexWhere((i) => i['name'] == itemName);
-      if (itemIndex == -1) return;
-
-      double qtyChange = isHalfOptionEnabled ? 0.5 : 1.0;
-      double currentQty = double.tryParse(items[itemIndex]['qty'].toString()) ?? 0;
-
-      if (isDecrement) {
-        if (currentQty <= qtyChange) {
-          items.removeAt(itemIndex);
-        } else {
-          items[itemIndex]['qty'] = (currentQty - qtyChange).toString();
-        }
-      } else {
-        items[itemIndex]['qty'] = (currentQty + qtyChange).toString();
+      String cleanJson = tx.description;
+      String metadata = "";
+      if (tx.description.contains(' | ')) {
+        cleanJson = tx.description.split(' | ').first;
+        metadata = tx.description.substring(tx.description.indexOf(' | '));
       }
 
-      if (items.isEmpty) {
+      final List<dynamic> itemsList = jsonDecode(cleanJson);
+      int itemIndex = itemsList.indexWhere((i) => i['name'] == itemName);
+      if (itemIndex == -1) return;
+
+      double currentQty = double.tryParse(itemsList[itemIndex]['qty'].toString()) ?? 0;
+      double step = isHalfOptionEnabled ? 0.5 : 1.0;
+      double newQty = isDecrement ? (currentQty - step) : (currentQty + step);
+
+      if (newQty <= 0) {
+        itemsList.removeAt(itemIndex);
+      } else {
+        itemsList[itemIndex]['qty'] = newQty.toString();
+        
+        if (isSale) {
+          try {
+            final master = itemProvider.items.firstWhere((i) => i.name == itemName);
+            itemsList[itemIndex]['full_price'] = (master.price ?? 0).toString();
+            itemsList[itemIndex]['half_price'] = (master.halfPrice ?? 0).toString();
+            
+            if (newQty == 0.5 && master.halfPrice != null && master.halfPrice! > 0) {
+              itemsList[itemIndex]['variant'] = 'Half';
+              itemsList[itemIndex]['price'] = master.halfPrice.toString();
+            } else {
+              itemsList[itemIndex]['variant'] = 'Full';
+              itemsList[itemIndex]['price'] = (master.price ?? 0).toString();
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (itemsList.isEmpty) {
         await softDeleteTransaction(transactionId, itemProvider);
         return;
       }
 
-      double newTotal = 0;
-      for (var it in items) {
-        String name = it['name'] ?? '';
+      // Re-calculate raw items sum using accurate portion rules
+      double newRawSum = 0;
+      for (var it in itemsList) {
         double q = double.tryParse(it['qty'].toString()) ?? 0;
+        double p = double.tryParse(it['price'].toString()) ?? 0;
+        double fP = double.tryParse(it['full_price']?.toString() ?? '0') ?? 0;
+        double hP = double.tryParse(it['half_price']?.toString() ?? '0') ?? 0;
+        double exQ = double.tryParse(it['extra_qty']?.toString() ?? '0') ?? 0;
+        double exP = double.tryParse(it['extra_price']?.toString() ?? '0') ?? 0;
         
-        ItemModel? master;
-        try { master = itemProvider.items.firstWhere((i) => i.name == name); } catch (_) {}
-
-        if (isSale && master != null && master.halfPrice != null && master.halfPrice! > 0) {
-          int fullPlatesCount = q.floor();
-          double remainderHalf = q - fullPlatesCount;
-          
-          double itemPriceSum = (fullPlatesCount * (master.price ?? 0)) + (remainderHalf > 0 ? master.halfPrice! : 0);
-          newTotal += itemPriceSum;
-          
-          it['price'] = (q == 0.5 ? (master.halfPrice ?? 0) : (master.price ?? 0)).toString();
+        double base;
+        if (fP > 0 && hP > 0) {
+          int fullPortions = q.floor();
+          double remainder = q - fullPortions;
+          base = (fullPortions * fP) + (remainder > 0 ? hP : 0);
         } else {
-          double p = double.tryParse(it['price'].toString()) ?? 0;
-          newTotal += (q * p);
+          base = q * p;
         }
+        
+        double totalExtra = exQ > 0 ? (exQ * exP) : exP;
+        newRawSum += base + totalExtra;
       }
 
-      tx.description = jsonEncode(items);
-      tx.amount = newTotal < 0 ? 0 : newTotal;
+      double taxAmt = 0;
+      double discAmt = 0;
+      if (metadata.contains('Tax: ₹')) {
+        taxAmt = double.tryParse(metadata.split('Tax: ₹').last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
+      }
+      if (metadata.contains('Discount: ₹')) {
+        discAmt = double.tryParse(metadata.split('Discount: ₹').last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
+      }
+
+      tx.description = jsonEncode(itemsList) + metadata;
+      tx.amount = (newRawSum + taxAmt - discAmt);
+      if (tx.amount < 0) tx.amount = 0;
       tx.isSynced = 0;
 
       await updateTransaction(tx, itemProvider, oldTx: originalTx);
@@ -375,7 +402,14 @@ class TransactionProvider with ChangeNotifier {
       final tx = TransactionModel.fromMap(originalTx.toMap());
       bool isSale = tx.type.toLowerCase() == 'sale' || tx.type.toLowerCase() == 'income';
 
-      final List<dynamic> items = jsonDecode(tx.description);
+      String cleanJson = tx.description;
+      String metadata = "";
+      if (tx.description.contains(' | ')) {
+        cleanJson = tx.description.split(' | ').first;
+        metadata = tx.description.substring(tx.description.indexOf(' | '));
+      }
+
+      final List<dynamic> items = jsonDecode(cleanJson);
       int itemIndex = items.indexWhere((i) => i['name'] == itemName);
       if (itemIndex == -1) return;
 
@@ -388,7 +422,9 @@ class TransactionProvider with ChangeNotifier {
           if (isSale) {
             try {
               final masterItem = itemProvider.items.firstWhere((i) => i.name == itemName);
-              items[itemIndex]['price'] = (newVariant == 'Half' ? (masterItem.halfPrice ?? 0) : (masterItem.price ?? 0)).toString();
+              items[itemIndex]['price'] = (newVariant.toLowerCase() == 'half' ? (masterItem.halfPrice ?? 0) : (masterItem.price ?? 0)).toString();
+              items[itemIndex]['full_price'] = (masterItem.price ?? 0).toString();
+              items[itemIndex]['half_price'] = (masterItem.halfPrice ?? 0).toString();
             } catch (_) {}
           }
         }
@@ -399,26 +435,41 @@ class TransactionProvider with ChangeNotifier {
         return;
       }
 
-      tx.description = jsonEncode(items);
-      
-      double newTotal = 0;
+      double newRawSum = 0;
       for (var it in items) {
         double q = double.tryParse(it['qty'].toString()) ?? 0;
         double p = double.tryParse(it['price'].toString()) ?? 0;
+        double fP = double.tryParse(it['full_price']?.toString() ?? '0') ?? 0;
+        double hP = double.tryParse(it['half_price']?.toString() ?? '0') ?? 0;
+        double exQ = double.tryParse(it['extra_qty']?.toString() ?? '0') ?? 0;
+        double exP = double.tryParse(it['extra_price']?.toString() ?? '0') ?? 0;
         
-        if (isSale) {
-           ItemModel? master;
-           try { master = itemProvider.items.firstWhere((i) => i.name == it['name']); } catch (_) {}
-           if (master != null && master.halfPrice != null && master.halfPrice! > 0) {
-              int fullPlatesCount = q.floor();
-              double halfRem = q - fullPlatesCount;
-              newTotal += (fullPlatesCount * (master.price ?? 0)) + (halfRem > 0 ? master.halfPrice! : 0);
-              continue;
-           }
+        double base;
+        if (fP > 0 && hP > 0) {
+          int fullPortions = q.floor();
+          double remainder = q - fullPortions;
+          base = (fullPortions * fP) + (remainder > 0 ? hP : 0);
+        } else {
+          base = q * p;
         }
-        newTotal += (q * p);
+        
+        double totalExtra = exQ > 0 ? (exQ * exP) : exP;
+        newRawSum += base + totalExtra;
       }
-      tx.amount = newTotal;
+
+      double taxAmt = 0;
+      double discAmt = 0;
+      if (metadata.contains('Tax: ₹')) {
+        taxAmt = double.tryParse(metadata.split('Tax: ₹').last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
+      }
+      if (metadata.contains('Discount: ₹')) {
+        discAmt = double.tryParse(metadata.split('Discount: ₹').last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
+      }
+
+      tx.description = jsonEncode(items) + metadata;
+      tx.amount = (newRawSum + taxAmt - discAmt);
+      if (tx.amount < 0) tx.amount = 0;
+      tx.isSynced = 0;
 
       await updateTransaction(tx, itemProvider, oldTx: originalTx);
     } catch (e) {
@@ -473,21 +524,21 @@ class TransactionProvider with ChangeNotifier {
         final name = itemMap['name']!;
         int? targetId;
         ItemModel? masterItem;
-        try { 
+        try {
           masterItem = itemProvider.items.firstWhere((i) => i.name == name);
-          targetId = masterItem.id; 
+          targetId = masterItem.id;
         } catch (_) {}
 
         if (targetId != null && masterItem != null) {
           final displayQty = double.tryParse(itemMap['qty'] ?? '0') ?? 0;
           final extraQty = double.tryParse(itemMap['extra_qty'] ?? '0') ?? 0;
           final totalDisplayQty = displayQty + extraQty;
-          
+
           double piecesToAdjust = totalDisplayQty * (masterItem.fullQty ?? 1.0);
           
           if (piecesToAdjust == 0) continue;
 
-          bool shouldIncrease = (tx.type == 'sale') ? !isAddingEffect : isAddingEffect;
+          bool shouldIncrease = (tx.type == 'sale' || tx.type == 'income') ? !isAddingEffect : isAddingEffect;
           await itemProvider.adjustStock(targetId, piecesToAdjust, shouldIncrease);
         }
       } catch (e) {
@@ -541,9 +592,9 @@ class TransactionProvider with ChangeNotifier {
     final range = DateTimeRange(start: start, end: start);
     return getSalesForRange(range);
   }
-  
+
   double getSalesForRange(DateTimeRange? range) {
-    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale').fold(0.0, (sum, tx) => sum + tx.amount);
+    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale' || tx.type == 'income').fold(0.0, (sum, tx) => sum + tx.amount);
   }
 
   double getPurchasesForRange(DateTimeRange? range) {
@@ -551,19 +602,19 @@ class TransactionProvider with ChangeNotifier {
   }
 
   double getCashSalesForRange(DateTimeRange? range) {
-    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale' && (tx.paymentMode == 'Cash' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.cashAmount : tx.amount));
+    return _getTransactionsInRange(range).where((tx) => (tx.type == 'sale' || tx.type == 'income') && (tx.paymentMode == 'Cash' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.cashAmount : tx.amount));
   }
 
   double getUpiSalesForRange(DateTimeRange? range) {
-    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale' && (tx.paymentMode == 'UPI' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.upiAmount : tx.amount));
+    return _getTransactionsInRange(range).where((tx) => (tx.type == 'sale' || tx.type == 'income') && (tx.paymentMode == 'UPI' || tx.paymentMode == 'Split')).fold(0.0, (sum, tx) => sum + (tx.paymentMode == 'Split' ? tx.upiAmount : tx.amount));
   }
 
   double getCreditSalesForRange(DateTimeRange? range) {
-    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale' && tx.paymentMode == 'Credit').fold(0.0, (sum, tx) => sum + (tx.amount - tx.paidAmount));
+    return _getTransactionsInRange(range).where((tx) => (tx.type == 'sale' || tx.type == 'income') && tx.paymentMode == 'Credit').fold(0.0, (sum, tx) => sum + (tx.amount - tx.paidAmount));
   }
 
   double getAvgOrderValueForRange(DateTimeRange? range) {
-    final txs = _getTransactionsInRange(range).where((tx) => tx.type == 'sale').toList();
+    final txs = _getTransactionsInRange(range).where((tx) => tx.type == 'sale' || tx.type == 'income').toList();
     if (txs.isEmpty) return 0.0;
     return getSalesForRange(range) / txs.length;
   }
@@ -573,13 +624,13 @@ class TransactionProvider with ChangeNotifier {
   }
 
   int getOrderCountForRange(DateTimeRange? range) {
-    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale').length;
+    return _getTransactionsInRange(range).where((tx) => tx.type == 'sale' || tx.type == 'income').length;
   }
 
   double getSalesGrowthForRange(DateTimeRange? range) {
     double current = getSalesForRange(range);
     double prev = 0;
-    
+
     if (range == null) {
       prev = yesterdaySales;
     } else {
@@ -620,8 +671,8 @@ class TransactionProvider with ChangeNotifier {
   double get profitToday => getProfitForRange(null);
 
   List<TransactionModel> _activeDayTransactions(DateTime day) {
-    return _allTransactions.where((tx) => 
-      tx.isDeleted == 0 && 
+    return _allTransactions.where((tx) =>
+      tx.isDeleted == 0 &&
       _normalizeStatus(tx.status) == 'completed' &&
       tx.date.year == day.year && tx.date.month == day.month && tx.date.day == day.day
     ).toList();

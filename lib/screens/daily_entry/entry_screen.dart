@@ -65,6 +65,10 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
         final unit = itemMap['unit'] ?? 'Full';
         final servingMethod = itemMap['serving_method'] ?? 'Dine-in';
         final table = itemMap['table_number'] ?? '1';
+        
+        // Fix: Loading extra fields from snapshot
+        final exQty = double.tryParse(itemMap['extra_qty'].toString()) ?? 0.0;
+        final exPrice = double.tryParse(itemMap['extra_price'].toString()) ?? 0.0;
 
         final item = itemProvider.items.firstWhere((i) => i.name == name);
         _cart.add(CartItem(
@@ -73,6 +77,8 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
           price: price,
           variant: variant,
           unit: unit,
+          extraPieces: exQty,
+          extraPrice: exPrice,
           servingMethod: servingMethod,
           tableNumber: table,
         ));

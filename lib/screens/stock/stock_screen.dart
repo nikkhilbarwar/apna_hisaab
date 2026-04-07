@@ -8,7 +8,6 @@ import '../../models/item_model.dart';
 import '../items/item_management_screen.dart';
 import '../purchase_reminders/purchase_reminder_screen.dart';
 import 'category_management_screen.dart';
-import '../../utils/app_formatter.dart';
 
 class StockScreen extends StatefulWidget {
   final String? initialCategory;

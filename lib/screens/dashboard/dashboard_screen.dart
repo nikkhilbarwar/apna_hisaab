@@ -12,8 +12,8 @@ import '../../utils/report_helper.dart';
 import '../daily_entry/entry_screen.dart';
 import '../purchase_reminders/purchase_reminder_screen.dart';
 import '../stock/stock_screen.dart';
-import '../../services/export_service.dart';
 import 'widgets/stat_card.dart';
+import 'widgets/transaction_detail_sheet.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -28,7 +28,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final Map<int, GlobalKey> _itemKeys = {};
   DateTimeRange? _selectedDateRange;
   
-  // Alert Tracking Logic
   final Set<String> _dismissedAlertsToday = {};
 
   @override
@@ -227,8 +226,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final reminderProvider = Provider.of<PurchaseReminderProvider>(context);
     final isSelectionMode = _selectedIds.isNotEmpty;
 
-    final todayCompletedCount = txProvider.transactions.where((tx) => tx.type == 'sale' && _isToday(tx.date)).length;
-    final todayPurchaseCount = txProvider.transactions.where((tx) => tx.type == 'purchase' && _isToday(tx.date)).length;
+    final todayCompletedCount = txProvider.transactions.where((tx) => (tx.type == 'sale' || tx.type == 'income') && _isToday(tx.date)).length;
+    final todayPurchaseCount = txProvider.transactions.where((tx) => (tx.type == 'purchase' || tx.type == 'expense') && _isToday(tx.date)).length;
 
     List<TransactionModel> filteredTransactions;
     if (_activeFilter == 'Pending') {
@@ -236,7 +235,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } else {
       String targetType = _activeFilter == 'Completed' ? 'sale' : 'purchase';
       filteredTransactions = txProvider.transactions.where((tx) {
-        bool matchType = tx.type == targetType;
+        bool matchType = (targetType == 'sale') ? (tx.type == 'sale' || tx.type == 'income') : (tx.type == 'purchase' || tx.type == 'expense');
         if (!matchType) return false;
 
         if (_selectedDateRange != null) {
@@ -428,11 +427,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildPendingOrderCard(BuildContext context, TransactionModel tx, ProfileProvider profile, TransactionProvider provider) {
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+    final double discount = tx.discountValue;
+
     return Container(
       key: _itemKeys[tx.id!],
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: profile.scaffoldColor,
+        color: profile.cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
       ),
@@ -469,51 +470,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ...tx.parsedItems.map((item) {
                   final bool isChecked = item['checked'] == 'true';
                   final qty = double.tryParse(item['qty'] ?? '1') ?? 1;
+                  final double exQty = double.tryParse(item['extra_qty'] ?? '0') ?? 0;
+                  final double exPrice = double.tryParse(item['extra_price'] ?? '0') ?? 0;
+                  final bool hasExtras = exQty > 0 || exPrice > 0;
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        InkWell(
-                          onTap: () => provider.toggleItemCheck(tx.id!, item['name']!, !isChecked),
-                          child: Icon(
-                            isChecked ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                            color: isChecked ? Colors.green : Colors.orange.withValues(alpha: 0.5),
-                            size: 22,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item['name'] ?? 'Item',
-                                style: TextStyle(fontSize: 14, color: isChecked ? profile.secondaryTextColor : profile.textColor, fontWeight: FontWeight.w700, decoration: isChecked ? TextDecoration.lineThrough : null)
-                              ),
-                              Text('${item['serving_method'] ?? 'Dine-in'} • ${profile.currencySymbol}${item['price']} x ${item['qty']}', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
-                            ],
-                          ),
-                        ),
                         Row(
                           children: [
-                            _qtyEditBtn(Icons.remove, () {
-                              final masterItem = itemProvider.items.firstWhere((i) => i.name == item['name']);
-                              bool hasHalf = masterItem.halfPrice != null && masterItem.halfPrice! > 0;
-                              provider.addPortionToPending(tx.id!, item['name']!, hasHalf, true, itemProvider);
-                            }),
-                            Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(qty.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold))),
-                            _qtyEditBtn(Icons.add, () {
-                              final masterItem = itemProvider.items.firstWhere((i) => i.name == item['name']);
-                              bool hasHalf = masterItem.halfPrice != null && masterItem.halfPrice! > 0;
-                              provider.addPortionToPending(tx.id!, item['name']!, hasHalf, false, itemProvider);
-                            }),
+                            InkWell(
+                              onTap: () => provider.toggleItemCheck(tx.id!, item['name']!, !isChecked),
+                              child: Icon(
+                                isChecked ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                color: isChecked ? Colors.green : Colors.orange.withValues(alpha: 0.5),
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item['name'] ?? 'Item',
+                                    style: TextStyle(fontSize: 14, color: isChecked ? profile.secondaryTextColor : profile.textColor, fontWeight: FontWeight.w700, decoration: isChecked ? TextDecoration.lineThrough : null)
+                                  ),
+                                  Text('${item['display'] ?? ''} • ${item['serving_method'] ?? 'Dine-in'} • ${profile.currencySymbol}${item['price']}', 
+                                    style: TextStyle(fontSize: 10, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                _qtyEditBtn(Icons.remove, () {
+                                  try {
+                                    final masterItem = itemProvider.items.firstWhere((i) => i.name == item['name']);
+                                    bool hasHalf = masterItem.halfPrice != null && masterItem.halfPrice! > 0;
+                                    provider.addPortionToPending(tx.id!, item['name']!, hasHalf, true, itemProvider);
+                                  } catch (_) {}
+                                }),
+                                Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(qty == 0.5 ? "Half" : qty.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                                _qtyEditBtn(Icons.add, () {
+                                  try {
+                                    final masterItem = itemProvider.items.firstWhere((i) => i.name == item['name']);
+                                    bool hasHalf = masterItem.halfPrice != null && masterItem.halfPrice! > 0;
+                                    provider.addPortionToPending(tx.id!, item['name']!, hasHalf, false, itemProvider);
+                                  } catch (_) {}
+                                }),
+                              ],
+                            ),
                           ],
                         ),
+                        if (hasExtras)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 34, top: 4),
+                            child: Text(
+                              '+ Extra: ${exQty > 0 ? '${exQty.toInt()} x ' : ''}${profile.currencySymbol}${exPrice.toInt()}',
+                              style: TextStyle(color: Colors.blue.shade700, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ),
                       ],
                     ),
                   );
                 }).toList(),
+                
+                const Divider(height: 32),
+                
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('SUBTOTAL', style: TextStyle(color: profile.secondaryTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                    Text('${profile.currencySymbol}${(tx.amount + discount).toStringAsFixed(0)}', style: TextStyle(color: profile.textColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                if (discount > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('DISCOUNT', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                        Text('- ${profile.currencySymbol}${discount.toStringAsFixed(0)}', style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -644,7 +687,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildModernTransactionTile(BuildContext context, TransactionModel tx, ProfileProvider profile, bool isSelected) {
-    final isSale = tx.type == 'sale';
+    final isSale = tx.type == 'sale' || tx.type == 'income';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -668,114 +711,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showTransactionActions(BuildContext context, TransactionModel tx, ProfileProvider profile) {
-    final txProvider = Provider.of<TransactionProvider>(context, listen: false);
-    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
-
-    // CRITICAL FIX: Calculate accurate contributions for display matching grand total
-    double transactionItemsRawSum = 0;
-    List<Map<String, dynamic>> contributions = [];
-    for (var i in tx.parsedItems) {
-      double q = double.tryParse(i['qty'] ?? '0') ?? 0;
-      double p = double.tryParse(i['price'] ?? '0') ?? 0;
-      double eq = double.tryParse(i['extra_qty'] ?? '0') ?? 0;
-      double ep = double.tryParse(i['extra_price'] ?? '0') ?? 0;
-      
-      double itemRawBase = 0;
-      try {
-        final master = itemProvider.items.firstWhere((it) => it.name == i['name']);
-        if (master.halfPrice != null && master.halfPrice! > 0) {
-          int fullPlates = q.floor();
-          double remainder = q - fullPlates;
-          itemRawBase = (fullPlates * (master.price ?? 0)) + (remainder > 0 ? (master.halfPrice ?? 0) : 0);
-        } else {
-          itemRawBase = q * p;
-        }
-      } catch(_) {
-        itemRawBase = q * p;
-      }
-      
-      double lineRawValue = itemRawBase + (eq * ep);
-      transactionItemsRawSum += lineRawValue;
-      contributions.add({...i, 'rawValue': lineRawValue});
-    }
-    
-    double scale = (transactionItemsRawSum > 0) ? (tx.amount / transactionItemsRawSum) : 1.0;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(color: profile.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('TRANSACTION DETAILS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.secondaryTextColor, letterSpacing: 1.5)),
-                Text(DateFormat('dd MMM, hh:mm a').format(tx.date), style: TextStyle(color: profile.secondaryTextColor, fontSize: 11)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(_getSmartItemTitle(tx), style: TextStyle(color: profile.textColor, fontWeight: FontWeight.w900, fontSize: 22)),
-            const Divider(height: 24),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
-              child: SingleChildScrollView(
-                child: Column(
-                  children: contributions.map((item) {
-                    double itemFinalPrice = (item['rawValue'] as double) * scale;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(item['name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
-                            Text('${item['qty']} x ${profile.currencySymbol}${item['price']} • ${item['serving_method'] ?? 'Dine-in'}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
-                          ]),
-                          Text('${profile.currencySymbol}${profile.showAmount ? itemFinalPrice.toStringAsFixed(0) : "****"}', style: const TextStyle(fontWeight: FontWeight.w900)),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-            const Divider(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('GRAND TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-                Text('${profile.currencySymbol}${profile.showAmount ? tx.amount.toStringAsFixed(0) : "****"}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: profile.themeColor)),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                _actionButton(icon: Icons.print_rounded, label: 'PRINT', color: Colors.blue, onTap: () async {
-                  Navigator.pop(context);
-                  await ExportService().saveBillAsPdf(tx, profile.businessName);
-                }),
-                const SizedBox(width: 12),
-                _actionButton(icon: Icons.edit_note_rounded, label: 'EDIT', color: Colors.orange, onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (c) => EntryScreen(transaction: tx)));
-                }),
-                const SizedBox(width: 12),
-                _actionButton(icon: Icons.delete_outline_rounded, label: 'DELETE', color: Colors.red, onTap: () {
-                  Navigator.pop(context);
-                  txProvider.softDeleteTransaction(tx.id!, itemProvider);
-                }),
-              ],
-            ),
-          ],
-        ),
-      ),
+      builder: (context) => TransactionDetailSheet(tx: tx, profile: profile),
     );
   }
 

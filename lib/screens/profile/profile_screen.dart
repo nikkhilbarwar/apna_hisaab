@@ -699,6 +699,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     profile: profile,
                   ),
                   ProfileActionCard(
+                    title: "Direct Print",
+                    subtitle: "Auto print after completing bill",
+                    icon: Icons.print_outlined,
+                    trailing: Switch(
+                      value: profile.isAutoPrintEnabled,
+                      activeColor: themeColor,
+                      onChanged: (val) => profile.toggleAutoPrint(val),
+                    ),
+                    onTap: () => profile.toggleAutoPrint(!profile.isAutoPrintEnabled),
+                    profile: profile,
+                  ),
+                  ProfileActionCard(
                     title: "Theme Color",
                     subtitle: "Personalize your app look",
                     icon: Icons.palette_outlined,

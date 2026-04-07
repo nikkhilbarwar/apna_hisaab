@@ -5,9 +5,8 @@ import '../../../models/transaction_model.dart';
 import '../../../providers/profile_provider.dart';
 import '../../../providers/transaction_provider.dart';
 import '../../../providers/item_provider.dart';
-import '../../../models/item_model.dart';
-import '../../../services/export_service.dart';
 import '../../daily_entry/entry_screen.dart';
+import '../../../services/export_service.dart';
 
 class TransactionDetailSheet extends StatelessWidget {
   final TransactionModel tx;
@@ -16,69 +15,35 @@ class TransactionDetailSheet extends StatelessWidget {
   const TransactionDetailSheet({super.key, required this.tx, required this.profile});
 
   String _getSmartItemTitle(TransactionModel tx) {
-    final items = tx.parsedItems;
+    final items = tx.itemSnapshots;
     if (items.isEmpty) return tx.category;
     if (items.length == 1) {
-      return items.first['name'] ?? tx.category;
+      return items.first.name;
     } else {
-      String names = items.take(2).map((e) => e['name']).join(', ');
+      String names = items.take(2).map((e) => e.name).join(', ');
       if (items.length > 2) names += '...';
       return '${items.length} Items: $names';
     }
   }
 
-  String _getSmartCategory(TransactionModel tx) {
-    if (tx.category != 'All' && tx.category != 'Mixed' && tx.category.isNotEmpty) {
-      return tx.category;
-    }
-    final items = tx.parsedItems;
-    if (items.isNotEmpty) {
-      final firstCat = items.first['category'];
-      if (firstCat != null && firstCat.isNotEmpty) {
-        bool allSame = items.every((item) => item['category'] == firstCat);
-        if (allSame) return firstCat;
-      }
-    }
-    return tx.category;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isSale = tx.type == 'sale';
+    final isSale = tx.type == 'sale' || tx.type == 'income';
     final isPending = tx.status == 'pending';
     final txProvider = Provider.of<TransactionProvider>(context, listen: false);
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
 
-    // CRITICAL FIX: Plate Logic and Weighted Scaling
-    double transactionItemsRawSum = 0;
-    List<Map<String, dynamic>> contributions = [];
-    
-    for (var i in tx.parsedItems) {
-      double q = double.tryParse(i['qty'] ?? '0') ?? 0;
-      double p = double.tryParse(i['price'] ?? '0') ?? 0;
-      double eq = double.tryParse(i['extra_qty'] ?? '0') ?? 0;
-      double ep = double.tryParse(i['extra_price'] ?? '0') ?? 0;
-      
-      double itemRawBase = 0;
-      try {
-        final master = itemProvider.items.firstWhere((it) => it.name == i['name']);
-        if (master.halfPrice != null && master.halfPrice! > 0) {
-          int fullPlates = q.floor();
-          double remainder = q - fullPlates;
-          itemRawBase = (fullPlates * (master.price ?? 0)) + (remainder > 0 ? (master.halfPrice ?? 0) : 0);
-        } else {
-          itemRawBase = q * p;
-        }
-      } catch(_) {
-        itemRawBase = q * p;
-      }
-      
-      double lineRawValue = itemRawBase + (eq * ep);
-      transactionItemsRawSum += lineRawValue;
-      contributions.add({...i, 'rawValue': lineRawValue});
+    // Precise calculations from Snapshots
+    final snapshots = tx.itemSnapshots;
+    double calculatedSubtotal = 0;
+    for (var s in snapshots) {
+      calculatedSubtotal += s.lineTotal;
     }
-    
-    double scale = (transactionItemsRawSum > 0) ? (tx.amount / transactionItemsRawSum) : 1.0;
+
+    double discount = tx.discountValue;
+    double subAfterDiscount = calculatedSubtotal - discount;
+    double taxAmount = tx.amount - subAfterDiscount;
+    if (taxAmount.abs() < 1.0) taxAmount = 0;
 
     return Container(
       decoration: BoxDecoration(color: profile.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
@@ -87,11 +52,11 @@ class TransactionDetailSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
+          Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('TRANSACTION DETAILS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.secondaryTextColor, letterSpacing: 1.5)),
+              Text('BILL DETAILS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.secondaryTextColor, letterSpacing: 1.5)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
@@ -103,7 +68,7 @@ class TransactionDetailSheet extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          Text(_getSmartCategory(tx).toUpperCase(), style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1)),
+          Text(tx.category.toUpperCase(), style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1)),
           const SizedBox(height: 4),
           Text(_getSmartItemTitle(tx), style: TextStyle(color: profile.textColor, fontWeight: FontWeight.w900, fontSize: 24, letterSpacing: -0.5)),
           const SizedBox(height: 8),
@@ -116,29 +81,80 @@ class TransactionDetailSheet extends StatelessWidget {
           ),
           const Divider(height: 40),
           
+          Text('ITEMS BREAKDOWN', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)),
+          const SizedBox(height: 16),
+          
           ConstrainedBox(
             constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.35),
             child: SingleChildScrollView(
               child: Column(
-                children: contributions.map((item) {
-                  double itemFinalPrice = (item['rawValue'] as double) * scale;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: snapshots.map((s) {
+                  // Quantity Logic: Half/Full/Numeric
+                  String qLabel = s.qty == 0.5 ? "Half" : (s.qty == 1.0 ? "Full" : s.qty.toStringAsFixed(1));
+                  bool hasExtraQty = s.extraQty > 0;
+                  bool hasExtraPrice = s.extraPrice > 0;
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: profile.scaffoldColor.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(s.name, style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 15)),
+                                  const SizedBox(height: 4),
+                                  Text('$qLabel x ${profile.currencySymbol}${s.price.toStringAsFixed(0)} • ${s.variant}', 
+                                    style: TextStyle(color: profile.secondaryTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('${profile.currencySymbol}${s.lineTotal.toStringAsFixed(0)}',
+                                  style: TextStyle(fontWeight: FontWeight.w900, color: profile.themeColor, fontSize: 16)),
+                                Text('Total', style: TextStyle(fontSize: 9, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ],
+                        ),
+                        if (hasExtraQty || hasExtraPrice) ...[
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Divider(height: 1, thickness: 0.5),
+                          ),
+                          Row(
                             children: [
-                              Text(item['name'] ?? 'Item', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 16)),
-                              const SizedBox(height: 2),
-                              Text('${item['qty']} x ${profile.currencySymbol}${item['price']}${item['serving_method'] != null && item['serving_method'] != '' ? ' • ${item['serving_method']}' : ''}${item['table_number'] != null && item['table_number'] != '' ? ' • Table: ${item['table_number']}' : ''}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
+                              Icon(Icons.add_circle_outline_rounded, size: 14, color: Colors.blue.shade600),
+                              const SizedBox(width: 8),
+                              if (hasExtraQty) 
+                                Text('Extra Qty: ${s.extraQty.toInt()} ', 
+                                  style: TextStyle(fontSize: 12, color: profile.textColor, fontWeight: FontWeight.bold)),
+                              if (hasExtraQty && hasExtraPrice) 
+                                Text('• ', style: TextStyle(color: profile.secondaryTextColor)),
+                              if (hasExtraPrice)
+                                Text('Extra Rs: ${profile.currencySymbol}${s.extraPrice.toInt()}', 
+                                  style: TextStyle(fontSize: 12, color: profile.textColor, fontWeight: FontWeight.bold)),
                             ],
                           ),
-                        ),
-                        Text('${profile.currencySymbol}${profile.showAmount ? itemFinalPrice.toStringAsFixed(0) : "****"}', 
-                          style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 16)),
+                        ],
+                        if (s.servingMethod != 'N/A')
+                           Padding(
+                             padding: const EdgeInsets.only(top: 8),
+                             child: Text('${s.servingMethod}${s.tableNumber.isNotEmpty ? ' • Table: ${s.tableNumber}' : ''}', 
+                               style: TextStyle(fontSize: 10, color: profile.secondaryTextColor, fontStyle: FontStyle.italic)),
+                           ),
                       ],
                     ),
                   );
@@ -148,55 +164,50 @@ class TransactionDetailSheet extends StatelessWidget {
           ),
           
           const Divider(height: 40),
+          _detailRow('Subtotal', '${profile.currencySymbol}${calculatedSubtotal.toStringAsFixed(0)}', profile),
+          if (discount > 0) _detailRow('Discount', '- ${profile.currencySymbol}${discount.toStringAsFixed(0)}', profile, color: Colors.green),
+          if (taxAmount > 0) _detailRow('Tax (${profile.taxPercentage}%)', '${profile.currencySymbol}${taxAmount.toStringAsFixed(0)}', profile),
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.05), borderRadius: BorderRadius.circular(20)),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [profile.themeColor.withOpacity(0.1), profile.themeColor.withOpacity(0.05)]),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: profile.themeColor.withOpacity(0.1))
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('GRAND TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.textColor, letterSpacing: 1)),
-                Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, color: profile.themeColor, letterSpacing: -1)),
+                Text(profile.showAmount ? '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}' : '${profile.currencySymbol}****', 
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, color: profile.themeColor, letterSpacing: -1)),
               ],
             ),
           ),
           const SizedBox(height: 28),
           Row(
             children: [
-              _actionButton(
-                icon: Icons.print_rounded, 
-                label: 'PRINT BILL', 
-                color: Colors.blue, 
-                onTap: () async {
+              Expanded(child: _actionButton(
+                icon: Icons.print_rounded, label: 'PRINT', color: Colors.blue, onTap: () async {
                   Navigator.pop(context);
                   final exportService = ExportService();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Generating PDF...')));
-                  try {
-                    await exportService.saveBillAsPdf(tx, profile.businessName);
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Print Error: $e')));
-                  }
+                  await exportService.saveBillAsPdf(tx, profile.businessName);
                 }
-              ),
+              )),
               const SizedBox(width: 12),
-              _actionButton(
-                icon: Icons.edit_note_rounded, 
-                label: 'EDIT ENTRY', 
-                color: Colors.orange, 
-                onTap: () {
+              Expanded(child: _actionButton(
+                icon: Icons.edit_note_rounded, label: 'EDIT', color: Colors.orange, onTap: () {
                   Navigator.pop(context);
                   Navigator.push(context, MaterialPageRoute(builder: (c) => EntryScreen(transaction: tx)));
                 }
-              ),
+              )),
               const SizedBox(width: 12),
-              _actionButton(
-                icon: Icons.delete_outline_rounded, 
-                label: 'DELETE', 
-                color: Colors.red, 
-                onTap: () {
+              Expanded(child: _actionButton(
+                icon: Icons.delete_outline_rounded, label: 'DELETE', color: Colors.red, onTap: () {
                   Navigator.pop(context);
-                  _showDeleteConfirm(context, tx, txProvider, itemProvider, profile);
+                  txProvider.softDeleteTransaction(tx.id!, itemProvider);
                 }
-              ),
+              )),
             ],
           ),
         ],
@@ -205,45 +216,30 @@ class TransactionDetailSheet extends StatelessWidget {
   }
 
   Widget _actionButton({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.3))),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 6),
-              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.8)),
-            ],
-          ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.3))),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 6),
+            Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.8)),
+          ],
         ),
       ),
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, TransactionModel tx, TransactionProvider txProvider, ItemProvider itemProvider, ProfileProvider profile) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text('Delete Transaction?'),
-        content: const Text('Are you sure you want to move this to trash? This will restore stock levels.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
-          TextButton(
-            onPressed: () async {
-              await txProvider.softDeleteTransaction(tx.id!, itemProvider);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transaction moved to trash!')));
-            },
-            child: const Text('DELETE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+  Widget _detailRow(String l, String v, ProfileProvider profile, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(l, style: TextStyle(color: profile.secondaryTextColor, fontSize: 13, fontWeight: FontWeight.w600)),
+        Text(v, style: TextStyle(fontWeight: FontWeight.w900, color: color ?? profile.textColor, fontSize: 14))
+      ]),
     );
   }
 }

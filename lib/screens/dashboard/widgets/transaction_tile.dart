@@ -20,14 +20,16 @@ class TransactionTile extends StatelessWidget {
   });
 
   String _getSmartItemTitle(TransactionModel tx) {
-    final items = tx.parsedItems;
-    if (items.isEmpty) return tx.category;
-    if (items.length == 1) {
-      return items.first['name'] ?? tx.category;
+    final snapshots = tx.itemSnapshots;
+    if (snapshots.isEmpty) return tx.category;
+    if (snapshots.length == 1) {
+      final s = snapshots.first;
+      String q = s.qty == 0.5 ? "Half" : s.qty.toStringAsFixed(0);
+      return "$q x ${s.name}";
     } else {
-      String names = items.take(2).map((e) => e['name']).join(', ');
-      if (items.length > 2) names += '...';
-      return '${items.length} Items: $names';
+      String names = snapshots.take(2).map((e) => e.name).join(', ');
+      if (snapshots.length > 2) names += '...';
+      return '${snapshots.length} Items: $names';
     }
   }
 
@@ -40,15 +42,15 @@ class TransactionTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isSelected ? Colors.red.withOpacity(0.08) : profile.cardColor,
+        color: isSelected ? Colors.red.withValues(alpha: 0.08) : profile.cardColor,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isSelected 
             ? Colors.red 
-            : (isPending ? Colors.orange.withOpacity(0.4) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)), 
+            : (isPending ? Colors.orange.withValues(alpha: 0.4) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)), 
           width: isSelected ? 2 : 1
         ),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.01), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
