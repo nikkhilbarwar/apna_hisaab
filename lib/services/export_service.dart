@@ -233,7 +233,7 @@ class ExportService {
               ),
             ),
             pw.Divider(thickness: 0.5),
-            pw.Center(child: pw.Text(isPurchase ? "PURCHASE VOUCHER" : "TAX INVOICE", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1))),
+            pw.Center(child: pw.Text(isPurchase ? "PURCHASE VOUCHER" : "CASH MEMO", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1))),
             pw.Divider(thickness: 0.5),
             
             pw.Row(

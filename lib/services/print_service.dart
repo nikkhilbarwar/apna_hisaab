@@ -137,7 +137,7 @@ class PrintService {
     }
 
     bytes += generator.hr();
-    bytes += generator.text("TAX INVOICE", styles: const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text("CASH MEMO", styles: const PosStyles(align: PosAlign.center, bold: true));
     
     String billId = tx.id?.toString() ?? '0';
     String shortId = billId.length > 5 ? billId.substring(billId.length - 5) : billId;
