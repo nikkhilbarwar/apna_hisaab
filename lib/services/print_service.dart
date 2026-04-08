@@ -51,7 +51,7 @@ class PrintService {
     }
 
     // 2. KOT Task
-    if (!isPurchase && profile.isAutoPrintEnabled && printerProv.kotPrinter.isEnabled && !isManualReprint) {
+    if (!isPurchase && profile.isAutoPrintEnabled && profile.isKotEnabled && printerProv.kotPrinter.isEnabled && !isManualReprint) {
       if (printerProv.kotPrinter.type == AppPrinterType.pdf) {
         tasks.add(ExportService().saveKotAsPdf(tx, profile.businessName));
       } else {

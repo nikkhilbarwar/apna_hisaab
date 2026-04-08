@@ -131,20 +131,22 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
 
     final items = order.parsedItems;
     final double discount = order.discountValue;
+    final String tableNum = items.isNotEmpty ? (items.first['table_number'] ?? '') : '';
+    final String method = items.isNotEmpty ? (items.first['serving_method'] ?? 'Dine-in') : 'Dine-in';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: isSelected ? Colors.red.withValues(alpha: 0.05) : cardColor,
-        borderRadius: BorderRadius.circular(20),
+        color: isSelected ? Colors.red.withOpacity(0.05) : cardColor,
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: isSelected ? Colors.red : Colors.orange.withValues(alpha: 0.3), 
-          width: isSelected ? 2 : 1.5
+          color: isSelected ? Colors.red : profile.isDarkMode ? Colors.white10 : Colors.grey.shade100, 
+          width: isSelected ? 2 : 1
         ),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -159,95 +161,109 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
             child: Stack(
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(18),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                            child: const Text('PENDING', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 10)),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.access_time_rounded, size: 12, color: Colors.orange),
+                                const SizedBox(width: 4),
+                                Text(DateFormat('hh:mm a').format(order.date), style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 0.5)),
+                              ],
+                            ),
                           ),
-                          Text(DateFormat('dd MMM, hh:mm a').format(order.date), style: TextStyle(color: secondaryTextColor, fontSize: 11)),
+                          const Spacer(),
+                          if (tableNum.isNotEmpty) ...[
+                             Icon(Icons.restaurant_rounded, size: 14, color: themeColor.withOpacity(0.6)),
+                             const SizedBox(width: 4),
+                             Text('Table $tableNum', style: TextStyle(color: themeColor, fontWeight: FontWeight.w900, fontSize: 12)),
+                             const SizedBox(width: 12),
+                          ],
+                          Text(method, style: TextStyle(color: secondaryTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
                         ],
                       ),
+                      const SizedBox(height: 16),
+                      Text(order.category.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: themeColor, letterSpacing: 1.5)),
                       const SizedBox(height: 12),
-                      Text(order.category.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: themeColor, letterSpacing: 1)),
-                      const SizedBox(height: 8),
                       
-                      // Enhanced Item List with Extras
-                      ...items.take(4).map((item) {
-                        double exQty = double.tryParse(item['extra_qty'] ?? '0') ?? 0;
-                        double exPrice = double.tryParse(item['extra_price'] ?? '0') ?? 0;
+                      ...items.take(3).map((item) {
+                        double exQty = double.tryParse(item['extra_qty']?.toString() ?? '0') ?? 0;
+                        double exPrice = double.tryParse(item['extra_price']?.toString() ?? '0') ?? 0;
                         bool hasExtras = exQty > 0 || exPrice > 0;
 
                         return Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.only(bottom: 8),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  Icon(Icons.circle, size: 6, color: themeColor.withValues(alpha: 0.5)),
-                                  const SizedBox(width: 8),
-                                  Expanded(child: Text(item['display'] ?? '', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.bold))),
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(color: profile.scaffoldColor, borderRadius: BorderRadius.circular(6)),
+                                    child: Icon(Icons.fastfood_rounded, size: 12, color: themeColor.withOpacity(0.5)),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: Text(item['display'] ?? '', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w700))),
                                 ],
                               ),
                               if (hasExtras)
                                 Padding(
-                                  padding: const EdgeInsets.only(left: 14, top: 2),
-                                  child: Text(
-                                    '+ Extra: ${exQty > 0 ? '${exQty.toInt()} x ' : ''}${profile.currencySymbol}${exPrice.toInt()}',
-                                    style: TextStyle(color: Colors.blue.shade700, fontSize: 11, fontWeight: FontWeight.bold),
+                                  padding: const EdgeInsets.only(left: 26, top: 4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.08), borderRadius: BorderRadius.circular(6)),
+                                    child: Text(
+                                      'Extra: ${exQty > 0 ? '${exQty.toInt()}x ' : ''}${profile.currencySymbol}${exPrice.toInt()}',
+                                      style: TextStyle(color: Colors.blue.shade700, fontSize: 10, fontWeight: FontWeight.w900),
+                                    ),
                                   ),
                                 ),
                             ],
                           ),
                         );
                       }),
-                      if (items.length > 4) 
+                      if (items.length > 3) 
                         Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: Text('+ ${items.length - 4} more items', style: TextStyle(color: secondaryTextColor, fontSize: 10, fontStyle: FontStyle.italic)),
+                          padding: const EdgeInsets.only(left: 26, top: 4),
+                          child: Text('+ ${items.length - 3} more items', style: TextStyle(color: secondaryTextColor, fontSize: 11, fontStyle: FontStyle.italic, fontWeight: FontWeight.w600)),
                         ),
 
-                      const Divider(height: 24),
+                      const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(height: 1, thickness: 0.5)),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Text('TOTAL DUE', style: TextStyle(color: secondaryTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                                  if (discount > 0) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                      decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                                      child: Text('- ${profile.currencySymbol}${discount.toStringAsFixed(0)} OFF', style: const TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold)),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              Text('${profile.currencySymbol}${order.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: textColor)),
+                              Text('GRAND TOTAL', style: TextStyle(color: secondaryTextColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                              const SizedBox(height: 2),
+                              Text('${profile.currencySymbol}${order.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: textColor)),
                             ],
                           ),
                           if (_selectedIds.isEmpty)
-                            ElevatedButton.icon(
+                            ElevatedButton(
                               onPressed: () => _openPendingOrder(context, order),
-                              icon: const Icon(Icons.shopping_cart_checkout_rounded, size: 16),
-                              label: const Text('OPEN BILL'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: themeColor, 
                                 foregroundColor: Colors.white, 
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), 
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), 
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                                 elevation: 0
+                              ),
+                              child: const Row(
+                                children: [
+                                  Text('OPEN BILL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
+                                  SizedBox(width: 8),
+                                  Icon(Icons.arrow_forward_ios_rounded, size: 14),
+                                ],
                               ),
                             ),
                         ],
@@ -257,8 +273,12 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
                 ),
                 if (isSelected)
                   Positioned(
-                    top: 10, right: 10,
-                    child: Icon(Icons.check_circle, color: Colors.red.shade700, size: 28),
+                    top: 15, right: 15,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: Icon(Icons.check_circle, color: Colors.red.shade700, size: 30),
+                    ),
                   ),
               ],
             ),

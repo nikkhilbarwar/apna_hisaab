@@ -22,7 +22,32 @@ class UnitProvider with ChangeNotifier {
     if (_units.isEmpty) {
       await _insertDefaultUnits();
     } else {
+      await _cleanupDuplicateUnits();
       notifyListeners();
+    }
+  }
+
+  Future<void> _cleanupDuplicateUnits() async {
+    bool changed = false;
+    final Map<String, int> uniqueNames = {};
+    final List<int> idsToDelete = [];
+
+    for (var unit in _units) {
+      String name = unit.name.toLowerCase().trim();
+      if (uniqueNames.containsKey(name)) {
+        idsToDelete.add(unit.id!);
+        changed = true;
+      } else {
+        uniqueNames[name] = unit.id!;
+      }
+    }
+
+    if (changed) {
+      for (var id in idsToDelete) {
+        await DatabaseHelper.instance.deleteUnit(id);
+      }
+      final data = await DatabaseHelper.instance.getAllUnits();
+      _units = data.map((e) => UnitModel.fromMap(e)).toList();
     }
   }
 

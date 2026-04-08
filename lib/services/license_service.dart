@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:io';
 
 class LicenseService {
@@ -100,10 +101,20 @@ class LicenseService {
       }
 
       if (data['activated'] != true) {
+        final version = await getAppVersion();
         await firestore.collection('licenses').doc(key).update({
           'activated': true,
           'activeDeviceId': deviceId,
           'activatedAt': FieldValue.serverTimestamp(),
+          'lastUsedAt': FieldValue.serverTimestamp(),
+          'appVersion': version,
+        });
+      } else {
+        // Update last used and version even if already activated
+        final version = await getAppVersion();
+        await firestore.collection('licenses').doc(key).update({
+          'lastUsedAt': FieldValue.serverTimestamp(),
+          'appVersion': version,
         });
       }
       return {
@@ -115,5 +126,31 @@ class LicenseService {
     } catch (e) {
       return {'success': false, 'message': 'Error: $e'};
     }
+  }
+
+  static Future<String> getAppVersion() async {
+    try {
+      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      return packageInfo.version;
+    } catch (_) {
+      return "1.0.0";
+    }
+  }
+
+  static Future<void> resetDevice(String licenseKey, String adminIdentifier) async {
+    await firestore.collection('licenses').doc(licenseKey).update({
+      'activated': false,
+      'activeDeviceId': null,
+    });
+    await logAdminAction(adminIdentifier, "RESET_DEVICE", "Reset device for $licenseKey");
+  }
+
+  static Future<void> logAdminAction(String adminId, String action, String details) async {
+    await firestore.collection('admin_logs').add({
+      'adminId': adminId,
+      'action': action,
+      'details': details,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 }

@@ -6,6 +6,8 @@ import '../../providers/profile_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/transaction_provider.dart';
 import '../../core/database/database_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/license_service.dart';
 import '../main_navigation.dart';
 import 'login_screen.dart';
 import 'activation_screen.dart';
@@ -71,6 +73,63 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
   }
 
+  Future<void> _checkAnnouncement(BuildContext context) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final doc = await LicenseService.firestore.collection('admin_settings').doc('announcement').get();
+      
+      if (doc.exists) {
+        final data = doc.data()!;
+        final String message = data['message'] ?? "";
+        final String lastSeen = prefs.getString('last_announcement') ?? "";
+
+        if (message.isNotEmpty && message != lastSeen) {
+          if (mounted) {
+            _showAnnouncementDialog(context, message);
+            await prefs.setString('last_announcement', message);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Announcement Check Error: $e");
+    }
+  }
+
+  void _showAnnouncementDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.campaign, color: Colors.orange),
+            SizedBox(width: 10),
+            Text("ANNOUNCEMENT", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(fontSize: 16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("OK, GOT IT", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateUserHeartbeat(ProfileProvider profile) async {
+    if (profile.isActivated && profile.licenseKey.isNotEmpty) {
+      try {
+        await LicenseService.verifyLicense(profile.licenseKey);
+        debugPrint("User heartbeat updated: ${profile.licenseKey}");
+      } catch (e) {
+        debugPrint("Heartbeat Update Error: $e");
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -101,9 +160,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
                              user.email == "missadvocate06@gmail.com";
               
               if (isAdmin || profile.isActivated) {
-                // Trigger restore check ONCE after login
-                WidgetsBinding.instance.addPostFrameCallback((_) {
+                // Trigger checks ONCE after login
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  if (isAdmin) {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString('admin_id', user.email ?? "Super Admin");
+                    await prefs.setBool('is_sys_admin', true);
+                  }
                   _checkAndRestoreData(context);
+                  _checkAnnouncement(context);
+                  _updateUserHeartbeat(profile); // Update Last Active & Version
                 });
                 return const MainNavigation();
               } else {
@@ -132,6 +198,17 @@ class _LoadingScreen extends StatelessWidget {
     this.subMessage, 
     this.progress
   });
+
+  Future<void> _updateUserHeartbeat(ProfileProvider profile) async {
+    if (profile.isActivated && profile.licenseKey.isNotEmpty) {
+      try {
+        await LicenseService.verifyLicense(profile.licenseKey);
+        debugPrint("User heartbeat updated: ${profile.licenseKey}");
+      } catch (e) {
+        debugPrint("Heartbeat Update Error: $e");
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

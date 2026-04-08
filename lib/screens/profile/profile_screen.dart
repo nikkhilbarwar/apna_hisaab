@@ -16,6 +16,7 @@ import '../../providers/staff_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/export_service.dart';
 import '../../utils/app_strings.dart';
+import '../../utils/image_helper.dart';
 import '../auth/login_screen.dart';
 import '../auth/activation_screen.dart';
 import 'printer_settings_screen.dart';
@@ -56,39 +57,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _pickAndCropImage(ProfileProvider profile, {bool isLogo = true}) async {
     try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-      if (image == null) return;
-
-      final croppedFile = await ImageCropper().cropImage(
-        sourcePath: image.path,
-        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: isLogo ? 'Crop Logo' : 'Crop QR Code',
-            toolbarColor: profile.themeColor,
-            toolbarWidgetColor: Colors.white,
-            statusBarColor: profile.themeColor, 
-            backgroundColor: profile.scaffoldColor,
-            initAspectRatio: CropAspectRatioPreset.square,
-            lockAspectRatio: true,
-            hideBottomControls: false,
-            cropFrameColor: profile.themeColor,
-            cropGridColor: profile.themeColor.withOpacity(0.5),
-            activeControlsWidgetColor: profile.themeColor,
-          ),
-          IOSUiSettings(
-            title: isLogo ? 'Crop Logo' : 'Crop QR Code',
-            aspectRatioLockEnabled: true,
-            resetButtonHidden: false,
-            doneButtonTitle: 'Done',
-            cancelButtonTitle: 'Cancel',
-          ),
-        ],
+      final String? croppedPath = await ImageHelper.pickAndCropItemIcon(
+        context: context, 
+        themeColor: profile.themeColor,
+        isCircle: false, // QR aur Logo ke liye Square crop chahiye
       );
 
-      if (croppedFile != null && mounted) {
+      if (croppedPath != null && mounted) {
         if (isLogo) {
-          profile.updateProfile(logoPath: croppedFile.path);
+          profile.updateProfile(logoPath: croppedPath);
         } else {
           // Ask for QR Label
           final String? selectedLabel = await showDialog<String>(
@@ -112,7 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           );
 
           if (selectedLabel != null) {
-            profile.updateProfile(qrPath: croppedFile.path, qrLabel: selectedLabel);
+            profile.updateProfile(qrPath: croppedPath, qrLabel: selectedLabel);
           }
         }
       }

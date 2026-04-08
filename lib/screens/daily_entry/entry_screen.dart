@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -654,24 +655,46 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
           ),
         ],
         bottom: _tabController == null ? null : PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: GestureDetector(
-            onLongPress: _showCategoryReorderSheet,
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.only(left: 8), 
-              labelColor: themeColor,
-              unselectedLabelColor: profile.secondaryTextColor,
-              indicatorColor: themeColor,
-              indicatorWeight: 3,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11),
-              tabs: [
-                Tab(text: _isSellingType ? 'ALL SALES' : 'ALL ITEMS'),
-                ...filteredCats.map((c) => Tab(text: c.name.toUpperCase())),
-              ],
+          preferredSize: const Size.fromHeight(60),
+          child: Container(
+            height: 60,
+            padding: const EdgeInsets.only(bottom: 8),
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: filteredCats.length + 1,
+              itemBuilder: (context, index) {
+                bool isSelected = _tabController!.index == index;
+                String title = index == 0 
+                  ? (_isSellingType ? 'ALL SALES' : 'ALL ITEMS') 
+                  : filteredCats[index - 1].name.toUpperCase();
+                
+                return GestureDetector(
+                  onTap: () => _tabController!.animateTo(index),
+                  onLongPress: _showCategoryReorderSheet,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    decoration: BoxDecoration(
+                      color: isSelected ? themeColor : themeColor.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: isSelected ? [BoxShadow(color: themeColor.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))] : [],
+                      border: Border.all(color: isSelected ? themeColor : Colors.transparent),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : profile.secondaryTextColor,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 11,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -715,9 +738,9 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount, 
-        crossAxisSpacing: 16, 
-        mainAxisSpacing: 16, 
-        childAspectRatio: 0.82
+        crossAxisSpacing: 12, 
+        mainAxisSpacing: 12, 
+        childAspectRatio: 0.95
       ),
       itemCount: filteredItems.length,
       itemBuilder: (context, index) {
@@ -732,12 +755,25 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
   Widget _buildSearchBar(ProfileProvider profile, List<dynamic> categories) {
     String currentCatName = (_tabController != null && _tabController!.index > 0) ? categories[_tabController!.index - 1].name : (_isSellingType ? 'All Sales' : 'All Items');
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: profile.cardColor,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: profile.cardColor,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 5))],
+      ),
       child: TextField(
         controller: _searchController,
         onChanged: (v) => setState(() => _searchQuery = v),
-        decoration: InputDecoration(hintText: 'Search in $currentCatName...', prefixIcon: const Icon(Icons.search, size: 20), contentPadding: EdgeInsets.zero),
+        style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
+        decoration: InputDecoration(
+          hintText: 'Search in $currentCatName...', 
+          prefixIcon: Icon(Icons.search_rounded, size: 22, color: profile.themeColor.withValues(alpha: 0.5)), 
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+          filled: true,
+          fillColor: profile.scaffoldColor,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+          hintStyle: TextStyle(color: profile.secondaryTextColor.withValues(alpha: 0.5), fontSize: 14),
+        ),
       ),
     );
   }
@@ -747,47 +783,47 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
     return Container(
       decoration: BoxDecoration(
         color: profile.cardColor, 
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: themeColor.withValues(alpha: hasAdded ? 0.12 : 0.04), 
-            blurRadius: 20, 
-            offset: const Offset(0, 10)
+            color: themeColor.withValues(alpha: hasAdded ? 0.1 : 0.03), 
+            blurRadius: 15, 
+            offset: const Offset(0, 8)
           )
         ],
         border: Border.all(
           color: hasAdded ? themeColor : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
-          width: hasAdded ? 2.5 : 1
+          width: hasAdded ? 2 : 1
         ),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Top Section: Category & More
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 6, 0),
+              padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Flexible(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: themeColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10)
+                        color: themeColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8)
                       ),
                       child: Text(
                         item.category.toUpperCase(),
-                        style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: themeColor, letterSpacing: 0.8),
+                        style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: themeColor, letterSpacing: 0.5),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.more_vert_rounded, size: 20, color: profile.secondaryTextColor.withValues(alpha: 0.7)),
+                    icon: Icon(Icons.more_vert_rounded, size: 18, color: profile.secondaryTextColor.withValues(alpha: 0.5)),
                     onPressed: () => _showItemOptionsBottomSheet(item),
                     constraints: const BoxConstraints(),
                     padding: const EdgeInsets.all(4),
@@ -808,7 +844,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
                 },
                 onLongPress: hasAdded ? () => _showManualQuantityDialog(item, totalCount) : null,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -817,31 +853,41 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
                         children: [
                           Container(
                             width: 32, height: 32,
-                            decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.05), shape: BoxShape.circle),
-                            child: Icon(_getIconForCategory(item.category), size: 16, color: themeColor),
+                            decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
+                            alignment: Alignment.center,
+                            child: item.icon != null && item.icon!.isNotEmpty
+                              ? (item.icon!.startsWith('/') || item.icon!.contains('data/user'))
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.file(File(item.icon!), width: 32, height: 32, fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => Icon(Icons.broken_image_outlined, size: 14, color: themeColor),
+                                    ),
+                                  )
+                                : Text(item.icon!, style: const TextStyle(fontSize: 16))
+                              : Icon(_getIconForCategory(item.category), size: 14, color: themeColor),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               item.name,
-                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.textColor, height: 1.1),
+                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: profile.textColor, height: 1.1),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       RichText(
                         text: TextSpan(
                           children: [
                             TextSpan(
                               text: '${profile.currencySymbol}${item.price ?? 0}',
-                              style: TextStyle(color: themeColor, fontWeight: FontWeight.w900, fontSize: 18),
+                              style: TextStyle(color: themeColor, fontWeight: FontWeight.w900, fontSize: 16),
                             ),
                             TextSpan(
                               text: ' / ${item.unit}',
-                              style: TextStyle(color: profile.secondaryTextColor, fontSize: 10, fontWeight: FontWeight.bold),
+                              style: TextStyle(color: profile.secondaryTextColor, fontSize: 9, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
@@ -854,7 +900,7 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
             
             // Bottom Section: Actions
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: hasAdded && _isSellingType 
                 ? _qtyControls(item, totalCount, profile, themeColor) 
                 : _addBtn(item, themeColor),
@@ -877,27 +923,27 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
 
   Widget _qtyControls(ItemModel item, double count, ProfileProvider profile, Color themeColor) {
     return Container(
-      height: 42,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: profile.isDarkMode ? Colors.white10 : const Color(0xFFF1F3F9), 
-        borderRadius: BorderRadius.circular(14)
+        borderRadius: BorderRadius.circular(12)
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            icon: Icon(Icons.remove_circle_rounded, size: 24, color: themeColor.withValues(alpha: 0.8)), 
+            icon: Icon(Icons.remove_circle_rounded, size: 22, color: themeColor.withValues(alpha: 0.8)), 
             onPressed: () => _removeItemFromCart(item), 
             constraints: const BoxConstraints(), 
             padding: EdgeInsets.zero
           ),
           Text(
-            count.toStringAsFixed(1), 
-            style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 14)
+            count % 1 == 0 ? count.toInt().toString() : count.toStringAsFixed(1), 
+            style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 13)
           ),
           IconButton(
-            icon: Icon(Icons.add_circle_rounded, size: 24, color: themeColor), 
+            icon: Icon(Icons.add_circle_rounded, size: 22, color: themeColor), 
             onPressed: () => item.halfPrice != null && item.halfPrice! > 0 ? _showVariantPicker(item) : _addItemToCart(item), 
             constraints: const BoxConstraints(), 
             padding: EdgeInsets.zero
@@ -923,12 +969,12 @@ class _EntryScreenState extends State<EntryScreen> with TickerProviderStateMixin
           backgroundColor: themeColor, 
           foregroundColor: textColor,
           elevation: 0, 
-          minimumSize: const Size(double.infinity, 42), 
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))
+          minimumSize: const Size(double.infinity, 38), 
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
         ),
         child: Text(
           _isSellingType ? 'ADD' : 'ENTER', 
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1)
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.5)
         ),
       ),
     );

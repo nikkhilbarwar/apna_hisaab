@@ -22,6 +22,7 @@ class ProfileProvider with ChangeNotifier {
   int _totalTables = 20;
   bool _showAmount = true;
   bool _isAutoPrintEnabled = false; 
+  bool _isKotEnabled = true; 
 
   // Security Settings
   String _customPin = '';
@@ -52,6 +53,7 @@ class ProfileProvider with ChangeNotifier {
   int get totalTables => _totalTables;
   bool get showAmount => _showAmount;
   bool get isAutoPrintEnabled => _isAutoPrintEnabled;
+  bool get isKotEnabled => _isKotEnabled;
   
   String get customPin => _customPin;
   bool get isPinEnabled => _isPinEnabled;
@@ -144,6 +146,7 @@ class ProfileProvider with ChangeNotifier {
       _totalTables = prefs.getInt('total_tables_$uid') ?? 20;
       _showAmount = prefs.getBool('show_amount_$uid') ?? true;
       _isAutoPrintEnabled = prefs.getBool('auto_print_$uid') ?? false;
+      _isKotEnabled = prefs.getBool('kot_enabled_$uid') ?? true;
 
       _customPin = prefs.getString('custom_pin_$uid') ?? '';
       _isPinEnabled = prefs.getBool('is_pin_enabled_$uid') ?? false;
@@ -359,6 +362,7 @@ class ProfileProvider with ChangeNotifier {
       'total_tables': _totalTables,
       'show_amount': _showAmount,
       'auto_print': _isAutoPrintEnabled,
+      'kot_enabled': _isKotEnabled,
       'custom_pin': _customPin,
       'is_pin_enabled': _isPinEnabled,
       'is_biometric_enabled': _isBiometricEnabled,
@@ -386,6 +390,7 @@ class ProfileProvider with ChangeNotifier {
     if (map['total_tables'] != null) { _totalTables = map['total_tables']; await prefs.setInt('total_tables_$uid', _totalTables); }
     if (map['show_amount'] != null) { _showAmount = map['show_amount']; await prefs.setBool('show_amount_$uid', _showAmount); }
     if (map['auto_print'] != null) { _isAutoPrintEnabled = map['auto_print']; await prefs.setBool('auto_print_$uid', _isAutoPrintEnabled); }
+    if (map['kot_enabled'] != null) { _isKotEnabled = map['kot_enabled']; await prefs.setBool('kot_enabled_$uid', _isKotEnabled); }
     if (map['custom_pin'] != null) { _customPin = map['custom_pin']; await prefs.setString('custom_pin_$uid', _customPin); }
     if (map['is_pin_enabled'] != null) { _isPinEnabled = map['is_pin_enabled']; await prefs.setBool('is_pin_enabled_$uid', _isPinEnabled); }
     if (map['is_biometric_enabled'] != null) { _isBiometricEnabled = map['is_biometric_enabled']; await prefs.setBool('is_biometric_enabled_$uid', _isBiometricEnabled); }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/transaction_model.dart';
@@ -6,6 +7,7 @@ import '../../providers/transaction_provider.dart';
 import '../../providers/item_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/cart_item.dart';
+import '../../models/item_model.dart';
 import '../../services/print_service.dart';
 
 class CartDetailsScreen extends StatefulWidget {
@@ -330,6 +332,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   }
 
   Widget _buildItemsList(ProfileProvider profile) {
+    final themeColor = profile.themeColor;
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -340,26 +343,40 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(boxShadow: profile.themeShadow,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
             color: profile.cardColor,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
             border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
           ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
+                  Container(
+                    height: 48, width: 48,
+                    decoration: BoxDecoration(
+                      color: themeColor.withValues(alpha: 0.05), 
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: themeColor.withValues(alpha: 0.1)),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    alignment: Alignment.center,
+                    child: _buildItemIcon(c.item),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(c.item.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: profile.textColor)),
-                        Text('${isHalf ? 'Half' : c.variant} | ${c.item.category}', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
+                        Text(c.item.name, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.textColor)),
+                        Text('${isHalf ? 'Half' : c.variant} • ${c.item.category}', style: TextStyle(fontSize: 10, color: profile.secondaryTextColor, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
-                  _qtyBtn(Icons.remove, profile, () => setState(() {
+                  _qtyBtn(Icons.remove_rounded, profile, () => setState(() {
                     double step = c.variant.toLowerCase() == 'half' ? 0.5 : 1.0;
                     if (c.quantity > step) {
                       c.quantity -= step;
@@ -368,66 +385,56 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     }
                     _syncPaidAmount();
                   })),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: InkWell(
-                      onTap: () => _showManualQuantityDialog(c),
+                  GestureDetector(
+                    onTap: () => _showManualQuantityDialog(c),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       child: Column(
                         children: [
-                          Text(isHalf ? 'Half' : '${c.quantity.toStringAsFixed(1)}', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13)),
-                          Text(c.unit, style: TextStyle(fontSize: 8, color: profile.secondaryTextColor)),
+                          Text(isHalf ? 'Half' : '${c.quantity % 1 == 0 ? c.quantity.toInt() : c.quantity}', 
+                            style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 15)),
+                          Text(c.unit, style: TextStyle(fontSize: 9, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
                   ),
-                  _qtyBtn(Icons.add, profile, () => setState(() {
+                  _qtyBtn(Icons.add_rounded, profile, () => setState(() {
                     double step = c.variant.toLowerCase() == 'half' ? 0.5 : 1.0;
                     c.quantity += step;
                     _syncPaidAmount();
                   })),
-                  const SizedBox(width: 10),
-                  Text('${profile.currencySymbol}${_getItemTotalPrice(c).toStringAsFixed(0)}',
-                    style: TextStyle(fontWeight: FontWeight.w900, color: profile.themeColor, fontSize: 13)),
                 ],
               ),
-              const Divider(height: 16),
+              const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider(height: 1, thickness: 0.5)),
               Row(
                 children: [
-                  Expanded(
-                    child: _smallEntryField('Edit Price', profile, (val) {
-                      setState(() {
-                        c.price = double.tryParse(val) ?? c.price;
-                        _syncPaidAmount();
-                      });
-                    }, initial: c.price.toStringAsFixed(0)),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _smallEntryField('Ex Qty', profile, (val) {
-                      setState(() {
-                        c.extraPieces = double.tryParse(val) ?? 0;
-                        _syncPaidAmount();
-                      });
-                    }, initial: c.extraPieces > 0 ? c.extraPieces.toInt().toString() : ''),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _smallEntryField('Ex Rs', profile, (val) {
-                      setState(() {
-                        c.extraPrice = double.tryParse(val) ?? 0;
-                        _syncPaidAmount();
-                      });
-                    }, initial: c.extraPrice > 0 ? c.extraPrice.toInt().toString() : ''),
-                  ),
+                  Expanded(flex: 2, child: _smallEntryField('Price', profile, (val) {
+                    setState(() { c.price = double.tryParse(val) ?? c.price; _syncPaidAmount(); });
+                  }, initial: c.price.toStringAsFixed(0))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _smallEntryField('Ex Qty', profile, (val) {
+                    setState(() { c.extraPieces = double.tryParse(val) ?? 0; _syncPaidAmount(); });
+                  }, initial: c.extraPieces > 0 ? c.extraPieces.toInt().toString() : '')),
+                  const SizedBox(width: 8),
+                  Expanded(child: _smallEntryField('Ex Rs', profile, (val) {
+                    setState(() { c.extraPrice = double.tryParse(val) ?? 0; _syncPaidAmount(); });
+                  }, initial: c.extraPrice > 0 ? c.extraPrice.toInt().toString() : '')),
+                  const SizedBox(width: 12),
+                  Text('${profile.currencySymbol}${_getItemTotalPrice(c).toStringAsFixed(0)}',
+                    style: TextStyle(fontWeight: FontWeight.w900, color: themeColor, fontSize: 15)),
                 ],
               ),
               if (_isSellingType) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     _servingCheckbox(c, 'Dine-in', profile),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 16),
                     _servingCheckbox(c, 'Takeaway', profile),
+                    const Spacer(),
+                    if (c.servingMethod == 'Dine-in' && profile.totalTables > 0)
+                      Text('Table: ${c.tableNumber.isEmpty ? _selectedTable : c.tableNumber}', 
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: themeColor.withValues(alpha: 0.7))),
                   ],
                 ),
               ],
@@ -435,6 +442,58 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _qtyBtn(IconData icon, ProfileProvider profile, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 32, width: 32,
+        decoration: BoxDecoration(
+          color: profile.themeColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, size: 18, color: profile.themeColor),
+      ),
+    );
+  }
+
+  Widget _buildItemIcon(ItemModel item) {
+    if (item.icon != null && item.icon!.isNotEmpty) {
+      if (item.icon!.startsWith('/') || item.icon!.contains('com.example')) {
+        return Image.file(
+          File(item.icon!),
+          fit: BoxFit.cover,
+          width: 48,
+          height: 48,
+          errorBuilder: (context, error, stackTrace) => const Text('🍽️', style: TextStyle(fontSize: 24)),
+        );
+      }
+      return Text(item.icon!, style: const TextStyle(fontSize: 24));
+    }
+    return const Text('🍽️', style: TextStyle(fontSize: 24));
+  }
+
+  Widget _smallEntryField(String hint, ProfileProvider profile, Function(String) onChange, {String? initial}) {
+    return SizedBox(height: 38,
+      child: TextFormField(
+        initialValue: initial,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        onChanged: onChange,
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: profile.textColor),
+        decoration: InputDecoration(
+          labelText: hint,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          labelStyle: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: profile.secondaryTextColor),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          filled: true,
+          fillColor: profile.scaffoldColor,
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: profile.themeColor.withValues(alpha: 0.5))),
+        ),
+      ),
     );
   }
 
@@ -481,35 +540,6 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     );
   }
 
-  Widget _smallEntryField(String hint, ProfileProvider profile, Function(String) onChange, {String? initial}) {
-    final borderColor = _isSellingType ? Colors.green : Colors.orange;
-    return SizedBox(height: 33,
-      child: TextFormField(
-        initialValue: initial,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        onChanged: onChange,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: profile.textColor),
-        decoration: InputDecoration(
-          labelText: hint,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor.withOpacity(0.3))),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: borderColor, width: 1.5)),
-        ),
-      ),
-    );
-  }
-
-  Widget _qtyBtn(IconData icon, ProfileProvider profile, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(color: profile.scaffoldColor, shape: BoxShape.circle),
-        child: Icon(icon, size: 14, color: profile.textColor),
-      ),
-    );
-  }
-
   Widget _buildPaymentMethodSelector(Color themeColor, ProfileProvider profile) {
     return Container(
       padding: const EdgeInsets.all(4),
@@ -547,7 +577,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       decoration: BoxDecoration(
         color: profile.cardColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -5))],
       ),
       child: SafeArea(
         child: Column(
@@ -585,7 +615,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                       minimumSize: const Size(double.infinity, 54),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       elevation: 4,
-                      shadowColor: (isSale ? Colors.green : Colors.orange).withOpacity(0.3),
+                      shadowColor: (isSale ? Colors.green : Colors.orange).withValues(alpha: 0.3),
                     ),
                     child: _isLoading
                       ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
@@ -754,7 +784,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         savedTx = await txProvider.updateTransaction(txData, itemProvider, oldTx: widget.existingTransaction);
       }
 
-      if (profile.isAutoPrintEnabled && savedTx != null) {
+      if (profile.isAutoPrintEnabled && savedTx != null && mounted) {
          await PrintService().printSmart(context, savedTx);
       }
 

@@ -17,7 +17,32 @@ class CategoryProvider with ChangeNotifier {
     if (_categories.isEmpty) {
       await _insertDefaultCategories();
     } else {
+      // Remove duplicates if any (cleanup)
+      await _cleanupDuplicateCategories();
       notifyListeners();
+    }
+  }
+
+  Future<void> _cleanupDuplicateCategories() async {
+    bool changed = false;
+    final Map<String, CategoryModel> uniqueCats = {};
+    final List<int> idsToDelete = [];
+
+    for (var cat in _categories) {
+      String key = "${cat.name.toLowerCase().trim()}_${cat.type}";
+      if (uniqueCats.containsKey(key)) {
+        idsToDelete.add(cat.id!);
+        changed = true;
+      } else {
+        uniqueCats[key] = cat;
+      }
+    }
+
+    if (changed) {
+      for (var id in idsToDelete) {
+        await DatabaseHelper.instance.deleteCategory(id);
+      }
+      _categories = await DatabaseHelper.instance.getAllCategories();
     }
   }
 

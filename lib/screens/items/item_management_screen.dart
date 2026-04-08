@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../utils/image_helper.dart';
 import '../../providers/item_provider.dart';
 import '../../models/item_model.dart';
 import '../../providers/profile_provider.dart';
@@ -138,52 +140,89 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           leading: Container(
-                            padding: const EdgeInsets.all(10),
+                            height: 50,
+                            width: 50,
                             decoration: BoxDecoration(
                               color: (item.itemType == 'selling' ? Colors.green : Colors.orange).withOpacity(0.1),
-                              shape: BoxShape.circle,
+                              borderRadius: BorderRadius.circular(15),
                             ),
-                            child: Icon(
-                              item.itemType == 'selling' ? Icons.sell_outlined : Icons.inventory_2_outlined, 
-                              color: item.itemType == 'selling' ? Colors.green : Colors.orange, 
-                              size: 20
-                            ),
+                            alignment: Alignment.center,
+                            child: item.icon != null && item.icon!.isNotEmpty
+                              ? (item.icon!.startsWith('/') || item.icon!.contains('data/user')) // Check if it's a file path
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(15),
+                                    child: Image.file(File(item.icon!), width: 50, height: 50, fit: BoxFit.cover, 
+                                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image_outlined, size: 20),
+                                    ),
+                                  )
+                                : Text(item.icon!, style: const TextStyle(fontSize: 24))
+                              : Icon(
+                                  item.itemType == 'selling' ? Icons.sell_outlined : Icons.inventory_2_outlined, 
+                                  color: item.itemType == 'selling' ? Colors.green : Colors.orange, 
+                                  size: 24
+                                ),
                           ),
-                          title: Text(item.name, style: TextStyle(fontWeight: FontWeight.bold, color: profileProvider.textColor)),
+                          title: Text(item.name, style: TextStyle(fontWeight: FontWeight.w900, color: profileProvider.textColor, fontSize: 16)),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: (item.itemType == 'selling' ? Colors.green : Colors.orange).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  item.itemType == 'selling' ? 'SALE ITEM' : 'PURCHASE ITEM', 
-                                  style: TextStyle(color: item.itemType == 'selling' ? Colors.green : Colors.orange, fontSize: 9, fontWeight: FontWeight.bold)
-                                ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: (item.itemType == 'selling' ? Colors.green : Colors.orange).withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: (item.itemType == 'selling' ? Colors.green : Colors.orange).withOpacity(0.2))
+                                    ),
+                                    child: Text(
+                                      item.itemType == 'selling' ? 'SALE ITEM' : 'PURCHASE ITEM', 
+                                      style: TextStyle(color: item.itemType == 'selling' ? Colors.green : Colors.orange, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.5)
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(item.unit, style: TextStyle(color: profileProvider.secondaryTextColor.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold)),
+                                ],
                               ),
                               if (item.itemType == 'selling') ...[
-                                const SizedBox(height: 4),
-                                Text(item.price != null ? 'Price: ${profileProvider.currencySymbol}${item.price}${item.halfPrice != null ? ' | Half: ${profileProvider.currencySymbol}${item.halfPrice}' : ''}' : 'Price not set',
-                                  style: TextStyle(color: profileProvider.secondaryTextColor, fontSize: 12)),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Icon(Icons.payments_outlined, size: 14, color: profileProvider.secondaryTextColor.withOpacity(0.5)),
+                                    const SizedBox(width: 4),
+                                    Text(item.price != null ? '${profileProvider.currencySymbol}${item.price}' : 'Price not set',
+                                      style: TextStyle(color: profileProvider.textColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                                    if (item.halfPrice != null) ...[
+                                      Text(' | Half: ', style: TextStyle(color: profileProvider.secondaryTextColor, fontSize: 11)),
+                                      Text('${profileProvider.currencySymbol}${item.halfPrice}', style: TextStyle(color: themeColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ],
+                                ),
                               ],
                             ],
                           ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
-                                onPressed: () => _showItemBottomSheet(context, itemProvider, item: item),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                onPressed: () => _showDeleteConfirm(context, itemProvider, profileProvider, item),
-                              ),
-                            ],
+                          trailing: Container(
+                            decoration: BoxDecoration(
+                              color: profileProvider.scaffoldColor,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_rounded, color: Colors.blue, size: 18),
+                                  onPressed: () => _showItemBottomSheet(context, itemProvider, item: item),
+                                  constraints: const BoxConstraints(minWidth: 40),
+                                ),
+                                Container(width: 1, height: 20, color: Colors.grey.withOpacity(0.1)),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_rounded, color: Colors.red, size: 18),
+                                  onPressed: () => _showDeleteConfirm(context, itemProvider, profileProvider, item),
+                                  constraints: const BoxConstraints(minWidth: 40),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -312,10 +351,17 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
     final halfUnitController = TextEditingController(text: item?.halfUnit ?? 'Half Portion');
     final fullQtyController = TextEditingController(text: item?.fullQty?.toString() ?? '1');
     final halfQtyController = TextEditingController(text: item?.halfQty?.toString() ?? '0.5');
+    String selectedIcon = item?.icon ?? '🍽️'; // Default icon
     
     bool hasHalfOption = item?.halfPrice != null;
     String selectedItemType = type ?? item?.itemType ?? 'selling';
     final isEditing = item != null;
+
+    final List<String> commonIcons = [
+      '🍔', '🍕', '🍟', '🍦', '🍩', '🥤', '☕', '🍗', '🥗', '🍲', 
+      '🍞', '🥚', '🥛', '🍎', '🍌', '🥩', '🥓', '🥘', '🍳', '🧂',
+      '📦', '💰', '🏷️', '🛒', '📦', '🛠️', '🚚', '📊', '📅'
+    ];
 
     showModalBottomSheet(
       context: context,
@@ -323,7 +369,11 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => Container(
-          decoration: BoxDecoration(color: profileProvider.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
+          decoration: BoxDecoration(
+            color: profileProvider.cardColor, 
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 20, spreadRadius: 5)]
+          ),
           padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
           child: SingleChildScrollView(
             child: Column(
@@ -331,12 +381,51 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: profileProvider.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)))),
-                Text(isEditing ? 'Edit Item' : 'New Item Details', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: profileProvider.textColor)),
-                const SizedBox(height: 20),
+                
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(isEditing ? 'Edit Item' : 'New Item Details', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: profileProvider.textColor)),
+                    GestureDetector(
+                      onTap: () => _showIconPickerSheet(context, (val) => setDialogState(() => selectedIcon = val), selectedIcon),
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 64, height: 64,
+                            decoration: BoxDecoration(
+                              color: themeColor.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: themeColor.withOpacity(0.3), width: 2)
+                            ),
+                            alignment: Alignment.center,
+                            child: selectedIcon.startsWith('/') || selectedIcon.contains('data/user')
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(32),
+                                  child: Image.file(File(selectedIcon), width: 64, height: 64, fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => Icon(Icons.broken_image_outlined, color: themeColor),
+                                  ),
+                                )
+                              : Text(selectedIcon, style: const TextStyle(fontSize: 32)),
+                          ),
+                          Positioned(
+                            bottom: 0, right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(color: themeColor, shape: BoxShape.circle),
+                              child: const Icon(Icons.edit, size: 12, color: Colors.white),
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                
                 _buildField(nameController, 'Item Name', Icons.label_important_outline, profileProvider, isCapitalize: true),
                 const SizedBox(height: 20),
                 
-                Text('UNIT & PRICING', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profileProvider.secondaryTextColor)),
+                Text('UNIT & PRICING', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profileProvider.secondaryTextColor, letterSpacing: 1.2)),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -345,7 +434,11 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(color: profileProvider.scaffoldColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: profileProvider.isDarkMode ? Colors.white10 : Colors.grey.shade200)),
+                        decoration: BoxDecoration(
+                          color: profileProvider.scaffoldColor, 
+                          borderRadius: BorderRadius.circular(16), 
+                          border: Border.all(color: profileProvider.isDarkMode ? Colors.white10 : Colors.grey.shade200)
+                        ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: availableUnitNames.contains(selectedUnit) ? selectedUnit : null,
@@ -365,17 +458,31 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                 if (selectedItemType == 'selling') ...[
                   const SizedBox(height: 16),
                   _buildField(fullQtyController, 'Deduct Qty per Sale', Icons.inventory_outlined, profileProvider, isNumber: true),
-                  SwitchListTile(
-                    title: Text('Has Half Option?', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: profileProvider.textColor)),
-                    value: hasHalfOption,
-                    onChanged: (val) => setDialogState(() => hasHalfOption = val),
-                    contentPadding: EdgeInsets.zero,
-                    activeColor: themeColor,
+                  
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: themeColor.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: themeColor.withOpacity(0.1))
+                    ),
+                    child: SwitchListTile(
+                      title: Text('Has Half Option?', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: profileProvider.textColor)),
+                      value: hasHalfOption,
+                      onChanged: (val) => setDialogState(() => hasHalfOption = val),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      activeColor: themeColor,
+                    ),
                   ),
+                  
                   if (hasHalfOption) ...[
-                    _buildField(halfPriceController, 'Half Price', Icons.payments_outlined, profileProvider, isNumber: true, prefix: profileProvider.currencySymbol),
-                    const SizedBox(height: 12),
-                    _buildField(halfQtyController, 'Deduct Qty per Half', Icons.inventory_outlined, profileProvider, isNumber: true),
+                    Row(
+                      children: [
+                        Expanded(child: _buildField(halfPriceController, 'Half Price', Icons.payments_outlined, profileProvider, isNumber: true, prefix: profileProvider.currencySymbol)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildField(halfQtyController, 'Half Qty', Icons.inventory_outlined, profileProvider, isNumber: true)),
+                      ],
+                    ),
                   ],
                 ],
                 const SizedBox(height: 32),
@@ -391,11 +498,17 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                       fullQty: double.tryParse(fullQtyController.text) ?? 1,
                       halfQty: hasHalfOption ? double.tryParse(halfQtyController.text) : 0.5,
                       itemType: selectedItemType,
+                      icon: selectedIcon, // Saving the selected icon
                     );
                     if (isEditing ? await provider.updateItem(newItem) : await provider.addItem(newItem)) Navigator.pop(context);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: themeColor, minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-                  child: Text(isEditing ? 'UPDATE ITEM' : 'SAVE ITEM', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themeColor, 
+                    minimumSize: const Size(double.infinity, 60), 
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    elevation: 0,
+                  ),
+                  child: Text(isEditing ? 'UPDATE ITEM' : 'SAVE ITEM', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 16, letterSpacing: 1)),
                 ),
               ],
             ),
@@ -403,6 +516,83 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
         ),
       ),
     );
+  }
+
+  void _showIconPickerSheet(BuildContext context, Function(String) onSelected, String current) {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final themeColor = profile.themeColor;
+    final List<String> commonIcons = ['🍔', '🍕', '🍟', '🍦', '🍩', '🥤', '☕', '🍗', '🥗', '🍲', '🍳', '🧂', '📦', '💰', '🏷️', '🛒', '🛠️'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(color: profile.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2))),
+            Text("Select Item Icon", style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 18)),
+            const SizedBox(height: 24),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                int crossAxisCount = constraints.maxWidth > 600 ? 10 : 6;
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount, 
+                    mainAxisSpacing: 12, 
+                    crossAxisSpacing: 12
+                  ),
+                  itemCount: commonIcons.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == commonIcons.length) {
+                      return GestureDetector(
+                        onTap: () => _pickAndCropImage(context, onSelected),
+                        child: Container(
+                          decoration: BoxDecoration(color: themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(15), border: Border.all(color: themeColor.withOpacity(0.3))),
+                          child: Icon(Icons.add_a_photo_outlined, color: themeColor),
+                        ),
+                      );
+                    }
+                    return GestureDetector(
+                      onTap: () { onSelected(commonIcons[index]); Navigator.pop(context); },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: profile.scaffoldColor, 
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: current == commonIcons[index] ? themeColor : Colors.transparent)
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(commonIcons[index], style: const TextStyle(fontSize: 24)),
+                      ),
+                    );
+                  },
+                );
+              }
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndCropImage(BuildContext context, Function(String) onSelected) async {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    
+    final String? croppedPath = await ImageHelper.pickAndCropItemIcon(
+      context: context, 
+      themeColor: profile.themeColor
+    );
+
+    if (croppedPath != null) {
+      onSelected(croppedPath);
+      if (context.mounted) Navigator.pop(context);
+    }
   }
 
   Widget _buildField(TextEditingController controller, String label, IconData icon, ProfileProvider profile, {bool isNumber = false, String? prefix, bool isCapitalize = false}) {

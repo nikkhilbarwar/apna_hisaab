@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import '../../services/license_service.dart';
 import '../../providers/profile_provider.dart';
 import '../../utils/report_helper.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -128,10 +130,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Future<void> _postAnnouncement() async {
     setState(() => _isPostingAnnouncement = true);
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final adminId = prefs.getString('admin_id') ?? FirebaseAuth.instance.currentUser?.email ?? "Unknown Admin";
+
       await LicenseService.firestore.collection('admin_settings').doc('announcement').set({
         'message': _announcementController.text.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      
+      await LicenseService.logAdminAction(adminId, "POST_ANNOUNCEMENT", "Published: ${_announcementController.text.trim()}");
+
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Announcement Published!"), backgroundColor: Colors.green));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
@@ -146,6 +154,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     bool saleBlocked = data['saleBlocked'] ?? false;
     bool expenseBlocked = data['expenseBlocked'] ?? false;
     bool bypassCheck = data['bypassCheck'] ?? false;
+    String appVersion = data['appVersion'] ?? "Unknown";
+    String lastUsed = data['lastUsedAt'] != null 
+        ? DateFormat('dd MMM, hh:mm a').format((data['lastUsedAt'] as Timestamp).toDate()) 
+        : "Never";
 
     showModalBottomSheet(
       context: context,
@@ -192,27 +204,38 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 ),
                 const SizedBox(height: 24),
                 _detailRow("License Key", data['licenseKey'] ?? "N/A", Icons.vpn_key, profile, isSelectable: true),
-                _detailRow("Validity", data['validTillFormatted'] ?? "N/A", Icons.calendar_today, profile),
+                Row(
+                  children: [
+                    Expanded(child: _detailRow("Validity", data['validTillFormatted'] ?? "N/A", Icons.calendar_today, profile)),
+                    Expanded(child: _detailRow("App Version", appVersion, Icons.phonelink_setup_rounded, profile)),
+                  ],
+                ),
+                _detailRow("Last Active", lastUsed, Icons.access_time_rounded, profile),
                 
                 const Divider(height: 32),
                 Text("USER PERMISSIONS & CONTROLS", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: profile.secondaryTextColor, letterSpacing: 1)),
                 const SizedBox(height: 16),
                 
                 _toggleTile("Bypass License Check", "Allow app access even if license is invalid", bypassCheck, Icons.verified_user_outlined, profile, (val) async {
+                  final prefs = await SharedPreferences.getInstance();
+                  final adminId = prefs.getString('admin_id') ?? FirebaseAuth.instance.currentUser?.email ?? "Unknown Admin";
                   await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({'bypassCheck': val});
+                  await LicenseService.logAdminAction(adminId, "TOGGLE_BYPASS", "Set bypass to $val for ${data['licenseKey']}");
                   setModalState(() => bypassCheck = val);
                 }),
                 _toggleTile("Payment Reminder", "Show daily payment alerts to user", isReminderEnabled, Icons.notifications_active_rounded, profile, (val) async {
+                  final prefs = await SharedPreferences.getInstance();
+                  final adminId = prefs.getString('admin_id') ?? FirebaseAuth.instance.currentUser?.email ?? "Unknown Admin";
                   await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({'isReminderEnabled': val});
+                  await LicenseService.logAdminAction(adminId, "TOGGLE_REMINDER", "Set reminder to $val for ${data['licenseKey']}");
                   setModalState(() => isReminderEnabled = val);
                 }),
                 _toggleTile("Block Sales", "Prevent user from creating new sales", saleBlocked, Icons.block_flipped, profile, (val) async {
+                  final prefs = await SharedPreferences.getInstance();
+                  final adminId = prefs.getString('admin_id') ?? FirebaseAuth.instance.currentUser?.email ?? "Unknown Admin";
                   await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({'saleBlocked': val});
+                  await LicenseService.logAdminAction(adminId, "BLOCK_SALES", "Set block_sales to $val for ${data['licenseKey']}");
                   setModalState(() => saleBlocked = val);
-                }),
-                _toggleTile("Block Expenses/Purchase", "Prevent user from adding purchases", expenseBlocked, Icons.shopping_bag_outlined, profile, (val) async {
-                  await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({'expenseBlocked': val});
-                  setModalState(() => expenseBlocked = val);
                 }),
                 
                 const SizedBox(height: 24),
@@ -232,28 +255,59 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: ElevatedButton(
+                      child: ElevatedButton.icon(
                         onPressed: () async {
-                          await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({
-                            'status': isActive ? 'blocked' : 'active'
-                          });
+                          final prefs = await SharedPreferences.getInstance();
+                          final adminId = prefs.getString('admin_id') ?? FirebaseAuth.instance.currentUser?.email ?? "Unknown Admin";
+                          await LicenseService.resetDevice(data['licenseKey'], adminId);
                           Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: Text(isActive ? "License Blocked!" : "License Unblocked!"),
-                            backgroundColor: isActive ? Colors.red : Colors.green,
-                          ));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Device Reset Successful!")));
                         },
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text("RESET DEVICE"),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: isActive ? Colors.red : Colors.green,
+                          backgroundColor: Colors.orange.shade800,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        child: Text(isActive ? "BLOCK APP" : "ACTIVATE APP", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      final adminId = prefs.getString('admin_id') ?? FirebaseAuth.instance.currentUser?.email ?? "Unknown Admin";
+                      await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({
+                        'status': isActive ? 'blocked' : 'active'
+                      });
+                      await LicenseService.logAdminAction(adminId, isActive ? "BLOCK_APP" : "ACTIVATE_APP", "License ${data['licenseKey']} status set to ${isActive ? 'blocked' : 'active'}");
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(isActive ? "License Blocked!" : "License Unblocked!"),
+                        backgroundColor: isActive ? Colors.red : Colors.green,
+                      ));
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isActive ? Colors.red : Colors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: Text(isActive ? "BLOCK APP" : "ACTIVATE APP", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
                 const SizedBox(height: 16),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () => _deleteLicense(data['licenseKey'], data['restaurantName'] ?? "N/A", profile),
+                    icon: const Icon(Icons.delete_forever_rounded, color: Colors.red),
+                    label: const Text("DELETE LICENSE PERMANENTLY", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Center(
                   child: TextButton.icon(
                     onPressed: () => Share.share("Restaurant: ${data['restaurantName']}\nLicense: ${data['licenseKey']}\nDownload App: $_driveLink"),
@@ -267,6 +321,47 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _deleteLicense(String key, String restaurant, ProfileProvider profile) async {
+    bool confirm = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("Delete License?", style: TextStyle(color: profile.textColor)),
+        content: Text("Are you sure you want to permanently delete the license for '$restaurant'? This cannot be undone.", 
+          style: TextStyle(color: profile.secondaryTextColor)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("CANCEL")),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("DELETE", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (confirm) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final adminId = prefs.getString('admin_id') ?? FirebaseAuth.instance.currentUser?.email ?? "Unknown Admin";
+
+        await LicenseService.firestore.collection('licenses').doc(key).delete();
+        await LicenseService.logAdminAction(adminId, "DELETE_LICENSE", "Permanently deleted license for $restaurant ($key)");
+
+        if (mounted) {
+          Navigator.pop(context); // Close details modal
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("License Deleted Successfully"),
+            backgroundColor: Colors.red,
+          ));
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    }
   }
 
   Widget _toggleTile(String title, String sub, bool value, IconData icon, ProfileProvider profile, Function(bool) onChanged) {
@@ -291,11 +386,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
 
     if (picked != null) {
+      final prefs = await SharedPreferences.getInstance();
+      final adminId = prefs.getString('admin_id') ?? FirebaseAuth.instance.currentUser?.email ?? "Unknown Admin";
+      
       await LicenseService.firestore.collection('licenses').doc(data['licenseKey']).update({
         'validTill': picked.toIso8601String(),
         'validTillFormatted': DateFormat('dd/MM/yyyy').format(picked),
         'isLifetime': false,
       });
+      await LicenseService.logAdminAction(adminId, "EDIT_EXPIRY", "Changed expiry to ${DateFormat('dd/MM/yyyy').format(picked)} for ${data['licenseKey']}");
+      
       if (mounted) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Expiry Date Updated!")));
     }
@@ -344,6 +444,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         foregroundColor: appBarContentColor,
         elevation: 0,
         iconTheme: IconThemeData(color: appBarContentColor),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history_rounded),
+            onPressed: () => _showLogsModal(profile),
+            tooltip: "Admin Logs",
+          ),
+        ],
       ),
       body: _isInitializing 
         ? const Center(child: CircularProgressIndicator()) 
@@ -634,5 +741,69 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         ),
       ),
     );
+  }
+
+  void _showLogsModal(ProfileProvider profile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: BoxDecoration(
+          color: profile.scaffoldColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            const Text("ADMIN ACTION LOGS", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1)),
+            const Divider(),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: LicenseService.firestore.collection('admin_logs').orderBy('timestamp', descending: true).limit(50).snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                  final logs = snapshot.data!.docs;
+                  if (logs.isEmpty) return const Center(child: Text("No logs found"));
+
+                  return ListView.builder(
+                    itemCount: logs.length,
+                    itemBuilder: (context, i) {
+                      final log = logs[i].data() as Map<String, dynamic>;
+                      final time = log['timestamp'] != null 
+                          ? DateFormat('dd MMM, hh:mm a').format((log['timestamp'] as Timestamp).toDate()) 
+                          : "Just now";
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: profile.themeColor.withOpacity(0.1),
+                          child: Icon(_getLogIcon(log['action']), color: profile.themeColor, size: 20),
+                        ),
+                        title: Text(log['details'] ?? "No details", style: TextStyle(fontSize: 13, color: profile.textColor, fontWeight: FontWeight.w600)),
+                        subtitle: Text("By: ${log['adminId']} • $time", style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getLogIcon(String? action) {
+    switch (action) {
+      case 'RESET_DEVICE': return Icons.refresh_rounded;
+      case 'BLOCK_APP': return Icons.block_flipped;
+      case 'ACTIVATE_APP': return Icons.check_circle_rounded;
+      case 'EDIT_EXPIRY': return Icons.edit_calendar_rounded;
+      case 'POST_ANNOUNCEMENT': return Icons.campaign_rounded;
+      case 'DELETE_LICENSE': return Icons.delete_forever_rounded;
+      default: return Icons.info_outline_rounded;
+    }
   }
 }

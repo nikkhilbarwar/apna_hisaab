@@ -1,7 +1,7 @@
 name: apna_hisaab
 description: "Professional Cart Sale Management App"
 publish_to: 'none'
-version: 1.0.2+20
+version: 1.0.2+21
 
 environment:
   sdk: ^3.11.1
@@ -39,6 +39,7 @@ dependencies:
   local_auth: ^2.3.0
   flutter_pos_printer_platform_image_3: ^1.2.4
   esc_pos_utils_plus: ^2.0.4
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:
