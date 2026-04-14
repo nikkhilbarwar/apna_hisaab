@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -42,7 +43,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path, 
-      version: 23, 
+      version: 28,
       onCreate: _createDB, 
       onUpgrade: _onUpgrade
     );
@@ -86,9 +87,52 @@ class DatabaseHelper {
         )
       ''');
     }
+    if (oldVersion < 24) {
+      try { await db.execute('ALTER TABLE staff ADD COLUMN image_path TEXT'); } catch(_) {}
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS staff_advance (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          staff_id INTEGER,
+          amount REAL,
+          date TEXT,
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+    }
+    if (oldVersion < 25) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS staff_leave (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          staff_id INTEGER,
+          date TEXT,
+          type REAL,
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+    }
+    if (oldVersion < 26) {
+      try {
+        await db.execute('ALTER TABLE staff ADD COLUMN role TEXT DEFAULT "Staff"');
+      } catch (e) {
+        debugPrint("Error adding role column: $e");
+      }
+    }
+    if (oldVersion < 27) {
+      try { await db.execute('ALTER TABLE items ADD COLUMN is_deleted INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE items ADD COLUMN deleted_at TEXT'); } catch(_) {}
+      try { await db.execute('ALTER TABLE categories ADD COLUMN is_deleted INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE categories ADD COLUMN deleted_at TEXT'); } catch(_) {}
+      try { await db.execute('ALTER TABLE staff ADD COLUMN is_deleted INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE staff ADD COLUMN deleted_at TEXT'); } catch(_) {}
+    }
+    if (oldVersion < 28) {
+      try { await db.execute('ALTER TABLE items ADD COLUMN purchase_price REAL'); } catch(_) {}
+      try { await db.execute('ALTER TABLE items ADD COLUMN transport_cost REAL'); } catch(_) {}
+    }
   }
 
   Future _createDB(Database db, int version) async {
+    // ... existing tables ...
     await db.execute('''
       CREATE TABLE transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,7 +174,11 @@ class DatabaseHelper {
         item_type TEXT DEFAULT "selling",
         is_synced INTEGER DEFAULT 0,
         low_stock_alert INTEGER DEFAULT 1,
-        icon TEXT
+        icon TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT,
+        purchase_price REAL,
+        transport_cost REAL
       )
     ''');
 
@@ -149,11 +197,36 @@ class DatabaseHelper {
       CREATE TABLE staff (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
+        role TEXT DEFAULT "Staff",
         monthly_salary REAL,
-        advance REAL,
+        advance REAL DEFAULT 0,
         join_date TEXT,
         contact TEXT,
-        total_leaves INTEGER DEFAULT 0,
+        total_leaves REAL DEFAULT 0,
+        image_path TEXT,
+        image_url TEXT,
+        is_synced INTEGER DEFAULT 0,
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE staff_advance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        staff_id INTEGER,
+        amount REAL,
+        date TEXT,
+        is_synced INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE staff_leave (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        staff_id INTEGER,
+        date TEXT,
+        type REAL,
         is_synced INTEGER DEFAULT 0
       )
     ''');
@@ -168,7 +241,9 @@ class DatabaseHelper {
         display_order INTEGER DEFAULT 0,
         use_category_stock INTEGER DEFAULT 0,
         stock_qty REAL DEFAULT 0,
-        low_stock_limit REAL DEFAULT 10
+        low_stock_limit REAL DEFAULT 10,
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT
       )
     ''');
 
@@ -203,6 +278,8 @@ class DatabaseHelper {
     await db.delete('items');
     await db.delete('categories');
     await db.delete('staff');
+    await db.delete('staff_advance');
+    await db.delete('staff_leave');
     await db.delete('suppliers');
     await db.delete('units');
     await db.delete('purchase_reminders');
@@ -269,7 +346,25 @@ class DatabaseHelper {
     final db = await instance.database;
     return await db.update('items', {'current_stock': newStock, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
   }
-  Future<int> deleteItem(int id) async {
+
+  Future<int> updateCategoryItemsStock(String categoryName, double newStock) async {
+    final db = await instance.database;
+    return await db.update(
+      'items',
+      {'current_stock': newStock, 'is_synced': 0},
+      where: 'category = ?',
+      whereArgs: [categoryName],
+    );
+  }
+  Future<int> softDeleteItem(int id) async {
+    final db = await instance.database;
+    return await db.update('items', {'is_deleted': 1, 'deleted_at': DateTime.now().toIso8601String(), 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+  Future<int> restoreItem(int id) async {
+    final db = await instance.database;
+    return await db.update('items', {'is_deleted': 0, 'deleted_at': null, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+  Future<int> permanentDeleteItem(int id) async {
     final db = await instance.database;
     return await db.delete('items', where: 'id = ?', whereArgs: [id]);
   }
@@ -291,7 +386,15 @@ class DatabaseHelper {
     final db = await instance.database;
     return await db.update('categories', {'stock_qty': newStock, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
   }
-  Future<int> deleteCategory(int id) async {
+  Future<int> softDeleteCategory(int id) async {
+    final db = await instance.database;
+    return await db.update('categories', {'is_deleted': 1, 'deleted_at': DateTime.now().toIso8601String(), 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+  Future<int> restoreCategory(int id) async {
+    final db = await instance.database;
+    return await db.update('categories', {'is_deleted': 0, 'deleted_at': null, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+  Future<int> permanentDeleteCategory(int id) async {
     final db = await instance.database;
     return await db.delete('categories', where: 'id = ?', whereArgs: [id]);
   }
@@ -309,7 +412,15 @@ class DatabaseHelper {
     final db = await instance.database;
     return await db.update('staff', staff.toMap(), where: 'id = ?', whereArgs: [staff.id]);
   }
-  Future<int> deleteStaff(int id) async {
+  Future<int> softDeleteStaff(int id) async {
+    final db = await instance.database;
+    return await db.update('staff', {'is_deleted': 1, 'deleted_at': DateTime.now().toIso8601String(), 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+  Future<int> restoreStaff(int id) async {
+    final db = await instance.database;
+    return await db.update('staff', {'is_deleted': 0, 'deleted_at': null, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+  Future<int> permanentDeleteStaff(int id) async {
     final db = await instance.database;
     return await db.delete('staff', where: 'id = ?', whereArgs: [id]);
   }

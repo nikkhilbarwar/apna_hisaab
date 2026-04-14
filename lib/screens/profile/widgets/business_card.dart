@@ -22,14 +22,14 @@ class BusinessCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 8),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [profile.themeColor, profile.themeColor.withValues(alpha: 0.5)],
+          colors: [profile.themeColor, profile.themeColor.withValues(alpha: .5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: profile.themeColor.withValues(alpha: 0.3),
+            color: profile.themeColor.withValues(alpha: .3),
             blurRadius: 12,
             offset: const Offset(0, 6),
           )
@@ -71,7 +71,7 @@ class BusinessCard extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.2),
+                                  color: Colors.white.withValues(alpha: .2),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(Icons.edit_note_rounded, color: Colors.white, size: 18),
@@ -83,14 +83,14 @@ class BusinessCard extends StatelessWidget {
                             profile.ownerName.isEmpty
                                 ? (user?.displayName ?? 'Business Owner')
                                 : profile.ownerName,
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w500),
+                            style: TextStyle(color: Colors.white.withValues(alpha: .9), fontSize: 13, fontWeight: FontWeight.w500),
                           ),
                           if (profile.isActivated)
                             Container(
                               margin: const EdgeInsets.only(top: 8),
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
+                                color: Colors.white.withValues(alpha: .2),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(

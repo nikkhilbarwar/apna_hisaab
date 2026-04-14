@@ -86,7 +86,7 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
                         margin: const EdgeInsets.only(right: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          color: isSel ? profile.themeColor : profile.themeColor.withOpacity(0.05),
+                          color: isSel ? profile.themeColor : profile.themeColor.withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(mode, style: TextStyle(color: isSel ? Colors.white : profile.themeColor, fontWeight: FontWeight.bold)),
@@ -287,7 +287,7 @@ class _HistoryList extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.history_rounded, size: 64, color: profile.secondaryTextColor.withOpacity(0.1)),
+            Icon(Icons.history_rounded, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.1)),
             const SizedBox(height: 16),
             Text('No matching records found', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
           ],
@@ -316,10 +316,10 @@ class _HistoryList extends StatelessWidget {
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: isSelected ? Colors.red.withOpacity(0.05) : profile.cardColor,
+              color: isSelected ? Colors.red.withValues(alpha: 0.05) : profile.cardColor,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isSelected ? Colors.red : (isCredit ? Colors.orange.withOpacity(0.5) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)),
+                color: isSelected ? Colors.red : (isCredit ? Colors.orange.withValues(alpha: 0.5) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)),
                 width: (isSelected || isCredit) ? 2 : 1,
               ),
             ),
@@ -330,7 +330,7 @@ class _HistoryList extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: isTrash ? Colors.grey.withOpacity(0.1) : (tx.type == 'sale' ? Colors.green : Colors.red).withOpacity(0.1),
+                      color: isTrash ? Colors.grey.withValues(alpha: 0.1) : (tx.type == 'sale' ? Colors.green : Colors.red).withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -390,7 +390,7 @@ class _HistoryList extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.2), borderRadius: BorderRadius.circular(2)))),
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -405,7 +405,7 @@ class _HistoryList extends StatelessWidget {
                 if (tx.parsedItems.isNotEmpty && tx.parsedItems.first['table_number'] != null)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                    decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
                     child: Text('TABLE ${tx.parsedItems.first['table_number']}', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
               ],
@@ -429,7 +429,7 @@ class _HistoryList extends StatelessWidget {
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.05), borderRadius: BorderRadius.circular(4)),
+                    decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(4)),
                     child: Text(item['serving_method'] ?? 'Dine-in', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: profile.themeColor)),
                   ),
                 ],

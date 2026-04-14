@@ -137,13 +137,13 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: isSelected ? Colors.red.withOpacity(0.05) : cardColor,
+        color: isSelected ? Colors.red.withValues(alpha: 0.05) : cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: isSelected ? Colors.red : profile.isDarkMode ? Colors.white10 : Colors.grey.shade100, 
           width: isSelected ? 2 : 1
         ),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
@@ -169,7 +169,7 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                            decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -181,7 +181,7 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
                           ),
                           const Spacer(),
                           if (tableNum.isNotEmpty) ...[
-                             Icon(Icons.restaurant_rounded, size: 14, color: themeColor.withOpacity(0.6)),
+                             Icon(Icons.restaurant_rounded, size: 14, color: themeColor.withValues(alpha: 0.6)),
                              const SizedBox(width: 4),
                              Text('Table $tableNum', style: TextStyle(color: themeColor, fontWeight: FontWeight.w900, fontSize: 12)),
                              const SizedBox(width: 12),
@@ -208,7 +208,7 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(4),
                                     decoration: BoxDecoration(color: profile.scaffoldColor, borderRadius: BorderRadius.circular(6)),
-                                    child: Icon(Icons.fastfood_rounded, size: 12, color: themeColor.withOpacity(0.5)),
+                                    child: Icon(Icons.fastfood_rounded, size: 12, color: themeColor.withValues(alpha: 0.5)),
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(child: Text(item['display'] ?? '', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w700))),
@@ -219,7 +219,7 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
                                   padding: const EdgeInsets.only(left: 26, top: 4),
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.08), borderRadius: BorderRadius.circular(6)),
+                                    decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
                                     child: Text(
                                       'Extra: ${exQty > 0 ? '${exQty.toInt()}x ' : ''}${profile.currencySymbol}${exPrice.toInt()}',
                                       style: TextStyle(color: Colors.blue.shade700, fontSize: 10, fontWeight: FontWeight.w900),
@@ -301,8 +301,8 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(color: profile.themeColor.withOpacity(0.05), shape: BoxShape.circle),
-              child: Icon(Icons.pending_actions_rounded, size: 80, color: profile.themeColor.withOpacity(0.2)),
+              decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.05), shape: BoxShape.circle),
+              child: Icon(Icons.pending_actions_rounded, size: 80, color: profile.themeColor.withValues(alpha: 0.2)),
             ),
             const SizedBox(height: 24),
             Text('No Pending Orders', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.w900, fontSize: 20)),

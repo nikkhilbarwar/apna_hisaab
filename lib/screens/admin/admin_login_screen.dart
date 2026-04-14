@@ -13,7 +13,7 @@ class AdminLoginScreen extends StatefulWidget {
 }
 
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscure = true;
@@ -27,13 +27,13 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   Future<void> _loadSavedCredentials() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedEmail = prefs.getString('remembered_admin_email') ?? '';
+    final savedPhone = prefs.getString('remembered_admin_phone') ?? '';
     final savedPassword = prefs.getString('remembered_admin_password') ?? '';
     final remember = prefs.getBool('admin_remember_me') ?? false;
 
     if (remember) {
       setState(() {
-        _emailController.text = savedEmail;
+        _phoneController.text = savedPhone;
         _passwordController.text = savedPassword;
         _rememberMe = true;
       });
@@ -41,29 +41,29 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    final email = _emailController.text.trim();
+    final phone = _phoneController.text.trim();
     final pass = _passwordController.text.trim();
 
-    if (email.isEmpty || pass.isEmpty) {
+    if (phone.isEmpty || pass.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Email and Password are required")),
+        const SnackBar(content: Text("Phone and Password are required")),
       );
       return;
     }
 
     setState(() => _isLoading = true);
-    final result = await LicenseService.loginAdmin(email, pass);
+    final result = await LicenseService.loginAdmin(phone, pass);
     setState(() => _isLoading = false);
 
     if (result['success']) {
       // Save credentials if remember me is checked
       final prefs = await SharedPreferences.getInstance();
       if (_rememberMe) {
-        await prefs.setString('remembered_admin_email', email);
+        await prefs.setString('remembered_admin_phone', phone);
         await prefs.setString('remembered_admin_password', pass);
         await prefs.setBool('admin_remember_me', true);
       } else {
-        await prefs.remove('remembered_admin_email');
+        await prefs.remove('remembered_admin_phone');
         await prefs.remove('remembered_admin_password');
         await prefs.setBool('admin_remember_me', false);
       }
@@ -105,11 +105,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               Icon(Icons.admin_panel_settings, size: 80, color: themeColor),
               const SizedBox(height: 32),
               TextField(
-                controller: _emailController,
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                maxLength: 10,
                 style: TextStyle(color: profile.textColor),
                 decoration: InputDecoration(
-                  labelText: "Admin Email / Phone",
-                  prefixIcon: const Icon(Icons.email_outlined),
+                  labelText: "Admin Phone Number",
+                  prefixIcon: const Icon(Icons.phone_android),
+                  counterText: "",
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                 ),
               ),

@@ -47,7 +47,7 @@ class TransactionTile extends StatelessWidget {
         border: Border.all(
           color: isSelected 
             ? Colors.red 
-            : (isPending ? Colors.orange.withValues(alpha: 0.4) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)), 
+            : (isPending ? Colors.orange.withValues(alpha: 0.4) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)),
           width: isSelected ? 2 : 1
         ),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.01), blurRadius: 8, offset: const Offset(0, 2))],
@@ -59,7 +59,7 @@ class TransactionTile extends StatelessWidget {
         leading: isSelected ? const Icon(Icons.check_circle, color: Colors.red, size: 28) : Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: (isPending ? Colors.orange : (isSale ? Colors.green : (isPurchase ? Colors.orange : Colors.red))).withOpacity(0.1), 
+            color: (isPending ? Colors.orange : (isSale ? Colors.green : (isPurchase ? Colors.orange : Colors.red))).withValues(alpha: 0.1), 
             borderRadius: BorderRadius.circular(14)
           ),
           child: Icon(
@@ -75,7 +75,7 @@ class TransactionTile extends StatelessWidget {
             const SizedBox(width: 4),
             Text(DateFormat('hh:mm a').format(tx.date), style: TextStyle(color: profile.secondaryTextColor, fontSize: 10)),
             const SizedBox(width: 8),
-            Container(width: 3, height: 3, decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.3), shape: BoxShape.circle)),
+            Container(width: 3, height: 3, decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.3), shape: BoxShape.circle)),
             const SizedBox(width: 8),
             Text(tx.paymentMode, style: TextStyle(color: profile.secondaryTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
           ],

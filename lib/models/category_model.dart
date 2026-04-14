@@ -7,6 +7,8 @@ class CategoryModel {
   int useCategoryStock;
   double stockQty;
   double lowStockLimit;
+  int isDeleted;
+  DateTime? deletedAt;
 
   CategoryModel({
     this.id,
@@ -17,6 +19,8 @@ class CategoryModel {
     this.useCategoryStock = 0,
     this.stockQty = 0,
     this.lowStockLimit = 10,
+    this.isDeleted = 0,
+    this.deletedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -29,19 +33,23 @@ class CategoryModel {
       'use_category_stock': useCategoryStock,
       'stock_qty': stockQty,
       'low_stock_limit': lowStockLimit,
+      'is_deleted': isDeleted,
+      'deleted_at': deletedAt?.toIso8601String(),
     };
   }
 
   factory CategoryModel.fromMap(Map<String, dynamic> map) {
     return CategoryModel(
-      id: map['id'] as int?,
-      name: map['name'] as String,
-      iconName: map['icon_name'] as String? ?? 'category',
-      type: map['type'] as String? ?? 'selling',
-      displayOrder: map['display_order'] as int? ?? 0,
-      useCategoryStock: map['use_category_stock'] as int? ?? 0,
+      id: (map['id'] as num?)?.toInt(),
+      name: map['name']?.toString() ?? 'General',
+      iconName: map['icon_name']?.toString() ?? 'category',
+      type: map['type']?.toString() ?? 'selling',
+      displayOrder: (map['display_order'] as num? ?? 0).toInt(),
+      useCategoryStock: (map['use_category_stock'] as num? ?? 0).toInt(),
       stockQty: (map['stock_qty'] as num? ?? 0).toDouble(),
       lowStockLimit: (map['low_stock_limit'] as num? ?? 10).toDouble(),
+      isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
+      deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
     );
   }
 
@@ -54,6 +62,8 @@ class CategoryModel {
     int? useCategoryStock,
     double? stockQty,
     double? lowStockLimit,
+    int? isDeleted,
+    DateTime? deletedAt,
   }) {
     return CategoryModel(
       id: id ?? this.id,
@@ -64,6 +74,8 @@ class CategoryModel {
       useCategoryStock: useCategoryStock ?? this.useCategoryStock,
       stockQty: stockQty ?? this.stockQty,
       lowStockLimit: lowStockLimit ?? this.lowStockLimit,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
 }

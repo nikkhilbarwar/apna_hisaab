@@ -178,7 +178,7 @@ class _IconCropScreenState extends State<IconCropScreen> {
             children: [
               // Dark Background with Hole
               ColorFiltered(
-                colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.7), BlendMode.srcOut),
+                colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.7), BlendMode.srcOut),
                 child: Stack(
                   children: [
                     Container(decoration: const BoxDecoration(color: Colors.black, backgroundBlendMode: BlendMode.dstOut)),
@@ -202,7 +202,7 @@ class _IconCropScreenState extends State<IconCropScreen> {
                 child: Container(
                   width: w, height: h,
                   decoration: BoxDecoration(
-                    border: Border.all(color: widget.themeColor.withOpacity(0.5), width: 2),
+                    border: Border.all(color: widget.themeColor.withValues(alpha: 0.5), width: 2),
                     shape: _currentMode == CropMode.circle ? BoxShape.circle : BoxShape.rectangle,
                   ),
                 ),

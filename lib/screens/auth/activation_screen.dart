@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../providers/profile_provider.dart';
 import '../../services/license_service.dart';
+import '../../services/auth_service.dart';
+import '../dashboard/dashboard_screen.dart';
+import 'login_screen.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key});
@@ -16,6 +21,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
   final TextEditingController _keyController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   bool _isLoading = false;
+  bool _isTermsAccepted = false;
   String _deviceId = "Loading...";
 
   @override
@@ -51,7 +57,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
 
     if (key.isEmpty || identifier.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter License Key and Registered Phone/Email")),
+        const SnackBar(content: Text("Please enter License Key and Registered Phone")),
       );
       return;
     }
@@ -71,6 +77,14 @@ class _ActivationScreenState extends State<ActivationScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text("Premium Activated! Welcome to Apna Hisaab."), backgroundColor: Colors.green),
             );
+            // Navigate to Dashboard after activation
+            if (mounted) {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                (route) => false,
+              );
+            }
           }
         }
       } else {
@@ -87,6 +101,85 @@ class _ActivationScreenState extends State<ActivationScreen> {
     }
   }
 
+  Future<void> _handleLogout() async {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final confirm = await AppBottomSheet.showAction(
+      context: context,
+      profile: profile,
+      title: "Logout",
+      message: "Are you sure you want to logout?",
+      confirmLabel: "LOGOUT",
+      isDestructive: true,
+    );
+
+    if (confirm == true) {
+      await AuthService().signOut();
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false,
+        );
+      }
+    }
+  }
+
+  Future<void> _handleDeleteAccount() async {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final confirm = await AppBottomSheet.showAction(
+      context: context,
+      profile: profile,
+      title: "Delete Account",
+      message: "This action is permanent and will delete all your cloud data. Are you sure?",
+      confirmLabel: "DELETE",
+      isDestructive: true,
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      try {
+        await AuthService().deleteAccount();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account Deleted Successfully")));
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+            (route) => false,
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          String errorMessage = "Error deleting account: $e";
+          
+          if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+            errorMessage = "For security, please logout and login again to delete your account.";
+            final logoutNow = await AppBottomSheet.showAction(
+              context: context,
+              profile: profile,
+              title: "Re-authentication Required",
+              message: "For your security, you must have logged in recently to delete your account. Please log out and log back in, then try again.",
+              confirmLabel: "LOGOUT NOW",
+              cancelLabel: "OK",
+              isDestructive: true,
+            );
+
+            if (logoutNow == true) {
+              await AuthService().signOut();
+              if (mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
+            }
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
+          }
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = Provider.of<ProfileProvider>(context);
@@ -99,6 +192,37 @@ class _ActivationScreenState extends State<ActivationScreen> {
         backgroundColor: themeColor,
         elevation: 0,
         centerTitle: true,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) {
+              if (value == 'logout') _handleLogout();
+              if (value == 'delete') _handleDeleteAccount();
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, size: 20),
+                    SizedBox(width: 8),
+                    Text("Logout"),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_forever, size: 20, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text("Delete Account", style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -127,22 +251,37 @@ class _ActivationScreenState extends State<ActivationScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _phoneController,
-              keyboardType: TextInputType.emailAddress,
+              keyboardType: TextInputType.number,
+              maxLength: 10,
               style: TextStyle(color: profile.textColor),
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(
-                labelText: "Registered Phone or Email",
-                prefixIcon: const Icon(Icons.person_pin_rounded),
+                labelText: "Registered Phone",
+                prefixIcon: const Icon(Icons.phone_android),
+                counterText: "",
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
+            CheckboxListTile(
+              value: _isTermsAccepted,
+              onChanged: (value) => setState(() => _isTermsAccepted = value ?? false),
+              title: Text(
+                "I agree to the Terms & Conditions. (Note: Data older than 365 days will be automatically cleared to maintain performance)",
+                style: TextStyle(fontSize: 11, color: profile.secondaryTextColor),
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              activeColor: themeColor,
+            ),
+            const SizedBox(height: 16),
             _isLoading
                 ? const CircularProgressIndicator()
                 : ElevatedButton(
-                    onPressed: _handleActivation,
+                    onPressed: _isTermsAccepted ? _handleActivation : null,
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 56),
-                      backgroundColor: themeColor,
+                      backgroundColor: _isTermsAccepted ? themeColor : Colors.grey,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
@@ -157,7 +296,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: themeColor.withValues(alpha: 0.05),
+                color: themeColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -200,7 +339,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            Text("Email: nikkhilbarwar@gmail.com", style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
+            Text("Email: dev.grillerzone@gmail.com", style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
           ],
         ),
       ),

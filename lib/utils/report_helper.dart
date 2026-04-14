@@ -37,7 +37,7 @@ class ReportHelper {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2))),
+              Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -69,7 +69,7 @@ class ReportHelper {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Icon(Icons.arrow_forward_rounded, color: themeColor.withOpacity(0.5), size: 16),
+                  Icon(Icons.arrow_forward_rounded, color: themeColor.withValues(alpha: 0.5), size: 16),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _dateTile(
@@ -144,9 +144,9 @@ class ReportHelper {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF8F9FE),
+          color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF8F9FE),
           borderRadius: BorderRadius.circular(16),
-          //border: Border.all(color: themeColor.withOpacity(0.1)),
+          //border: Border.all(color: themeColor.withValues(alpha: 0.1)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -164,8 +164,8 @@ class ReportHelper {
     return ActionChip(
       label: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
       onPressed: onTap,
-      backgroundColor: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
-      side: BorderSide(color: themeColor.withOpacity(0.1)),
+      backgroundColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
+      side: BorderSide(color: themeColor.withValues(alpha: 0.1)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     );
   }
@@ -197,7 +197,7 @@ class ReportHelper {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2))),
+              Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

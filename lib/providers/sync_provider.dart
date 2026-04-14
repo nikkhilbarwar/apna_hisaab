@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
+import '../models/purchase_reminder_model.dart';
 import '../services/firebase_service.dart';
 import '../core/database/database_helper.dart';
 import 'transaction_provider.dart';
@@ -17,6 +18,10 @@ import '../models/supplier_model.dart';
 import '../models/transaction_model.dart';
 import 'profile_provider.dart';
 import 'dart:async';
+import 'dart:io';
+import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 class SyncProvider with ChangeNotifier {
@@ -78,6 +83,20 @@ class SyncProvider with ChangeNotifier {
         await db.updateSyncStatus('staff', staff.id!, 1);
       }
 
+      final unsyncedAdvances = await db.getUnsyncedData('staff_advance');
+      for (var map in unsyncedAdvances) {
+        final advance = StaffAdvanceModel.fromMap(map);
+        await _firebaseService.syncStaffAdvance(advance);
+        await db.updateSyncStatus('staff_advance', advance.id!, 1);
+      }
+
+      final unsyncedLeaves = await db.getUnsyncedData('staff_leave');
+      for (var map in unsyncedLeaves) {
+        final leave = StaffLeaveModel.fromMap(map);
+        await _firebaseService.syncStaffLeave(leave);
+        await db.updateSyncStatus('staff_leave', leave.id!, 1);
+      }
+
       final unsyncedSuppliers = await db.getUnsyncedData('suppliers');
       for (var map in unsyncedSuppliers) {
         final supplier = SupplierModel.fromMap(map);
@@ -112,6 +131,17 @@ class SyncProvider with ChangeNotifier {
       // 1. Sync Profile
       _syncStatus = "Uploading profile...";
       await _firebaseService.syncProfile(profile.getProfileMap());
+      _syncProgress = 0.05;
+      if (context.mounted) notifyListeners();
+
+      // 1.1 Sync Purchase Reminders
+      _syncStatus = "Uploading reminders...";
+      final allRemindersRaw = await (await db.database).query('purchase_reminders');
+      for (var map in allRemindersRaw) {
+        final reminder = PurchaseReminderModel.fromMap(map);
+        await _firebaseService.syncPurchaseReminder(reminder);
+        await db.updateSyncStatus('purchase_reminders', reminder.id!, 1);
+      }
       _syncProgress = 0.1;
       notifyListeners();
 
@@ -121,8 +151,9 @@ class SyncProvider with ChangeNotifier {
       for (int i = 0; i < allCats.length; i++) {
         await _firebaseService.syncCategory(allCats[i]);
         await db.updateSyncStatus('categories', allCats[i].id!, 1);
-        _syncProgress = 0.1 + (0.15 * (i + 1) / (allCats.isEmpty ? 1 : allCats.length));
-        notifyListeners();
+        if (i % 5 == 0 || i == allCats.length - 1) {
+          _progress(0.1 + (0.15 * (i + 1) / (allCats.isEmpty ? 1 : allCats.length)), "Uploading categories...");
+        }
       }
 
       // 3. Items
@@ -131,21 +162,57 @@ class SyncProvider with ChangeNotifier {
       for (int i = 0; i < allItems.length; i++) {
         await _firebaseService.syncItem(allItems[i]);
         await db.updateSyncStatus('items', allItems[i].id!, 1);
-        _syncProgress = 0.25 + (0.2 * (i + 1) / (allItems.isEmpty ? 1 : allItems.length));
-        notifyListeners();
+        if (i % 10 == 0 || i == allItems.length - 1) {
+          _progress(0.25 + (0.2 * (i + 1) / (allItems.isEmpty ? 1 : allItems.length)), "Uploading items...");
+        }
       }
 
       // 4. Staff
       _syncStatus = "Uploading staff...";
       final allStaff = await db.getAllStaff();
       for (int i = 0; i < allStaff.length; i++) {
-        await _firebaseService.syncStaff(allStaff[i]);
-        await db.updateSyncStatus('staff', allStaff[i].id!, 1);
+        final staff = allStaff[i];
+        // Upload image to Firebase Storage if exists locally
+        if (staff.imagePath != null && staff.imagePath!.isNotEmpty) {
+          final file = File(staff.imagePath!);
+          if (await file.exists()) {
+            _syncStatus = "Uploading image for ${staff.name}...";
+            notifyListeners();
+            final imageUrl = await _firebaseService.uploadStaffImage(file, staff.id.toString());
+            if (imageUrl != null) {
+              staff.imageUrl = imageUrl;
+            }
+          }
+        }
+        await _firebaseService.syncStaff(staff);
+        await db.updateSyncStatus('staff', staff.id!, 1);
         _syncProgress = 0.45 + (0.1 * (i + 1) / (allStaff.isEmpty ? 1 : allStaff.length));
         notifyListeners();
       }
 
-      // 5. Suppliers
+      // 5. Staff Advances
+      _syncStatus = "Uploading advances...";
+      final allAdvancesRaw = await db.database.then((d) => d.query('staff_advance'));
+      for (int i = 0; i < allAdvancesRaw.length; i++) {
+        final adv = StaffAdvanceModel.fromMap(allAdvancesRaw[i]);
+        await _firebaseService.syncStaffAdvance(adv);
+        await db.updateSyncStatus('staff_advance', adv.id!, 1);
+      }
+      _syncProgress = 0.52;
+      notifyListeners();
+
+      // 5.1 Staff Leaves
+      _syncStatus = "Uploading leaves...";
+      final allLeavesRaw = await db.database.then((d) => d.query('staff_leave'));
+      for (int i = 0; i < allLeavesRaw.length; i++) {
+        final leave = StaffLeaveModel.fromMap(allLeavesRaw[i]);
+        await _firebaseService.syncStaffLeave(leave);
+        await db.updateSyncStatus('staff_leave', leave.id!, 1);
+      }
+      _syncProgress = 0.55;
+      notifyListeners();
+
+      // 6. Suppliers
       _syncStatus = "Uploading suppliers...";
       final allSuppliers = await db.getAllSuppliers();
       for (int i = 0; i < allSuppliers.length; i++) {
@@ -170,8 +237,9 @@ class SyncProvider with ChangeNotifier {
       for (int i = 0; i < allTxs.length; i++) {
         await _firebaseService.syncTransaction(allTxs[i]);
         await db.updateTransactionSyncStatus(allTxs[i].id!, 1);
-        _syncProgress = 0.65 + (0.35 * (i + 1) / (allTxs.isEmpty ? 1 : allTxs.length));
-        notifyListeners();
+        if (i % 10 == 0 || i == allTxs.length - 1) {
+          _progress(0.65 + (0.35 * (i + 1) / (allTxs.isEmpty ? 1 : allTxs.length)), "Uploading transactions...");
+        }
       }
 
       _syncStatus = "Sync Complete!";
@@ -180,6 +248,7 @@ class SyncProvider with ChangeNotifier {
       return true;
     } catch (e) {
       _syncStatus = "Sync Failed: $e";
+      debugPrint("Sync Failed: $e");
       notifyListeners();
       return false;
     } finally {
@@ -199,6 +268,17 @@ class SyncProvider with ChangeNotifier {
     try {
       final cloudData = await _firebaseService.fetchAllUserData();
       
+      // Safety Check: Verify if cloud data is actually present
+      final List<TransactionModel> transactions = cloudData['transactions'] ?? [];
+      final List<ItemModel> items = cloudData['items'] ?? [];
+      final List<CategoryModel> categories = cloudData['categories'] ?? [];
+      
+      if (transactions.isEmpty && items.isEmpty && categories.isEmpty) {
+        _progress(0.0, "Restore Aborted: Cloud backup is empty.");
+        debugPrint("SyncProvider: Restore aborted because cloud data is empty.");
+        return false;
+      }
+
       _syncProgress = 0.1;
       _syncStatus = "Cleaning local database...";
       notifyListeners();
@@ -206,7 +286,7 @@ class SyncProvider with ChangeNotifier {
 
       // 1. Profile
       _syncStatus = "Restoring profile...";
-      if (cloudData['profile'] != null) {
+      if (cloudData['profile'] != null && context.mounted) {
         final profile = Provider.of<ProfileProvider>(context, listen: false);
         await profile.loadFromMap(cloudData['profile']);
       }
@@ -215,9 +295,10 @@ class SyncProvider with ChangeNotifier {
 
       // 2. Categories
       _syncStatus = "Restoring categories...";
-      final categories = cloudData['categories'] ?? [];
+      // Removed redeclaration of 'categories'
       for (var cat in categories) {
-        // Mark as synced before insert
+        // Sanitize category name
+        cat.name = cat.name.trim();
         await DatabaseHelper.instance.insertCategory(cat);
       }
       _syncProgress = 0.35;
@@ -225,22 +306,83 @@ class SyncProvider with ChangeNotifier {
 
       // 3. Items
       _syncStatus = "Restoring items...";
-      final items = cloudData['items'] ?? [];
+      // Removed redeclaration of 'items'
+      debugPrint("SyncProvider: Found ${items.length} items on cloud.");
       for (var item in items) {
-        item.isSynced = 1;
-        await DatabaseHelper.instance.insertItem(item);
+        try {
+          item.isSynced = 1;
+          item.name = item.name.trim();
+          if (item.category.isNotEmpty) {
+            item.category = item.category.trim();
+          }
+          await DatabaseHelper.instance.insertItem(item);
+        } catch (e) {
+          debugPrint("Error restoring item ${item.name}: $e");
+        }
       }
       _syncProgress = 0.5;
       notifyListeners();
 
-      // 4. Staff
+      // 5. Staff
       _syncStatus = "Restoring staff...";
-      final staff = cloudData['staff'] ?? [];
-      for (var s in staff) {
+      final staffList = cloudData['staff'] as List<StaffModel>? ?? [];
+      final appDir = await getApplicationDocumentsDirectory();
+      
+      for (var s in staffList) {
         s.isSynced = 1;
+        // If there's a cloud image, handle it (Base64 or URL)
+        if (s.imageUrl != null && s.imageUrl!.isNotEmpty) {
+          final fileName = 'staff_${s.id}.png';
+          final localPath = p.join(appDir.path, fileName);
+          final localFile = File(localPath);
+          
+          if (!(await localFile.exists())) {
+             _syncStatus = "Restoring image for ${s.name}...";
+             notifyListeners();
+             
+             if (s.imageUrl!.startsWith('base64:')) {
+               try {
+                 final base64String = s.imageUrl!.replaceFirst('base64:', '');
+                 await localFile.writeAsBytes(base64Decode(base64String));
+                 s.imagePath = localPath;
+               } catch (e) {
+                 debugPrint("Error decoding base64 image: $e");
+               }
+             } else {
+               try {
+                 await _firebaseService.downloadFile(s.imageUrl!, localFile);
+                 s.imagePath = localPath;
+               } catch (e) {
+                 debugPrint("Error downloading file: $e");
+               }
+             }
+          }
+        }
         await DatabaseHelper.instance.insertStaff(s);
       }
       _syncProgress = 0.6;
+      notifyListeners();
+
+      // 5.1 Staff Advances
+      _syncStatus = "Restoring advances...";
+      final advances = cloudData['staff_advances'] as List<StaffAdvanceModel>? ?? [];
+      for (var adv in advances) {
+        adv.isSynced = 1;
+        final db = await DatabaseHelper.instance.database;
+        await db.insert('staff_advance', adv.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      _syncProgress = 0.63;
+      notifyListeners();
+
+      // 5.2 Staff Leaves
+      _syncStatus = "Restoring leaves...";
+      final leaves = cloudData['staff_leaves'] as List<StaffLeaveModel>? ?? [];
+      for (var leave in leaves) {
+        leave.isSynced = 1;
+        final db = await DatabaseHelper.instance.database;
+        await db.insert('staff_leave', leave.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      _syncProgress = 0.65;
       notifyListeners();
 
       // 5. Suppliers
@@ -275,21 +417,25 @@ class SyncProvider with ChangeNotifier {
 
       // 8. Transactions
       _syncStatus = "Restoring transactions...";
-      final List<TransactionModel> transactions = cloudData['transactions'] ?? [];
-      print("SyncProvider: Found ${transactions.length} transactions on cloud.");
+      // Removed redeclaration of 'transactions'
+      debugPrint("SyncProvider: Found ${transactions.length} transactions on cloud.");
       
       final db = await DatabaseHelper.instance.database;
       for (int i = 0; i < transactions.length; i++) {
         final tx = transactions[i];
-        tx.isSynced = 1;
-        // Using raw insert with Replace to ensure no ID conflicts block the restore
-        await db.insert(
-          'transactions', 
-          tx.toMap(), 
-          conflictAlgorithm: ConflictAlgorithm.replace
-        );
-        _syncProgress = 0.8 + (0.2 * (i + 1) / (transactions.isEmpty ? 1 : transactions.length));
-        notifyListeners();
+        try {
+          tx.isSynced = 1;
+          await db.insert(
+            'transactions', 
+            tx.toMap(), 
+            conflictAlgorithm: ConflictAlgorithm.replace
+          );
+        } catch (e) {
+          debugPrint("Error restoring transaction ${tx.id}: $e");
+        }
+        if (i % 10 == 0 || i == transactions.length - 1) {
+          _progress(0.8 + (0.2 * (i + 1) / (transactions.isEmpty ? 1 : transactions.length)), "Restoring transactions...");
+        }
       }
       
       _progress(1.0, "Restore Complete!");
@@ -306,9 +452,9 @@ class SyncProvider with ChangeNotifier {
         final p = Provider.of<ProfileProvider>(context, listen: false);
 
         await Future.wait([
+          c.fetchCategories(), // Fetch categories first to ensure items link correctly
           t.fetchTransactions(),
-          i.fetchItems(),
-          c.fetchCategories(),
+          i.refreshData(),
           s.fetchStaff(),
           sup.fetchSuppliers(),
           u.fetchUnits(),
@@ -316,13 +462,13 @@ class SyncProvider with ChangeNotifier {
           p.loadProfile(),
         ]);
         
-        print("SyncProvider: All Providers refreshed with restored data.");
+        debugPrint("SyncProvider: All Providers refreshed with restored data.");
       }
 
       return true;
     } catch (e) {
       _progress(0.0, "Restore Failed: $e");
-      print("SyncProvider Error: $e");
+      debugPrint("SyncProvider Error: $e");
       return false;
     } finally {
       _isSyncing = false;

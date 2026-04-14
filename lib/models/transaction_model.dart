@@ -9,6 +9,8 @@ class TransactionItemSnapshot {
   final String unit;
   final String variant;
   final double price; // Portions price when saved
+  final double purchasePrice; // Cost price for Ready Made items
+  final double transportCost; // Transport/Rent per unit
   final double fullPrice; 
   final double halfPrice; 
   final double extraQty;
@@ -16,6 +18,7 @@ class TransactionItemSnapshot {
   final String servingMethod;
   final String tableNumber;
   final bool checked;
+  final String itemType;
 
   TransactionItemSnapshot({
     required this.id,
@@ -25,6 +28,8 @@ class TransactionItemSnapshot {
     required this.unit,
     required this.variant,
     required this.price,
+    this.purchasePrice = 0,
+    this.transportCost = 0,
     this.fullPrice = 0,
     this.halfPrice = 0,
     required this.extraQty,
@@ -32,6 +37,7 @@ class TransactionItemSnapshot {
     required this.servingMethod,
     required this.tableNumber,
     this.checked = false,
+    this.itemType = 'regular',
   });
 
   /// Logic Fix: Robust portion math for both New and Old transactions
@@ -70,6 +76,8 @@ class TransactionItemSnapshot {
       unit: map['unit']?.toString() ?? '',
       variant: map['variant']?.toString() ?? 'Full',
       price: double.tryParse(map['price']?.toString() ?? '0') ?? 0.0,
+      purchasePrice: double.tryParse(map['purchase_price']?.toString() ?? '0') ?? 0.0,
+      transportCost: double.tryParse(map['transport_cost']?.toString() ?? '0') ?? 0.0,
       fullPrice: double.tryParse(map['full_price']?.toString() ?? '0') ?? 0.0,
       halfPrice: double.tryParse(map['half_price']?.toString() ?? '0') ?? 0.0,
       extraQty: double.tryParse(map['extra_qty']?.toString() ?? '0') ?? 0.0,
@@ -77,6 +85,7 @@ class TransactionItemSnapshot {
       servingMethod: map['serving_method']?.toString() ?? 'Dine-in',
       tableNumber: map['table_number']?.toString() ?? '',
       checked: map['checked']?.toString() == 'true',
+      itemType: map['item_type']?.toString() ?? 'regular',
     );
   }
 }

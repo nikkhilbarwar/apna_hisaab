@@ -1,12 +1,16 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/rendering.dart';
+import 'package:table_calendar/table_calendar.dart';
 import '../../providers/staff_provider.dart';
 import '../../models/staff_model.dart';
 import '../../providers/profile_provider.dart';
-import '../../utils/app_strings.dart';
 import '../../utils/report_helper.dart';
+import '../../utils/image_helper.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 
 class StaffScreen extends StatefulWidget {
   const StaffScreen({super.key});
@@ -17,24 +21,32 @@ class StaffScreen extends StatefulWidget {
 
 class _StaffScreenState extends State<StaffScreen> {
   final ScrollController _scrollController = ScrollController();
-  bool _isFabVisible = true;
+  final TextEditingController _searchController = TextEditingController();
+  int? _expandedIndex;
+  bool _showDeleted = false;
+  String _searchQuery = "";
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(() {
-      if (_scrollController.position.userScrollDirection == ScrollDirection.reverse) {
-        if (_isFabVisible) setState(() => _isFabVisible = false);
-      } else if (_scrollController.position.userScrollDirection == ScrollDirection.forward) {
-        if (!_isFabVisible) setState(() => _isFabVisible = true);
-      }
-    });
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  Color _getRoleColor(String role, Color themeColor) {
+    switch (role.toLowerCase()) {
+      case 'manager': return Colors.amber.shade700;
+      case 'chef': return Colors.orange.shade700;
+      case 'waiter': return Colors.blue.shade700;
+      case 'cleaner': return Colors.teal.shade700;
+      case 'security': return Colors.indigo.shade700;
+      default: return themeColor;
+    }
   }
 
   @override
@@ -43,172 +55,382 @@ class _StaffScreenState extends State<StaffScreen> {
     final profileProvider = Provider.of<ProfileProvider>(context);
     final themeColor = profileProvider.themeColor;
 
+    final filteredStaff = (_showDeleted ? staffProvider.deletedStaff : staffProvider.staffList).where((s) {
+      final matchesSearch = s.name.toLowerCase().contains(_searchQuery.toLowerCase()) || 
+                           s.role.toLowerCase().contains(_searchQuery.toLowerCase());
+      return matchesSearch;
+    }).toList();
+
     return Scaffold(
       backgroundColor: profileProvider.scaffoldColor,
-      appBar: AppBar(
-        title: const Text('STAFF MANAGEMENT', 
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white)),
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [themeColor.withOpacity(0.8), themeColor],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+      body: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          SliverToBoxAdapter(
+            child: SafeArea(
+              bottom: false,
+              child: _buildTopSummaryCard(staffProvider, profileProvider),
             ),
           ),
-        ),
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          _buildTopSummaryCard(staffProvider, profileProvider),
-          Expanded(
-            child: staffProvider.staffList.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.people_outline, size: 80, color: profileProvider.secondaryTextColor.withOpacity(0.2)),
-                        const SizedBox(height: 16),
-                        Text('No staff members added', style: TextStyle(color: profileProvider.secondaryTextColor, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: staffProvider.staffList.length,
-                    itemBuilder: (context, index) {
-                      final staff = staffProvider.staffList[index];
-                      final payable = staffProvider.calculatePayable(staff);
-                      final nextSalaryDate = staffProvider.calculateNextSalaryDate(staff.joinDate);
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        elevation: 0,
-                        color: profileProvider.cardColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(color: profileProvider.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _StickySearchBarDelegate(
+              profileProvider: profileProvider,
+              child: Container(
+                color: profileProvider.scaffoldColor,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: (val) => setState(() => _searchQuery = val),
+                        decoration: InputDecoration(
+                          hintText: 'Search staff by name or role...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _searchQuery.isNotEmpty 
+                            ? IconButton(icon: const Icon(Icons.clear), onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = "");
+                              })
+                            : null,
+                          filled: true,
+                          fillColor: profileProvider.cardColor,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: _showDeleted ? 'Show Active' : 'Show Removed',
+                      child: InkWell(
+                        onTap: () => setState(() => _showDeleted = !_showDeleted),
+                        borderRadius: BorderRadius.circular(15),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _showDeleted
+                                ? Colors.red
+                                : profileProvider.themeColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(15),
+                            boxShadow: _showDeleted
+                                ? [
+                                    BoxShadow(
+                                        color: Colors.red.withValues(alpha: 0.3),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4))
+                                  ]
+                                : [],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: themeColor.withOpacity(0.1),
-                                    child: Icon(Icons.person, color: themeColor),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(staff.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: profileProvider.textColor)),
-                                        Text('Joined: ${DateFormat('dd MMM yyyy').format(staff.joinDate)}', 
-                                          style: TextStyle(color: profileProvider.secondaryTextColor, fontSize: 11)),
-                                      ],
-                                    ),
-                                  ),
-                                  _actionBtn(Icons.event_busy_rounded, Colors.orange, () => _showLeaveDialog(context, staffProvider, staff)),
-                                  _actionBtn(Icons.edit_outlined, Colors.blue, () => _showStaffBottomSheet(context, staff: staff)),
-                                  _actionBtn(Icons.delete_outline, Colors.red, () => _showDeleteConfirm(context, staffProvider, staff)),
-                                ],
+                              Icon(
+                                _showDeleted
+                                    ? Icons.delete_sweep_rounded
+                                    : Icons.group_outlined,
+                                color: _showDeleted
+                                    ? Colors.white
+                                    : profileProvider.themeColor,
+                                size: 20,
                               ),
-                              const Divider(height: 24),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  _staffInfoTile('Monthly Salary', '₹${staff.monthlySalary.toStringAsFixed(0)}', profileProvider.textColor, profileProvider),
-                                  _staffInfoTile('Total Leaves', '${staff.totalLeaves} Days', Colors.orange.shade700, profileProvider, isBold: true),
-                                  _staffInfoTile('Advance', '₹${staff.advance.toStringAsFixed(0)}', Colors.red, profileProvider),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  _staffInfoTile('Next Pay Date', DateFormat('dd MMM').format(nextSalaryDate), Colors.blue, profileProvider),
-                                  _staffInfoTile('Net Pay (After Leaves)', '₹${payable.toStringAsFixed(0)}', Colors.green, profileProvider, isBold: true),
-                                ],
+                              const SizedBox(width: 8),
+                              Text(
+                                _showDeleted ? "TRASH" : "ACTIVE",
+                                style: TextStyle(
+                                  color: _showDeleted
+                                      ? Colors.white
+                                      : profileProvider.themeColor,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 12,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        height: _isFabVisible ? 95 : 0,
-        child: _isFabVisible ? Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-          decoration: BoxDecoration(
-            color: profileProvider.cardColor,
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-          ),
-          child: SafeArea(
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: themeColor,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 55),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                elevation: 0,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              onPressed: () => _showStaffBottomSheet(context),
-              icon: const Icon(Icons.person_add_alt_1),
-              label: const Text('ADD NEW STAFF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             ),
           ),
-        ) : const SizedBox.shrink(),
+          if (filteredStaff.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(_searchQuery.isNotEmpty ? Icons.search_off : Icons.people_outline, 
+                      size: 80, color: profileProvider.secondaryTextColor.withValues(alpha: 0.2)),
+                    const SizedBox(height: 16),
+                    Text(_searchQuery.isNotEmpty ? 'No staff found for "$_searchQuery"' : 'No staff members added', 
+                      style: TextStyle(color: profileProvider.secondaryTextColor, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final staff = filteredStaff[index];
+                    final payable = staffProvider.calculatePayable(staff);
+                    final nextSalaryDate = staffProvider.calculateNextSalaryDate(staff.joinDate);
+                    final isExpanded = _expandedIndex == index;
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      elevation: 0,
+                      color: profileProvider.cardColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(color: profileProvider.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => setState(() => _expandedIndex = isExpanded ? null : index),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: AnimatedSize(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: themeColor.withValues(alpha: 0.2), width: 1.5),
+                                      ),
+                                      child: CircleAvatar(
+                                        radius: 22,
+                                        backgroundColor: themeColor.withValues(alpha: 0.1),
+                                        backgroundImage: (staff.imagePath != null && File(staff.imagePath!).existsSync()) 
+                                            ? FileImage(File(staff.imagePath!)) 
+                                            : (staff.imageUrl != null && staff.imageUrl!.isNotEmpty)
+                                                ? (staff.imageUrl!.startsWith('base64:') 
+                                                    ? MemoryImage(base64Decode(staff.imageUrl!.replaceFirst('base64:', '')))
+                                                    : NetworkImage(staff.imageUrl!) as ImageProvider)
+                                                : null,
+                                        child: (staff.imagePath == null || !File(staff.imagePath!).existsSync()) && (staff.imageUrl == null || staff.imageUrl!.isEmpty)
+                                            ? Icon(Icons.person, color: themeColor, size: 24) 
+                                            : null,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(staff.name, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: staff.isDeleted == 1 ? Colors.grey : profileProvider.textColor, letterSpacing: 0.3)),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: _getRoleColor(staff.role, themeColor).withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(color: _getRoleColor(staff.role, themeColor).withValues(alpha: 0.3), width: 0.5),
+                                                ),
+                                                child: Text(
+                                                  staff.role.toUpperCase(), 
+                                                  style: TextStyle(color: _getRoleColor(staff.role, themeColor), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)
+                                                ),
+                                              ),
+                                              if (staff.isDeleted == 1) ...[
+                                                const SizedBox(width: 8),
+                                                const Text('(DELETED)', style: TextStyle(color: Colors.red, fontSize: 8, fontWeight: FontWeight.bold)),
+                                              ],
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (!isExpanded)
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          Text('Net Pay', style: TextStyle(fontSize: 10, color: profileProvider.secondaryTextColor)),
+                                          Text('₹${payable.toStringAsFixed(0)}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: staff.isDeleted == 1 ? Colors.grey : Colors.green)),
+                                        ],
+                                      ),
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                      color: profileProvider.secondaryTextColor,
+                                      size: 20,
+                                    ),
+                                  ],
+                                ),
+                                if (isExpanded) ...[
+                                  const Divider(height: 20),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          children: [
+                                            GridView.count(
+                                              shrinkWrap: true,
+                                              physics: const NeverScrollableScrollPhysics(),
+                                              crossAxisCount: 2,
+                                              mainAxisSpacing: 8,
+                                              crossAxisSpacing: 8,
+                                              childAspectRatio: 2.8,
+                                              children: [
+                                                _staffInfoTile('Base Salary', '₹${staff.monthlySalary.toStringAsFixed(0)}', Icons.payments_outlined, Colors.blue, profileProvider),
+                                                _staffInfoTile('Total Leaves', '${staff.totalLeaves} Days', Icons.event_busy_outlined, Colors.orange, profileProvider),
+                                                InkWell(
+                                                  onTap: staff.isDeleted == 1 ? null : () => _showAdvanceHistorySheet(context, staff),
+                                                  borderRadius: BorderRadius.circular(10),
+                                                  child: _staffInfoTile('Advance Taken', '₹${staff.advance.toStringAsFixed(0)}', Icons.account_balance_wallet_outlined, Colors.red, profileProvider),
+                                                ),
+                                                _staffInfoTile('Pay Date', DateFormat('dd MMM').format(nextSalaryDate), Icons.calendar_month_outlined, Colors.purple, profileProvider),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                              decoration: BoxDecoration(
+                                                color: (staff.isDeleted == 1 ? Colors.grey : Colors.green).withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(10),
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text('NET PAYABLE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: staff.isDeleted == 1 ? Colors.grey : Colors.green.shade800, letterSpacing: 0.5)),
+                                                  Text('₹${payable.toStringAsFixed(0)}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: staff.isDeleted == 1 ? Colors.grey : Colors.green.shade800)),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        width: 44,
+                                        height: staff.isDeleted == 1 ? 110 : 155, 
+                                        decoration: BoxDecoration(
+                                          color: profileProvider.scaffoldColor.withValues(alpha: 0.5),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                          children: [
+                                            if (staff.isDeleted == 0) ...[
+                                              _actionBtn(Icons.calendar_month_rounded, Colors.orange, () => _showLeaveCalendarSheet(context, staff)),
+                                              _actionBtn(Icons.edit_outlined, Colors.blue, () => _showStaffBottomSheet(context, staff: staff)),
+                                              _actionBtn(Icons.delete_outline, Colors.red, () => _showActionConfirm(context, staffProvider, staff)),
+                                            ] else ...[
+                                              _actionBtn(Icons.restore, Colors.green, () => staffProvider.restoreStaff(staff.id!)),
+                                              _actionBtn(Icons.delete_forever, Colors.red, () => _showPermanentDeleteConfirm(context, staffProvider, staff)),
+                                            ]
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  childCount: filteredStaff.length,
+                ),
+              ),
+            ),
+        ],
+      ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        decoration: BoxDecoration(
+          color: profileProvider.cardColor,
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -5))],
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: SafeArea(
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: themeColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 55),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              elevation: 0,
+            ),
+            onPressed: () => _showStaffBottomSheet(context),
+            icon: const Icon(Icons.person_add_alt_1),
+            label: const Text('ADD NEW STAFF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _actionBtn(IconData icon, Color color, VoidCallback onTap) {
+  Widget _actionBtn(IconData icon, Color color, VoidCallback? onTap) {
     return IconButton(
-      icon: Icon(icon, color: color, size: 20),
+      icon: Icon(icon, color: onTap == null ? Colors.grey.withValues(alpha: 0.3) : color, size: 18),
       onPressed: onTap,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 35),
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
     );
   }
 
   Widget _buildTopSummaryCard(StaffProvider provider, ProfileProvider profile) {
     final themeColor = profile.themeColor;
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [themeColor.withOpacity(0.8), themeColor]),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: profile.themeShadow,
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _summaryItem('Total Workers', '${provider.staffList.length}', Colors.white, Colors.white70),
-              _summaryItem('Total Base Salary', '₹${provider.totalMonthlySalary.toStringAsFixed(0)}', Colors.white, Colors.white70),
-            ],
+    return ListenableBuilder(
+      listenable: _scrollController,
+      builder: (context, child) {
+        double offset = 0;
+        if (_scrollController.hasClients) {
+          offset = _scrollController.offset;
+        }
+        double opacity = (1.0 - (offset / 100)).clamp(0.0, 1.0);
+        
+        return Opacity(
+          opacity: opacity,
+          child: Container(
+            height: 135, 
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [themeColor.withValues(alpha: 0.8), themeColor]),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: profile.themeShadow,
+            ),
+            child: opacity > 0.1 ? Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _summaryItem('Active Workers', '${provider.staffList.length}', Colors.white, Colors.white70),
+                    _summaryItem('Total Base Salary', '₹${provider.totalMonthlySalary.toStringAsFixed(0)}', Colors.white, Colors.white70),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Divider(color: Colors.white.withValues(alpha: 0.2), height: 1),
+                const SizedBox(height: 10),
+                _summaryItem('Total Net Payable (Excl. Deleted)', '₹${provider.totalNetPayable.toStringAsFixed(0)}', Colors.white, Colors.white70, isCenter: true),
+              ],
+            ) : const SizedBox.shrink(),
           ),
-          const SizedBox(height: 16),
-          Divider(color: Colors.white.withOpacity(0.2)),
-          const SizedBox(height: 8),
-          _summaryItem('Total Net Payable (Deducted)', '₹${provider.totalNetPayable.toStringAsFixed(0)}', Colors.white, Colors.white70, isCenter: true),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -222,90 +444,199 @@ class _StaffScreenState extends State<StaffScreen> {
     );
   }
 
-  Widget _staffInfoTile(String label, String value, Color color, ProfileProvider profile, {bool isBold = false}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(fontSize: 10, color: profile.secondaryTextColor)),
-        Text(value, style: TextStyle(fontSize: 13, fontWeight: isBold ? FontWeight.bold : FontWeight.w500, color: color)),
-      ],
+  Widget _staffInfoTile(String label, String value, IconData icon, Color color, ProfileProvider profile) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: profile.scaffoldColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(label, style: TextStyle(fontSize: 8, color: profile.secondaryTextColor, fontWeight: FontWeight.w500)),
+                Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.textColor), overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  void _showLeaveDialog(BuildContext context, StaffProvider provider, StaffModel staff) {
+  void _showLeaveCalendarSheet(BuildContext context, StaffModel staff) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
-    final controller = TextEditingController(text: staff.totalLeaves.toString());
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Update Leaves', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Current Leaves: ${staff.totalLeaves}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.number,
-              autofocus: true,
-              style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                labelText: 'Total Leave Days',
-                labelStyle: TextStyle(color: profile.secondaryTextColor),
-                filled: true,
-                fillColor: profile.scaffoldColor,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      profile: profile,
+      title: 'Leave: ${staff.name}',
+      child: _LeaveCalendarWidget(staff: staff, profile: profile, themeColor: profile.themeColor),
+    );
+  }
+
+  void _showActionConfirm(BuildContext context, StaffProvider provider, StaffModel staff) async {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final isDeleting = staff.isDeleted == 0;
+    
+    final confirmed = await AppBottomSheet.showAction(
+      context: context,
+      profile: profile,
+      title: isDeleting ? 'Remove Staff?' : 'Restore Staff?',
+      message: isDeleting 
+        ? 'Are you sure you want to remove "${staff.name}"? They will no longer appear in active totals.'
+        : 'Do you want to restore "${staff.name}" to active staff list?',
+      confirmLabel: isDeleting ? 'REMOVE' : 'RESTORE',
+      isDestructive: isDeleting,
+    );
+
+    if (confirmed == true) {
+      if (isDeleting) {
+        provider.softDeleteStaff(staff.id!);
+      } else {
+        provider.restoreStaff(staff.id!);
+      }
+    }
+  }
+
+  void _showPermanentDeleteConfirm(BuildContext context, StaffProvider provider, StaffModel staff) async {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    
+    final confirmed = await AppBottomSheet.showAction(
+      context: context,
+      profile: profile,
+      title: 'Permanent Delete?',
+      message: 'Are you sure you want to permanently delete "${staff.name}"? This action will also delete all their leave and advance history and cannot be undone.',
+      confirmLabel: 'DELETE FOREVER',
+      isDestructive: true,
+    );
+
+    if (confirmed == true) {
+      provider.permanentDeleteStaff(staff.id!);
+    }
+  }
+
+  void _showAdvanceHistorySheet(BuildContext context, StaffModel staff) {
+    final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
+    final themeColor = profileProvider.themeColor;
+    final advanceController = TextEditingController();
+
+    AppBottomSheet.show(
+      context: context,
+      profile: profileProvider,
+      title: 'Advance: ${staff.name}',
+      child: StatefulBuilder(
+        builder: (ctx, setStateSheet) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: profileProvider.scaffoldColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: themeColor.withValues(alpha: 0.1)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: advanceController,
+                        keyboardType: TextInputType.number,
+                        style: TextStyle(color: profileProvider.textColor, fontWeight: FontWeight.bold),
+                        decoration: InputDecoration(
+                          hintText: 'Enter amount...',
+                          hintStyle: TextStyle(color: profileProvider.secondaryTextColor.withValues(alpha: 0.5)),
+                          prefixIcon: Icon(Icons.currency_rupee_rounded, color: themeColor),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final amount = double.tryParse(advanceController.text) ?? 0;
+                        if (amount > 0) {
+                          await Provider.of<StaffProvider>(context, listen: false).addAdvance(staff.id!, amount);
+                          advanceController.clear();
+                          setStateSheet(() {}); // Refresh local UI
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: themeColor,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: const Text('ADD', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text('Note: Update the total count. Salary will be recalculated automatically.', 
-              style: TextStyle(color: profile.secondaryTextColor.withOpacity(0.6), fontSize: 10)),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
-          ElevatedButton(
-            onPressed: () {
-              int days = int.tryParse(controller.text) ?? 0;
-              provider.setLeave(staff.id!, days);
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange, 
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              elevation: 0,
-            ),
-            child: const Text('UPDATE LEAVES', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
+              SizedBox(
+                height: 300,
+                child: Consumer<StaffProvider>(
+                  builder: (context, provider, _) {
+                    return FutureBuilder<List<StaffAdvanceModel>>(
+                      future: provider.getStaffAdvances(staff.id!),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        final advances = snapshot.data ?? [];
+                        if (advances.isEmpty) {
+                          return Center(child: Text('No history found', style: TextStyle(color: profileProvider.secondaryTextColor)));
+                        }
+                        return ListView.builder(
+                          itemCount: advances.length,
+                          itemBuilder: (context, index) {
+                            final adv = advances[index];
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.red.withValues(alpha: 0.1), 
+                                child: const Icon(Icons.arrow_downward, color: Colors.red, size: 16)
+                              ),
+                              title: Text('₹${adv.amount.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text(DateFormat('dd MMM yyyy, hh:mm a').format(adv.date)),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                onPressed: () => _confirmDeleteAdvance(context, provider, adv),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, StaffProvider provider, StaffModel staff) {
+  void _confirmDeleteAdvance(BuildContext context, StaffProvider provider, StaffAdvanceModel advance) async {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
-    showDialog(
+    final confirmed = await AppBottomSheet.showAction(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Remove Staff?', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to remove "${staff.name}"?', style: TextStyle(color: profile.secondaryTextColor)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text(AppStrings.cancel)),
-          TextButton(
-            onPressed: () {
-              provider.deleteStaff(staff.id!);
-              Navigator.pop(context);
-            },
-            child: const Text('REMOVE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+      profile: profile,
+      title: 'Delete Advance?',
+      message: 'This will remove this record permanently.',
+      confirmLabel: 'DELETE',
+      isDestructive: true,
     );
+    if (confirmed == true) {
+      await provider.deleteAdvance(advance.id!);
+    }
   }
 
   void _showStaffBottomSheet(BuildContext context, {StaffModel? staff}) {
@@ -316,115 +647,149 @@ class _StaffScreenState extends State<StaffScreen> {
     final salaryController = TextEditingController(text: staff?.monthlySalary.toStringAsFixed(0));
     final advanceController = TextEditingController(text: staff?.advance.toStringAsFixed(0));
     final contactController = TextEditingController(text: staff?.contact);
+    String selectedRole = staff?.role ?? 'Staff';
+    final List<String> roles = ['Staff', 'Waiter', 'Chef', 'Manager', 'Cleaner', 'Security'];
     DateTime selectedDate = staff?.joinDate ?? DateTime.now();
+    String? currentImagePath = staff?.imagePath;
 
-    showModalBottomSheet(
+    AppBottomSheet.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: profileProvider.cardColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-        ),
-        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(color: profileProvider.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
+      profile: profileProvider,
+      title: staff == null ? 'Add New Staff' : 'Edit Staff Details',
+      child: StatefulBuilder(
+        builder: (ctx, setStateSheet) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                Center(
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: themeColor.withValues(alpha: 0.1),
+                        backgroundImage: (currentImagePath != null && File(currentImagePath!).existsSync())
+                            ? FileImage(File(currentImagePath!))
+                            : (staff?.imageUrl != null && staff!.imageUrl!.isNotEmpty)
+                                ? (staff!.imageUrl!.startsWith('base64:')
+                                    ? MemoryImage(base64Decode(staff!.imageUrl!.replaceFirst('base64:', '')))
+                                    : NetworkImage(staff!.imageUrl!) as ImageProvider)
+                                : null,
+                        child: (currentImagePath == null || !File(currentImagePath!).existsSync()) && (staff?.imageUrl == null || staff?.imageUrl == "")
+                            ? Icon(Icons.person, size: 50, color: themeColor) 
+                            : null,
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: GestureDetector(
+                        onTap: () async {
+                          final String? croppedPath = await ImageHelper.pickAndCropItemIcon(
+                            context: context,
+                            themeColor: themeColor,
+                            isCircle: true,
+                          );
+                          if (croppedPath != null) {
+                            setStateSheet(() => currentImagePath = croppedPath);
+                          }
+                        },
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(color: themeColor, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                            child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(staff == null ? 'Add New Staff' : 'Edit Staff Details', 
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: profileProvider.textColor)),
-                  IconButton(onPressed: () => Navigator.pop(ctx), icon: Icon(Icons.close_rounded, color: profileProvider.textColor)),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _sheetTextField(nameController, 'Staff Full Name', Icons.person_outline, profileProvider),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(child: _sheetTextField(salaryController, 'Monthly Salary', Icons.payments_outlined, profileProvider, isNumber: true)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _sheetTextField(advanceController, 'Advance (₹)', Icons.account_balance_wallet_outlined, profileProvider, isNumber: true)),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _sheetTextField(contactController, 'Contact Number', Icons.phone_android_outlined, profileProvider, isNumber: true),
-              const SizedBox(height: 20),
-              Text('JOINING DATE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: profileProvider.secondaryTextColor, letterSpacing: 1)),
-              const SizedBox(height: 8),
-              StatefulBuilder(
-                builder: (context, setStateSB) => InkWell(
+                const SizedBox(height: 24),
+                _sheetTextField(nameController, 'Staff Full Name', Icons.person_outline, profileProvider),
+                const SizedBox(height: 16),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: roles.map((role) {
+                      final isSelected = selectedRole == role;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(role),
+                          selected: isSelected,
+                          onSelected: (val) => setStateSheet(() => selectedRole = role),
+                          selectedColor: themeColor,
+                          labelStyle: TextStyle(color: isSelected ? Colors.white : profileProvider.textColor, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+                          backgroundColor: profileProvider.scaffoldColor,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide.none),
+                          showCheckmark: false,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(child: _sheetTextField(salaryController, 'Monthly Salary', Icons.payments_outlined, profileProvider, isNumber: true)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _sheetTextField(advanceController, 'Initial Advance', Icons.account_balance_wallet_outlined, profileProvider, isNumber: true)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _sheetTextField(contactController, 'Contact Number', Icons.phone_android_outlined, profileProvider, isNumber: true),
+                const SizedBox(height: 20),
+                InkWell(
                   onTap: () async {
-                    final date = await ReportHelper.showAppDatePicker(
-                      context, 
-                      selectedDate, 
-                      themeColor,
-                      lastDate: DateTime.now(),
-                    );
-                    if (date != null) setStateSB(() => selectedDate = date);
+                    final date = await ReportHelper.showAppDatePicker(context, selectedDate, themeColor, lastDate: DateTime.now());
+                    if (date != null) setStateSheet(() => selectedDate = date);
                   },
-                  borderRadius: BorderRadius.circular(16),
                   child: Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: profileProvider.scaffoldColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: profileProvider.isDarkMode ? Colors.white10 : Colors.grey.shade200),
-                    ),
+                    decoration: BoxDecoration(color: profileProvider.scaffoldColor, borderRadius: BorderRadius.circular(16)),
                     child: Row(
                       children: [
-                        Icon(Icons.calendar_month_outlined, color: themeColor, size: 20),
+                        Icon(Icons.calendar_month_outlined, color: themeColor),
                         const SizedBox(width: 12),
-                        Text(DateFormat('dd MMMM yyyy').format(selectedDate), 
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: profileProvider.textColor)),
+                        Text(DateFormat('dd MMMM yyyy').format(selectedDate), style: const TextStyle(fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: () {
-                  if (nameController.text.isNotEmpty) {
-                    final newStaff = StaffModel(
-                      id: staff?.id,
-                      name: nameController.text,
-                      monthlySalary: double.tryParse(salaryController.text) ?? 0,
-                      advance: double.tryParse(advanceController.text) ?? 0,
-                      joinDate: selectedDate,
-                      contact: contactController.text,
-                      totalLeaves: staff?.totalLeaves ?? 0,
-                    );
-                    if (staff == null) {
-                      staffProvider.addStaff(newStaff);
-                    } else {
-                      staffProvider.updateStaff(newStaff);
+                const SizedBox(height: 32),
+                ElevatedButton(
+                  onPressed: () {
+                    if (nameController.text.isNotEmpty) {
+                      final newStaff = StaffModel(
+                        id: staff?.id,
+                        name: nameController.text,
+                        role: selectedRole,
+                        monthlySalary: double.tryParse(salaryController.text) ?? 0,
+                        advance: double.tryParse(advanceController.text) ?? 0,
+                        joinDate: selectedDate,
+                        contact: contactController.text,
+                        totalLeaves: staff?.totalLeaves ?? 0,
+                        imagePath: currentImagePath,
+                        isDeleted: staff?.isDeleted ?? 0,
+                      );
+                      if (staff == null) {
+                        staffProvider.addStaff(newStaff);
+                      } else {
+                        staffProvider.updateStaff(newStaff);
+                      }
+                      Navigator.pop(ctx);
                     }
-                    Navigator.pop(ctx);
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: themeColor,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 60),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                  elevation: 0,
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themeColor,
+                    minimumSize: const Size(double.infinity, 60),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  ),
+                  child: Text(staff == null ? 'ADD STAFF MEMBER' : 'UPDATE DETAILS', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
-                child: Text(staff == null ? 'ADD STAFF MEMBER' : 'UPDATE DETAILS', 
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -435,17 +800,146 @@ class _StaffScreenState extends State<StaffScreen> {
     return TextField(
       controller: controller,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
+      style: TextStyle(color: profile.textColor),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: profile.secondaryTextColor),
-        prefixIcon: Icon(icon, size: 20, color: profile.themeColor),
+        prefixIcon: Icon(icon, color: profile.themeColor),
         filled: true,
         fillColor: profile.scaffoldColor,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: profile.themeColor, width: 2)),
       ),
+    );
+  }
+}
+
+class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
+  final ProfileProvider profileProvider;
+  final Widget child;
+
+  _StickySearchBarDelegate({required this.profileProvider, required this.child});
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      height: 60,
+      decoration: BoxDecoration(
+        color: profileProvider.scaffoldColor,
+        boxShadow: overlapsContent ? [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          )
+        ] : null,
+      ),
+      child: child,
+    );
+  }
+
+  @override
+  double get maxExtent => 60;
+  @override
+  double get minExtent => 60;
+  @override
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => true;
+}
+
+
+class _LeaveCalendarWidget extends StatefulWidget {
+  final StaffModel staff;
+  final ProfileProvider profile;
+  final Color themeColor;
+
+  const _LeaveCalendarWidget({required this.staff, required this.profile, required this.themeColor});
+
+  @override
+  State<_LeaveCalendarWidget> createState() => _LeaveCalendarWidgetState();
+}
+
+class _LeaveCalendarWidgetState extends State<_LeaveCalendarWidget> {
+  DateTime _focusedDay = DateTime.now();
+  List<StaffLeaveModel> _leaves = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLeaves();
+  }
+
+  Future<void> _loadLeaves() async {
+    final provider = Provider.of<StaffProvider>(context, listen: false);
+    final leaves = await provider.getStaffLeaves(widget.staff.id!);
+    if (mounted) setState(() => _leaves = leaves);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TableCalendar(
+          firstDay: widget.staff.joinDate,
+          lastDay: DateTime.now().add(const Duration(days: 365)),
+          focusedDay: _focusedDay,
+          calendarFormat: CalendarFormat.month,
+          headerStyle: HeaderStyle(
+            formatButtonVisible: false,
+            titleCentered: true,
+            titleTextStyle: TextStyle(fontWeight: FontWeight.bold, color: widget.profile.textColor),
+          ),
+          calendarStyle: CalendarStyle(
+            defaultTextStyle: TextStyle(color: widget.profile.textColor),
+            todayDecoration: BoxDecoration(color: widget.themeColor.withValues(alpha: 0.2), shape: BoxShape.circle),
+            todayTextStyle: TextStyle(color: widget.themeColor, fontWeight: FontWeight.bold),
+          ),
+          onPageChanged: (focusedDay) => setState(() => _focusedDay = focusedDay),
+          calendarBuilders: CalendarBuilders(
+            defaultBuilder: (context, day, focusedDay) => _buildDayCell(day),
+            todayBuilder: (context, day, focusedDay) => _buildDayCell(day, isToday: true),
+          ),
+          onDaySelected: (selectedDay, focusedDay) async {
+            final provider = Provider.of<StaffProvider>(context, listen: false);
+            await provider.toggleLeave(widget.staff.id!, selectedDay);
+            await _loadLeaves();
+          },
+        ),
+        const SizedBox(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _legendItem('Leave', Colors.red),
+            _legendItem('Half Day', Colors.orange),
+            _legendItem('Present', Colors.grey),
+          ],
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _buildDayCell(DateTime day, {bool isToday = false}) {
+    final leave = _leaves.firstWhere((l) => isSameDay(l.date, day), orElse: () => StaffLeaveModel(staffId: -1, date: day, type: 0));
+    Color? bgColor;
+    Color textColor = widget.profile.textColor;
+    if (leave.type == 1.0) { bgColor = Colors.red; textColor = Colors.white; }
+    else if (leave.type == 0.5) { bgColor = Colors.orange; textColor = Colors.white; }
+    else if (isToday) { bgColor = widget.themeColor.withValues(alpha: 0.15); textColor = widget.themeColor; }
+
+    return Container(
+      margin: const EdgeInsets.all(4),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
+      child: Text('${day.day}', style: TextStyle(color: textColor, fontWeight: (isToday || leave.type > 0) ? FontWeight.bold : FontWeight.normal)),
+    );
+  }
+
+  Widget _legendItem(String label, Color color) {
+    return Row(
+      children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Text(label, style: TextStyle(fontSize: 12, color: widget.profile.secondaryTextColor)),
+      ],
     );
   }
 }

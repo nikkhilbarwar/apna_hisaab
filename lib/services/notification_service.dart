@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
@@ -7,18 +9,62 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
+  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
     tz.initializeTimeZones();
     
+    // Request permission for FCM
+    NotificationSettings settings = await _fcm.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      // Subscribe to a general topic for announcements
+      await _fcm.subscribeToTopic('announcements');
+      
+      // Get token for debugging
+      String? token = await _fcm.getToken();
+      debugPrint("FCM Token: $token");
+    }
+
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/launcher_icon');
 
     const InitializationSettings initializationSettings = InitializationSettings(
       android: initializationSettingsAndroid,
     );
+
+    // Create Notification Channels for Android
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'pending_orders',
+      'Pending Orders',
+      description: 'Notifications for pending orders',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    const AndroidNotificationChannel purchaseChannel = AndroidNotificationChannel(
+      'purchase_reminders',
+      'Purchase Reminders',
+      description: 'Notifications for purchase reminders',
+      importance: Importance.max,
+      playSound: true,
+    );
+
+    final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+        flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+
+    if (androidImplementation != null) {
+      await androidImplementation.createNotificationChannel(channel);
+      await androidImplementation.createNotificationChannel(purchaseChannel);
+    }
 
     await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
@@ -78,7 +124,7 @@ class NotificationService {
         matchDateTimeComponents: DateTimeComponents.time,
       );
     } catch (e) {
-      print("Notification Scheduling Error: $e");
+      debugPrint("Notification Scheduling Error: $e");
     }
   }
 
@@ -107,7 +153,7 @@ class NotificationService {
         );
       }
     } catch (e) {
-      print("Purchase Reminder Scheduling Error: $e");
+      debugPrint("Purchase Reminder Scheduling Error: $e");
     }
   }
 
@@ -170,5 +216,31 @@ class NotificationService {
 
   Future<void> cancelAllNotifications() async {
     await flutterLocalNotificationsPlugin.cancelAll();
+  }
+
+  // Handle background messages
+  static Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+    // If you're going to use other Firebase services in the background, such as Firestore,
+    // make sure you call `await Firebase.initializeApp()` if required.
+    debugPrint("Handling a background message: ${message.messageId}");
+  }
+
+  void setupInteractions() {
+    // Handle foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null) {
+        showNotification(
+          id: message.hashCode,
+          title: message.notification!.title ?? '',
+          body: message.notification!.body ?? '',
+        );
+      }
+    });
+
+    // Handle when the app is opened from a notification
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      debugPrint('A new onMessageOpenedApp event was published!');
+      // Handle navigation if needed
+    });
   }
 }

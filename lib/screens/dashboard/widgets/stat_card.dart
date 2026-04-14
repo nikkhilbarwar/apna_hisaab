@@ -27,14 +27,14 @@ class StatCard extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [profile.themeColor, profile.themeColor.withOpacity(0.85)],
+          colors: [profile.themeColor, profile.themeColor.withValues(alpha: 0.85)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: profile.themeColor.withOpacity(0.3),
+            color: profile.themeColor.withValues(alpha: 0.3),
             blurRadius: 25,
             offset: const Offset(0, 12),
           )
@@ -44,7 +44,7 @@ class StatCard extends StatelessWidget {
         children: [
           Positioned(
             right: -30, top: -30,
-            child: CircleAvatar(radius: 80, backgroundColor: Colors.white.withOpacity(0.05)),
+            child: CircleAvatar(radius: 80, backgroundColor: Colors.white.withValues(alpha: 0.05)),
           ),
           Column(
             children: [
@@ -55,7 +55,7 @@ class StatCard extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.auto_awesome, color: Colors.white.withOpacity(0.6), size: 14),
+                        Icon(Icons.auto_awesome, color: Colors.white.withValues(alpha: 0.6), size: 14),
                         const SizedBox(width: 8),
                         Text(dateLabel, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 1.5)),
                       ],
@@ -70,7 +70,7 @@ class StatCard extends StatelessWidget {
                     const SizedBox(height: 4), 
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         Icon(growth >= 0 ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded, size: 14, color: growth >= 0 ? Colors.greenAccent : Colors.redAccent),
                         const SizedBox(width: 6),
@@ -82,7 +82,7 @@ class StatCard extends StatelessWidget {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(color: Colors.black.withOpacity(0.1), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28))),
+                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.1), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28))),
                 child: Column(
                   children: [
                     Row(
@@ -107,7 +107,7 @@ class StatCard extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15), 
+                  color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12), 
                   border: Border.all(color: Colors.white24)
                 ),

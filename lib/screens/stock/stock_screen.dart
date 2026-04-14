@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../models/category_model.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/item_provider.dart';
 import '../../providers/category_provider.dart';
@@ -14,8 +15,8 @@ class StockScreen extends StatefulWidget {
   final bool filterLowStock;
 
   const StockScreen({
-    super.key, 
-    this.initialCategory, 
+    super.key,
+    this.initialCategory,
     this.filterLowStock = false
   });
 
@@ -66,8 +67,8 @@ class _StockScreenState extends State<StockScreen> {
       },
       child: Scaffold(
         backgroundColor: profileProvider.scaffoldColor,
-        appBar: AppBar(
-          title: Text(_selectedCategory == null ? 'INVENTORY & STOCK' : _selectedCategory!.toUpperCase(), 
+        appBar: _selectedCategory == null ? null : AppBar(
+          title: Text(_selectedCategory!.toUpperCase(),
             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.white)),
           flexibleSpace: Container(
             decoration: BoxDecoration(
@@ -78,20 +79,14 @@ class _StockScreenState extends State<StockScreen> {
               ),
             ),
           ),
-          leading: (_selectedCategory != null || _searchQuery.isNotEmpty || _onlyShowLowStock) ? IconButton(
+          leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () {
               setState(() {
-                if (_selectedCategory != null) {
-                  _selectedCategory = null;
-                } else {
-                  _searchQuery = '';
-                  _searchController.clear();
-                  _onlyShowLowStock = false;
-                }
+                _selectedCategory = null;
               });
             },
-          ) : null,
+          ),
           centerTitle: true,
           actions: [
             IconButton(
@@ -99,39 +94,24 @@ class _StockScreenState extends State<StockScreen> {
               onPressed: () => setState(() => _onlyShowLowStock = !_onlyShowLowStock),
               tooltip: 'Low Stock Filter',
             ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Colors.white),
-              onSelected: (value) {
-                if (value == 'manage_categories') {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoryManagementScreen()));
-                } else if (value == 'low_stock_settings') {
-                  _showLowStockSettings(context, itemProvider, catProvider, profileProvider);
-                } else if (value == 'purchase_planning') {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseReminderScreen()));
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: 'purchase_planning', child: Row(children: [Icon(Icons.playlist_add_check_rounded, size: 18), SizedBox(width: 8), Text('Purchase List')])),
-                const PopupMenuItem(value: 'manage_categories', child: Text('Manage Categories')),
-                const PopupMenuItem(value: 'low_stock_settings', child: Text('Low Stock Alerts')),
-              ],
-            ),
           ],
           elevation: 0,
           iconTheme: const IconThemeData(color: Colors.white),
         ),
-        body: Column(
-          children: [
-            _buildSearchBar(profileProvider),
-            if (reminderProvider.reminders.any((r) => r.status == 'pending'))
-              _buildReminderBanner(reminderProvider, profileProvider),
-            Expanded(
-              child: _selectedCategory == null && _searchQuery.isEmpty && !_onlyShowLowStock
-                ? _buildCategoryList(catProvider, itemProvider, profileProvider)
-                : _buildFilteredItemList(itemProvider, profileProvider),
-            ),
-            _buildBottomActionBar(profileProvider, catProvider),
-          ],
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildSearchBar(profileProvider),
+              if (reminderProvider.reminders.any((r) => r.status == 'pending'))
+                _buildReminderBanner(reminderProvider, profileProvider),
+              Expanded(
+                child: _selectedCategory == null && _searchQuery.isEmpty && !_onlyShowLowStock
+                  ? _buildCategoryList(catProvider, itemProvider, profileProvider)
+                  : _buildFilteredItemList(itemProvider, profileProvider),
+              ),
+              _buildBottomActionBar(profileProvider, catProvider),
+            ],
+          ),
         ),
       ),
     );
@@ -139,8 +119,17 @@ class _StockScreenState extends State<StockScreen> {
 
   Widget _buildSearchBar(ProfileProvider profile) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      color: profile.cardColor,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: profile.cardColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: TextField(
         controller: _searchController,
         onChanged: (v) => setState(() => _searchQuery = v),
@@ -195,11 +184,12 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   Widget _buildBottomActionBar(ProfileProvider profile, CategoryProvider catProvider) {
+    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
       decoration: BoxDecoration(
         color: profile.cardColor,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -5))],
       ),
       child: Row(
         children: [
@@ -219,9 +209,8 @@ class _StockScreenState extends State<StockScreen> {
           ),
           const SizedBox(width: 12),
           IconButton(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseReminderScreen())),
-            icon: Icon(Icons.playlist_add_check_rounded, color: profile.themeColor, size: 20),
-            tooltip: 'Purchase List',
+            onPressed: () => _showStockSettingsBottomSheet(context, itemProvider, catProvider, profile),
+            icon: Icon(Icons.tune_rounded, color: profile.themeColor, size: 22),
             style: IconButton.styleFrom(
               backgroundColor: profile.themeColor.withValues(alpha: 0.1),
               padding: const EdgeInsets.all(10),
@@ -233,10 +222,51 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
+  void _showStockSettingsBottomSheet(BuildContext context, ItemProvider itemProvider, CategoryProvider catProvider, ProfileProvider profile) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: profile.cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Text('STOCK SETTINGS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: profile.textColor, letterSpacing: 1.2)),
+            const SizedBox(height: 24),
+            _actionTile(Icons.playlist_add_check_rounded, 'Purchase Planning List', profile.themeColor, profile, () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseReminderScreen()));
+            }),
+            _actionTile(Icons.category_outlined, 'Manage Categories', Colors.orange, profile, () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoryManagementScreen()));
+            }),
+            _actionTile(Icons.notification_important_outlined, 'Low Stock Alert Settings', Colors.purple, profile, () {
+              Navigator.pop(context);
+              _showLowStockSettings(context, itemProvider, catProvider, profile);
+            }),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCategoryList(CategoryProvider catProvider, ItemProvider itemProvider, ProfileProvider profile) {
     final List<String> categories = catProvider.categories.map((c) => c.name).toList();
     categories.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    
+
     final uncategorizedItems = itemProvider.getItemsByCategory('Uncategorized');
     final hasUncategorized = uncategorizedItems.isNotEmpty;
 
@@ -254,14 +284,14 @@ class _StockScreenState extends State<StockScreen> {
           decoration: BoxDecoration(
             color: profile.cardColor,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
             border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             leading: Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: (isUncategorized ? Colors.grey : profile.themeColor).withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
+              decoration: BoxDecoration(color: (isUncategorized ? Colors.grey : profile.themeColor).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)),
               child: Icon(isUncategorized ? Icons.help_outline_rounded : Icons.folder_rounded, color: isUncategorized ? Colors.grey : profile.themeColor, size: 24),
             ),
             title: Text(catName, style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor, fontSize: 15)),
@@ -276,7 +306,7 @@ class _StockScreenState extends State<StockScreen> {
                     decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                     child: Text('$lowStockCount LOW', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10)),
                   ),
-                Icon(Icons.chevron_right, color: profile.secondaryTextColor.withOpacity(0.5)),
+                Icon(Icons.chevron_right, color: profile.secondaryTextColor.withValues(alpha: 0.5)),
               ],
             ),
             onTap: () => setState(() => _selectedCategory = catName),
@@ -288,14 +318,14 @@ class _StockScreenState extends State<StockScreen> {
 
   Widget _buildFilteredItemList(ItemProvider itemProvider, ProfileProvider profile) {
     final filteredItems = itemProvider.allItems.where((item) {
-      bool matchCategory = _selectedCategory == null || 
-          (_selectedCategory == 'Uncategorized' 
+      bool matchCategory = _selectedCategory == null ||
+          (_selectedCategory == 'Uncategorized'
               ? itemProvider.getItemsByCategory('Uncategorized').contains(item)
               : item.category == _selectedCategory);
-      
+
       bool matchSearch = _searchQuery.isEmpty || item.name.toLowerCase().contains(_searchQuery.toLowerCase());
       bool matchLowStock = !_onlyShowLowStock || itemProvider.isLowStock(item);
-      
+
       return matchCategory && matchSearch && matchLowStock;
     }).toList();
 
@@ -304,7 +334,7 @@ class _StockScreenState extends State<StockScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory_2_outlined, size: 60, color: profile.secondaryTextColor.withOpacity(0.3)),
+            Icon(Icons.inventory_2_outlined, size: 60, color: profile.secondaryTextColor.withValues(alpha: 0.3)),
             const SizedBox(height: 16),
             Text('No items found', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
           ],
@@ -318,13 +348,13 @@ class _StockScreenState extends State<StockScreen> {
       itemBuilder: (context, index) {
         final item = filteredItems[index];
         final isLow = itemProvider.isLowStock(item);
-        
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
             color: profile.cardColor,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
             border: Border.all(color: isLow ? Colors.red.withValues(alpha: 0.5) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100), width: isLow ? 2 : 1),
           ),
           child: ListTile(
@@ -357,7 +387,7 @@ class _StockScreenState extends State<StockScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('${item.currentStock % 1 == 0 ? item.currentStock.toInt() : item.currentStock}', 
+                Text('${item.currentStock % 1 == 0 ? item.currentStock.toInt() : item.currentStock}',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isLow ? Colors.red : profile.textColor)),
                 Text(item.unit, style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
               ],
@@ -372,7 +402,6 @@ class _StockScreenState extends State<StockScreen> {
   void _showLowStockSettings(BuildContext context, ItemProvider itemProvider, CategoryProvider catProvider, ProfileProvider profile) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Container(
@@ -389,7 +418,7 @@ class _StockScreenState extends State<StockScreen> {
                 child: Container(
                   width: 40, height: 4,
                   margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
+                  decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
                 ),
               ),
               Text('LOW STOCK ALERTS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor, letterSpacing: 1)),
@@ -449,7 +478,7 @@ class _StockScreenState extends State<StockScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inventory_2_outlined, size: 80, color: profile.secondaryTextColor.withOpacity(0.2)),
+          Icon(Icons.inventory_2_outlined, size: 80, color: profile.secondaryTextColor.withValues(alpha: 0.2)),
           const SizedBox(height: 16),
           Text('Inventory is empty', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
@@ -464,8 +493,14 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   void _showItemActions(BuildContext context, ItemProvider provider, ItemModel item, ProfileProvider profile) {
+    CategoryModel? cat;
+    try {
+      cat = Provider.of<CategoryProvider>(context, listen: false).getCategoryByName(item.category);
+    } catch (_) {}
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: BoxDecoration(
@@ -475,22 +510,23 @@ class _StockScreenState extends State<StockScreen> {
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
               child: Container(
                 width: 40, height: 4,
                 margin: const EdgeInsets.only(bottom: 24),
-                decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            Text(item.name.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor, letterSpacing: 1)),
             const SizedBox(height: 24),
-            _actionTile(Icons.edit_note, 'Quick Stock Update', Colors.blue, profile, () {
-              Navigator.pop(context);
-              _showUpdateStockBottomSheet(context, provider, item, profile);
-            }),
-            _actionTile(item.lowStockAlert == 1 ? Icons.notifications_off_outlined : Icons.notifications_active_outlined, 
-              item.lowStockAlert == 1 ? 'Disable Low Stock Alert' : 'Enable Low Stock Alert', 
+            if (cat == null || cat.useCategoryStock == 0)
+              _actionTile(Icons.edit_note, 'Quick Stock Update', Colors.blue, profile, () {
+                Navigator.pop(context);
+                _showUpdateStockBottomSheet(context, provider, item, profile);
+              }),
+            _actionTile(item.lowStockAlert == 1 ? Icons.notifications_off_outlined : Icons.notifications_active_outlined,
+              item.lowStockAlert == 1 ? 'Disable Low Stock Alert' : 'Enable Low Stock Alert',
               Colors.purple, profile, () {
               provider.toggleLowStockAlert(item.id!, item.lowStockAlert == 0);
               Navigator.pop(context);
@@ -540,7 +576,7 @@ class _StockScreenState extends State<StockScreen> {
               child: Container(
                 width: 40, height: 4,
                 margin: const EdgeInsets.only(bottom: 24),
-                decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
               ),
             ),
             Row(
@@ -613,7 +649,7 @@ class _StockScreenState extends State<StockScreen> {
               child: Container(
                 width: 40, height: 4,
                 margin: const EdgeInsets.only(bottom: 24),
-                decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
               ),
             ),
             Text('Update Stock: ${item.name}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor)),
@@ -622,9 +658,9 @@ class _StockScreenState extends State<StockScreen> {
               controller: stockController,
               style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
               decoration: InputDecoration(
-                labelText: 'Update Quantity', 
+                labelText: 'Update Quantity',
                 hintText: 'Current: ${item.currentStock % 1 == 0 ? item.currentStock.toInt() : item.currentStock}',
-                hintStyle: TextStyle(color: profile.secondaryTextColor.withOpacity(0.4)),
+                hintStyle: TextStyle(color: profile.secondaryTextColor.withValues(alpha: 0.4)),
                 labelStyle: TextStyle(color: profile.secondaryTextColor),
                 prefixIcon: Icon(Icons.inventory_2_outlined, color: profile.themeColor),
                 filled: true,
@@ -673,10 +709,10 @@ class _StockScreenState extends State<StockScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
           TextButton(
-            onPressed: () { 
-              provider.deleteItem(item.id!); 
-              Navigator.pop(context); 
-            }, 
+            onPressed: () {
+              provider.softDeleteItem(item.id!);
+              Navigator.pop(context);
+            },
             child: const Text('DELETE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
           ),
         ],

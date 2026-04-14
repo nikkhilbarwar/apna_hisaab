@@ -5,7 +5,6 @@ import '../../services/auth_service.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/transaction_provider.dart';
-import '../../core/database/database_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/license_service.dart';
 import '../main_navigation.dart';
@@ -38,12 +37,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
       if (txProvider.transactions.isEmpty) {
         if (mounted) {
           setState(() => _isCurrentlyRestoring = true);
-          print("AuthWrapper: Local DB empty, starting cloud restore...");
+          debugPrint("AuthWrapper: Local DB empty, starting cloud restore...");
           
           bool success = await syncProvider.fullRestoreFromServer(context);
           
           if (success) {
-            print("AuthWrapper: Restore Success. Refreshing UI...");
+            debugPrint("AuthWrapper: Restore Success. Refreshing UI...");
             await txProvider.fetchTransactions();
           }
           
@@ -63,7 +62,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
       }
     } catch (e) {
-      print("AuthWrapper Restore Check Error: $e");
+      debugPrint("AuthWrapper Restore Check Error: $e");
       if (mounted) {
         setState(() {
           _isCurrentlyRestoring = false;
@@ -155,6 +154,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
           return Consumer<ProfileProvider>(
             builder: (context, profile, child) {
+              if (profile.isLoading) {
+                return const _LoadingScreen(message: 'Loading Profile...');
+              }
+
               bool isAdmin = user.email == "nikkhilbarwar@gmail.com" || 
                              user.email == "anitamishra1714@gmail.com" ||
                              user.email == "missadvocate06@gmail.com";
@@ -169,13 +172,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
                   }
                   _checkAndRestoreData(context);
                   _checkAnnouncement(context);
-                  _updateUserHeartbeat(profile); // Update Last Active & Version
+                  _updateUserHeartbeat(profile);
                 });
                 return const MainNavigation();
               } else {
-                if (profile.businessName == 'My Business' && !isAdmin) {
-                   return const _LoadingScreen(message: 'Loading Profile...');
-                }
                 return const ActivationScreen();
               }
             },

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/supplier_provider.dart';
 import '../../models/supplier_model.dart';
 import '../../providers/profile_provider.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 
 class SupplierScreen extends StatelessWidget {
   const SupplierScreen({super.key});
@@ -19,7 +20,7 @@ class SupplierScreen extends StatelessWidget {
         title: const Text('SUPPLIERS & VENDORS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white)),
         flexibleSpace: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [themeColor.withOpacity(0.8), themeColor]),
+            gradient: LinearGradient(colors: [themeColor.withValues(alpha: 0.8), themeColor]),
           ),
         ),
         elevation: 0,
@@ -31,7 +32,7 @@ class SupplierScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.person_outline, size: 80, color: profile.secondaryTextColor.withOpacity(0.2)),
+                  Icon(Icons.person_outline, size: 80, color: profile.secondaryTextColor.withValues(alpha: 0.2)),
                   const SizedBox(height: 16),
                   Text('No suppliers added yet', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
                 ],
@@ -48,7 +49,7 @@ class SupplierScreen extends StatelessWidget {
                     color: profile.cardColor,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
                   ),
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -105,26 +106,20 @@ class SupplierScreen extends StatelessWidget {
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, SupplierProvider provider, ProfileProvider profile, SupplierModel supplier) {
-    showDialog(
+  void _showDeleteConfirm(BuildContext context, SupplierProvider provider, ProfileProvider profile, SupplierModel supplier) async {
+    final confirm = await AppBottomSheet.showAction(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Delete Supplier?', style: TextStyle(color: profile.textColor)),
-        content: Text('Are you sure you want to remove "${supplier.name}"?', style: TextStyle(color: profile.secondaryTextColor)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
-          TextButton(
-            onPressed: () {
-              provider.deleteSupplier(supplier.id!);
-              Navigator.pop(context);
-            },
-            child: const Text('DELETE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+      profile: profile,
+      title: 'Delete Supplier?',
+      message: 'Are you sure you want to remove "${supplier.name}"?',
+      confirmLabel: 'DELETE',
+      isDestructive: true,
+      icon: Icons.person_remove_outlined,
     );
+
+    if (confirm == true) {
+      provider.deleteSupplier(supplier.id!);
+    }
   }
 
   void _showSupplierBottomSheet(BuildContext context, SupplierProvider provider, ProfileProvider profile, {SupplierModel? supplier}) {
@@ -133,70 +128,52 @@ class SupplierScreen extends StatelessWidget {
     final contactController = TextEditingController(text: supplier?.contact);
     final itemsController = TextEditingController(text: supplier?.itemsSupplied);
 
-    showModalBottomSheet(
+    AppBottomSheet.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: profile.cardColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(color: profile.secondaryTextColor.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              Text(supplier == null ? 'Add New Supplier' : 'Edit Supplier Details', 
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: profile.textColor)),
-              const SizedBox(height: 24),
-              _sheetTextField(nameController, 'Supplier / Shop Name', Icons.store_outlined, profile),
-              const SizedBox(height: 16),
-              _sheetTextField(contactController, 'Contact Number', Icons.phone_outlined, profile, isNumber: true),
-              const SizedBox(height: 16),
-              _sheetTextField(itemsController, 'Items Supplied', Icons.inventory_2_outlined, profile, maxLines: 2),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: () {
-                  if (nameController.text.isNotEmpty) {
-                    final newSupplier = SupplierModel(
-                      id: supplier?.id,
-                      name: nameController.text,
-                      contact: contactController.text,
-                      itemsSupplied: itemsController.text,
-                    );
-                    if (supplier == null) {
-                      provider.addSupplier(newSupplier);
-                    } else {
-                      provider.updateSupplier(newSupplier);
-                    }
-                    Navigator.pop(context);
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: themeColor,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 60),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                  elevation: 0,
-                ),
-                child: Text(supplier == null ? 'SAVE SUPPLIER' : 'UPDATE DETAILS', 
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 1)),
-              ),
-            ],
+      profile: profile,
+      title: supplier == null ? 'ADD NEW SUPPLIER' : 'EDIT SUPPLIER DETAILS',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sheetTextField(nameController, 'Supplier / Shop Name', Icons.store_outlined, profile),
+          const SizedBox(height: 16),
+          _sheetTextField(contactController, 'Contact Number', Icons.phone_outlined, profile, isNumber: true),
+          const SizedBox(height: 16),
+          _sheetTextField(itemsController, 'Items Supplied', Icons.inventory_2_outlined, profile, maxLines: 2),
+          const SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.isNotEmpty) {
+                final newSupplier = SupplierModel(
+                  id: supplier?.id,
+                  name: nameController.text,
+                  contact: contactController.text,
+                  itemsSupplied: itemsController.text,
+                );
+                if (supplier == null) {
+                  provider.addSupplier(newSupplier);
+                } else {
+                  provider.updateSupplier(newSupplier);
+                }
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: themeColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 60),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              elevation: 0,
+            ),
+            child: Text(supplier == null ? 'SAVE SUPPLIER' : 'UPDATE DETAILS',
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 1)),
           ),
-        ),
+        ],
       ),
     );
   }
+
 
   Widget _sheetTextField(TextEditingController controller, String label, IconData icon, ProfileProvider profile, {bool isNumber = false, int maxLines = 1}) {
     return TextField(

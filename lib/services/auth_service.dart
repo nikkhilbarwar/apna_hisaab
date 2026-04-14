@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -16,7 +17,7 @@ class AuthService {
     try {
       return await _auth.createUserWithEmailAndPassword(email: email, password: password);
     } catch (e) {
-      print("Registration Error: $e");
+      debugPrint("Registration Error: $e");
       rethrow;
     }
   }
@@ -25,7 +26,7 @@ class AuthService {
     try {
       return await _auth.signInWithEmailAndPassword(email: email, password: password);
     } catch (e) {
-      print("Login Error: $e");
+      debugPrint("Login Error: $e");
       rethrow;
     }
   }
@@ -34,7 +35,7 @@ class AuthService {
     try {
       await _auth.sendPasswordResetEmail(email: email);
     } catch (e) {
-      print("Password Reset Error: $e");
+      debugPrint("Password Reset Error: $e");
       rethrow;
     }
   }
@@ -44,7 +45,7 @@ class AuthService {
       // Logic: Trigger the authentication flow
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        print("Google Sign-In: User cancelled the flow.");
+        debugPrint("Google Sign-In: User cancelled the flow.");
         return null;
       }
 
@@ -61,7 +62,7 @@ class AuthService {
       final UserCredential userCredential = await _auth.signInWithCredential(credential);
       return userCredential;
     } catch (e) {
-      print("❌ GOOGLE LOGIN CRITICAL ERROR: $e");
+      debugPrint("❌ GOOGLE LOGIN CRITICAL ERROR: $e");
       return null;
     }
   }
@@ -71,7 +72,21 @@ class AuthService {
       await _googleSignIn.signOut();
       await _auth.signOut();
     } catch (e) {
-      print("Sign-Out Error: $e");
+      debugPrint("Sign-Out Error: $e");
+    }
+  }
+
+  Future<void> deleteAccount() async {
+    try {
+      User? user = _auth.currentUser;
+      if (user != null) {
+        // Sign out from Google first if applicable
+        await _googleSignIn.signOut();
+        await user.delete();
+      }
+    } catch (e) {
+      debugPrint("Delete Account Error: $e");
+      rethrow;
     }
   }
 
@@ -91,10 +106,10 @@ class AuthService {
           idToken: googleAuth.idToken,
         );
         await _auth.signInWithCredential(credential);
-        print("Silent Login Success: Firebase session restored via Google");
+        debugPrint("Silent Login Success: Firebase session restored via Google");
       }
     } catch (e) {
-      print("Silent Sign-In Error: $e");
+      debugPrint("Silent Sign-In Error: $e");
     }
   }
 }

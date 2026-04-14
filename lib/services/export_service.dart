@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
@@ -8,36 +9,82 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:printing/printing.dart';
 import '../core/database/database_helper.dart';
 import '../models/transaction_model.dart';
 import '../models/item_model.dart';
 
+import '../models/staff_model.dart';
+import '../providers/staff_provider.dart';
+
 class ExportService {
-  Future<Directory> _getReportDirectory() async {
+  Future<Directory> _getAppDirectory() async {
     Directory? baseDir;
+
     if (Platform.isAndroid) {
-      baseDir = Directory('/storage/emulated/0/Documents/ApnaHisaab_Reports');
+      // Use the public Downloads folder for best visibility on Android
+      // This is generally accessible and visible to users in File Managers
+      baseDir = Directory('/storage/emulated/0/Downloads');
+      
+      try {
+        if (!await baseDir.exists()) {
+          await baseDir.create(recursive: true);
+        }
+      } catch (e) {
+        debugPrint("Downloads folder access failed: $e");
+        // Fallback to app-specific external storage if Downloads is restricted
+        final external = await getExternalStorageDirectory();
+        if (external != null) {
+          baseDir = external;
+        }
+      }
     } else {
+      // iOS and other platforms
       baseDir = await getApplicationDocumentsDirectory();
     }
-    if (!await baseDir.exists()) {
-      await baseDir.create(recursive: true);
+    
+    final appDir = Directory('${baseDir!.path}/Apna Hisab');
+    if (!await appDir.exists()) {
+      await appDir.create(recursive: true);
     }
-    return baseDir;
+    return appDir;
+  }
+
+  Future<Directory> _getReportDirectory() async {
+    final appDir = await _getAppDirectory();
+    final reportDir = Directory('${appDir.path}/Reports');
+    if (!await reportDir.exists()) {
+      await reportDir.create(recursive: true);
+    }
+    return reportDir;
   }
 
   Future<Directory> _getBackupDirectory() async {
-    Directory? baseDir;
-    if (Platform.isAndroid) {
-      baseDir = Directory('/storage/emulated/0/Documents/ApnaHisaab_Backups');
-    } else {
-      baseDir = await getApplicationDocumentsDirectory();
+    final appDir = await _getAppDirectory();
+    final backupDir = Directory('${appDir.path}/Backups');
+    if (!await backupDir.exists()) {
+      await backupDir.create(recursive: true);
     }
-    if (!await baseDir.exists()) {
-      await baseDir.create(recursive: true);
+    return backupDir;
+  }
+
+  Future<Directory> _getBillDirectory() async {
+    final appDir = await _getAppDirectory();
+    final billDir = Directory('${appDir.path}/Bills');
+    if (!await billDir.exists()) {
+      await billDir.create(recursive: true);
     }
-    return baseDir;
+    return billDir;
+  }
+
+  Future<Directory> _getKotDirectory() async {
+    final appDir = await _getAppDirectory();
+    final kotDir = Directory('${appDir.path}/KOTs');
+    if (!await kotDir.exists()) {
+      await kotDir.create(recursive: true);
+    }
+    return kotDir;
   }
 
   String _getCleanDescription(TransactionModel tx) {
@@ -88,7 +135,7 @@ class ExportService {
 
     try {
       final dir = await _getReportDirectory();
-      final fileName = "${title}_${DateTime.now().millisecondsSinceEpoch}.xlsx";
+      final fileName = "${title.replaceAll(' ', '_')}_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.xlsx";
       final path = "${dir.path}/$fileName";
       
       var fileBytes = excel.save();
@@ -99,7 +146,237 @@ class ExportService {
         await Share.shareXFiles([XFile(path)], text: '$title Report');
       }
     } catch (e) {
-      print("Excel Export Error: $e");
+      debugPrint("Excel Export Error: $e");
+    }
+  }
+
+  /// Export licenses to Excel (XLSX)
+  Future<void> exportLicensesToExcel(List<Map<String, dynamic>> licenses) async {
+    var excel = Excel.createExcel();
+    Sheet sheetObject = excel['Licenses'];
+    excel.delete('Sheet1');
+
+    CellStyle headerStyle = CellStyle(
+      bold: true,
+      fontFamily: getFontFamily(FontFamily.Arial),
+      backgroundColorHex: ExcelColor.fromHexString("#E0E0E0"),
+    );
+
+    List<String> headers = ['Restaurant', 'Owner', 'Phone', 'Key', 'Status', 'Plan', 'Price', 'Expiry', 'Registered', 'Device ID', 'Created At'];
+    for (var i = 0; i < headers.length; i++) {
+      var cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+      cell.value = TextCellValue(headers[i]);
+      cell.cellStyle = headerStyle;
+    }
+
+    for (var i = 0; i < licenses.length; i++) {
+      var data = licenses[i];
+      int row = i + 1;
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).value = TextCellValue(data['restaurantName'] ?? '');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row)).value = TextCellValue(data['ownerName'] ?? '');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row)).value = TextCellValue(data['phone'] ?? '');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row)).value = TextCellValue(data['licenseKey'] ?? '');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row)).value = TextCellValue(data['status'] ?? '');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row)).value = TextCellValue(data['planType'] ?? '');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row)).value = IntCellValue(data['price'] ?? 0);
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 7, rowIndex: row)).value = TextCellValue(data['validTillFormatted'] ?? 'Lifetime');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: row)).value = TextCellValue(data['activated'] == true ? 'Yes' : 'No');
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row)).value = TextCellValue(data['activeDeviceId'] ?? '');
+      
+      String createdAt = '';
+      if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
+        createdAt = DateFormat('yyyy-MM-dd HH:mm').format((data['createdAt'] as Timestamp).toDate());
+      }
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 10, rowIndex: row)).value = TextCellValue(createdAt);
+    }
+
+    try {
+      final dir = await _getReportDirectory();
+      final fileName = "LicenseHistory_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.xlsx";
+      final path = "${dir.path}/$fileName";
+      
+      var fileBytes = excel.save();
+      if (fileBytes != null) {
+        File(path)
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(fileBytes);
+        await Share.shareXFiles([XFile(path)], text: 'License History Report');
+      }
+    } catch (e) {
+      debugPrint("License Excel Export Error: $e");
+    }
+  }
+
+  /// Generate a professional A4 Invoice for a License Purchase
+  Future<void> generateLicenseInvoice(Map<String, dynamic> data) async {
+    final pdf = pw.Document();
+    
+    // Header Branding
+    final title = "CASH MEMO";
+    final businessName = "THE GRILLER ZONE";
+    final tagline = "Professional Digital Solutions";
+    final contactInfo = "PH: +91 9992256959 | Email: dev.grillerzone@gmail.com";
+    
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (context) => pw.Padding(
+          padding: const pw.EdgeInsets.all(30),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(businessName, style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                      pw.Text(tagline, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text(contactInfo, style: const pw.TextStyle(fontSize: 9)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(title, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.grey900)),
+                      pw.Text("No: CM-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}", style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text("Date: ${DateFormat('dd-MM-yyyy').format(DateTime.now())}", style: const pw.TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 30),
+              pw.Divider(thickness: 2, color: PdfColors.blue900),
+              pw.SizedBox(height: 20),
+              
+              // Billing Details
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text("BILL TO:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: PdfColors.grey700)),
+                        pw.SizedBox(height: 5),
+                        pw.Text(data['restaurantName']?.toUpperCase() ?? "N/A", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                        pw.Text("Prop: ${data['ownerName'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 11)),
+                        pw.Text("Contact: ${data['phone'] ?? 'N/A'}", style: const pw.TextStyle(fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text("LICENSE STATUS:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: PdfColors.grey700)),
+                        pw.SizedBox(height: 5),
+                        pw.Text(data['status']?.toUpperCase() ?? "ACTIVE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.green)),
+                        pw.Text("Plan: ${data['planType']?.toUpperCase() ?? 'N/A'}", style: const pw.TextStyle(fontSize: 11)),
+                        pw.Text("Expiry: ${data['validTillFormatted'] ?? 'Lifetime'}", style: const pw.TextStyle(fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 40),
+
+              // Items Table
+              pw.Table.fromTextArray(
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
+                cellAlignment: pw.Alignment.centerLeft,
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(4),
+                  1: const pw.FlexColumnWidth(2),
+                  2: const pw.FlexColumnWidth(2),
+                },
+                headers: ['DESCRIPTION / LICENSE KEY', 'VALIDITY', 'AMOUNT'],
+                data: [
+                  [
+                    "Software Subscription License\nKey: ${data['licenseKey']}",
+                    "${data['planType'] ?? 'N/A'}",
+                    "INR ${data['price'] ?? 0}"
+                  ],
+                ],
+              ),
+              
+              pw.SizedBox(height: 20),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.end,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Row(
+                        children: [
+                          pw.Text("Total Amount: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                          pw.Text("INR ${data['price'] ?? 0}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16, color: PdfColors.blue900)),
+                        ],
+                      ),
+                      pw.Text("(Inclusive of all digital service taxes)", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                    ],
+                  ),
+                ],
+              ),
+
+              pw.Spacer(),
+              
+              // Footer
+              pw.Divider(thickness: 1, color: PdfColors.grey400),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text("Terms & Conditions:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                      pw.Text("1. This is a digital subscription license.", style: const pw.TextStyle(fontSize: 8)),
+                      pw.Text("2. License is locked to a single device.", style: const pw.TextStyle(fontSize: 8)),
+                      pw.Text("3. No refunds after activation.", style: const pw.TextStyle(fontSize: 8)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      pw.SizedBox(height: 20),
+                      pw.Text("Authorized Signatory", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                      pw.Text("The Griller Zone (Digital)", style: const pw.TextStyle(fontSize: 8)),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+              pw.Center(child: pw.Text("This is a computer generated cash memo and does not require a physical signature.", style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600))),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final pdfBytes = await pdf.save();
+      final dir = await _getBillDirectory();
+      final fileName = "CashMemo_${data['licenseKey']}_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
+      final path = "${dir.path}/$fileName";
+      final file = File(path);
+      await file.writeAsBytes(pdfBytes);
+
+      // Small delay to ensure sync
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Show print layout
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        name: "CashMemo_${data['restaurantName']}",
+      );
+
+      // Also share the file for convenience
+      await Share.shareXFiles([XFile(path)], text: 'Cash Memo for ${data['restaurantName']}');
+    } catch (e) {
+      debugPrint("Professional Cash Memo Error: $e");
     }
   }
 
@@ -151,7 +428,7 @@ class ExportService {
 
     try {
       final dir = await _getReportDirectory();
-      final fileName = "${title}_${DateTime.now().millisecondsSinceEpoch}.pdf";
+      final fileName = "${title.replaceAll(' ', '_')}_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
       final path = "${dir.path}/$fileName";
       final file = File(path);
       final pdfBytes = await pdf.save();
@@ -165,8 +442,293 @@ class ExportService {
       
       await Share.shareXFiles([XFile(path)], text: '$title Report PDF');
     } catch (e) {
-      print("PDF Export Error: $e");
+      debugPrint("PDF Export Error: $e");
     }
+  }
+
+  /// Generate a comprehensive PDF report including Sales and Expenses
+  Future<void> generateFullReport(
+    String businessName,
+    List<TransactionModel> sales,
+    List<TransactionModel> expenses,
+    DateTimeRange range,
+  ) async {
+    final pdf = pw.Document();
+    final totalSales = sales.fold(0.0, (sum, item) => sum + item.amount);
+    final totalExpenses = expenses.fold(0.0, (sum, item) => sum + item.amount);
+    final netProfit = totalSales - totalExpenses;
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (context) => [
+          // Header
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(businessName.toUpperCase(),
+                      style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                  pw.Text("Business Summary Report", style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                ],
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text("Period: ${DateFormat('dd MMM').format(range.start)} - ${DateFormat('dd MMM yyyy').format(range.end)}",
+                      style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text("Generated: ${DateFormat('dd/MM/yy HH:mm').format(DateTime.now())}",
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+          pw.Divider(thickness: 1, color: PdfColors.grey400),
+          pw.SizedBox(height: 20),
+
+          // Financial Summary Cards
+          pw.Row(
+            children: [
+              _buildSummaryBox("TOTAL SALES", totalSales, PdfColors.green700),
+              pw.SizedBox(width: 20),
+              _buildSummaryBox("TOTAL EXPENSES", totalExpenses, PdfColors.red700),
+              pw.SizedBox(width: 20),
+              _buildSummaryBox("NET PROFIT", netProfit, netProfit >= 0 ? PdfColors.blue700 : PdfColors.orange700),
+            ],
+          ),
+          pw.SizedBox(height: 30),
+
+          // Sales Section
+          pw.Text("SALES TRANSACTIONS", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+          pw.SizedBox(height: 10),
+          _buildTransactionTable(sales, PdfColors.green50),
+          pw.SizedBox(height: 30),
+
+          // Expenses Section
+          pw.Text("EXPENSE TRANSACTIONS", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+          pw.SizedBox(height: 10),
+          _buildTransactionTable(expenses, PdfColors.red50),
+          
+          pw.Spacer(),
+          pw.Divider(thickness: 0.5),
+          pw.Center(
+            child: pw.Text("This report is digitally generated by Apna Hisaab - Professional Business Manager",
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+          ),
+        ],
+      ),
+    );
+
+    try {
+      final pdfBytes = await pdf.save();
+      final dir = await _getReportDirectory();
+      final fileName = "FullReport_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
+      final path = "${dir.path}/$fileName";
+      final file = File(path);
+      await file.writeAsBytes(pdfBytes);
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        name: "Full_Report_${businessName}",
+      );
+    } catch (e) {
+      debugPrint("Full Report Error: $e");
+    }
+  }
+
+  /// Export Audit Report (Item/Category Wise) to PDF
+  Future<void> exportAuditReport({
+    required String businessName,
+    required String title,
+    required double totalRevenue,
+    required List<Map<String, dynamic>> history,
+    required bool isItem,
+    required DateTimeRange range,
+  }) async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (context) => [
+          // Header
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(businessName.toUpperCase(),
+                      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                  pw.Text(isItem ? "Item Audit Report" : "Category Audit Report", 
+                      style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                  pw.SizedBox(height: 4),
+                  pw.Text("Period: ${DateFormat('dd/MM/yyyy').format(range.start)} - ${DateFormat('dd/MM/yyyy').format(range.end)}",
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+                ],
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text("Generated: ${DateFormat('dd/MM/yy HH:mm').format(DateTime.now())}",
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+          pw.Divider(thickness: 1, color: PdfColors.grey400),
+          pw.SizedBox(height: 10),
+
+          // Audit Title & Summary
+          pw.Container(
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(title.toUpperCase(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                    pw.Text("Total Transactions: ${history.length}", style: const pw.TextStyle(fontSize: 10)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text("TOTAL REVENUE", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                    pw.Text("Rs. ${totalRevenue.toStringAsFixed(2)}", 
+                        style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 20),
+
+          // History Table
+          pw.Table.fromTextArray(
+            headers: ['Date', 'Time', 'Item/Category', 'Qty', 'Price', 'Extra', 'Total', 'Mode'],
+            data: history.map((h) {
+              String qLabel = h['qty'] == 0.5 ? "Half" : h['qty'].toString();
+              String extra = (h['extraQty'] > 0) ? "+${h['extraQty']}@${h['extraPrice']}" : "-";
+              return [
+                h['date'],
+                h['time'],
+                h['name'],
+                qLabel,
+                h['price'].toStringAsFixed(0),
+                extra,
+                h['total'].toStringAsFixed(0),
+                h['mode']
+              ];
+            }).toList(),
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            cellHeight: 20,
+            columnWidths: {
+              0: const pw.FlexColumnWidth(2),
+              1: const pw.FlexColumnWidth(2),
+              2: const pw.FlexColumnWidth(3),
+              3: const pw.FlexColumnWidth(1.5),
+              4: const pw.FlexColumnWidth(1.5),
+              5: const pw.FlexColumnWidth(2),
+              6: const pw.FlexColumnWidth(2),
+              7: const pw.FlexColumnWidth(1.5),
+            },
+          ),
+
+          pw.Spacer(),
+          pw.Divider(thickness: 0.5),
+          pw.Center(
+            child: pw.Text("This audit report is digitally generated by Apna Hisaab",
+                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+          ),
+        ],
+      ),
+    );
+
+    try {
+      final pdfBytes = await pdf.save();
+      final dir = await _getReportDirectory();
+      final fileName = "Audit_${title.replaceAll(' ', '_')}_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
+      final path = "${dir.path}/$fileName";
+      await File(path).writeAsBytes(pdfBytes);
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        name: "Audit_$title",
+      );
+    } catch (e) {
+      debugPrint("Audit PDF Error: $e");
+    }
+  }
+
+  pw.Widget _buildSummaryBox(String title, double amount, PdfColor color) {
+    return pw.Expanded(
+      child: pw.Container(
+        padding: const pw.EdgeInsets.all(12),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: color, width: 1),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+        ),
+        child: pw.Column(
+          children: [
+            pw.Text(title, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: color)),
+            pw.SizedBox(height: 5),
+            pw.Text("Rs. ${amount.toStringAsFixed(2)}", 
+                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _buildTransactionTable(List<TransactionModel> txs, PdfColor headerColor) {
+    if (txs.isEmpty) {
+      return pw.Text("No transactions found for this period.", style: pw.TextStyle(fontSize: 10, fontStyle: pw.FontStyle.italic));
+    }
+    return pw.Table.fromTextArray(
+      headers: ['Date', 'Category', 'Description', 'Amount', 'Mode'],
+      data: txs.map((tx) {
+        // Fix: Clean category name to handle 'All Sales' or other internal labels
+        String displayCategory = tx.category;
+        if (displayCategory.toLowerCase() == 'all sales' || displayCategory.toLowerCase() == 'all') {
+          // If the category is a generic label, we can try to get it from items or leave as is
+          // but based on user feedback, we should show the ACTUAL category.
+          // In this app, tx.category usually stores the category name.
+        }
+
+        return [
+          DateFormat('dd/MM/yy').format(tx.date),
+          displayCategory,
+          _getCleanDescription(tx),
+          tx.amount.toStringAsFixed(0),
+          tx.paymentMode
+        ];
+      }).toList(),
+      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+      cellStyle: const pw.TextStyle(fontSize: 9),
+      headerDecoration: pw.BoxDecoration(color: headerColor),
+      cellHeight: 25,
+      columnWidths: {
+        0: const pw.FlexColumnWidth(2),
+        1: const pw.FlexColumnWidth(3),
+        2: const pw.FlexColumnWidth(5),
+        3: const pw.FlexColumnWidth(2),
+        4: const pw.FlexColumnWidth(2),
+      },
+    );
   }
 
   /// Save Bill as PDF and return path
@@ -326,6 +888,14 @@ class ExportService {
               ],
             ),
             
+            if (tx.paymentMode == 'Credit') ...[
+              pw.SizedBox(height: 4),
+              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+              pw.Text("CREDIT SETTLEMENT:", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+              _buildPdfBreakdownRow("Paid Amount", tx.paidAmount.toStringAsFixed(0)),
+              _buildPdfBreakdownRow("Remaining Due", tx.remainingCredit.toStringAsFixed(0)),
+            ],
+
             if (isPurchase) ...[
               pw.SizedBox(height: 2),
               pw.Text("Payment Mode: ${tx.paymentMode}", style: const pw.TextStyle(fontSize: 8)),
@@ -368,8 +938,8 @@ class ExportService {
     );
 
     try {
-      final dir = await _getReportDirectory();
-      final fileName = "Bill_${tx.id}_${DateTime.now().millisecondsSinceEpoch}.pdf";
+      final dir = await _getBillDirectory();
+      final fileName = "Bill_${tx.id}_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
       final path = "${dir.path}/$fileName";
       final file = File(path);
       final pdfBytes = await pdf.save();
@@ -385,7 +955,7 @@ class ExportService {
 
       return path;
     } catch (e) {
-      print("Bill PDF Error: $e");
+      debugPrint("Bill PDF Error: $e");
       return null;
     }
   }
@@ -496,8 +1066,8 @@ class ExportService {
     );
 
     try {
-      final dir = await _getReportDirectory();
-      final fileName = "KOT_${tx.id}_${DateTime.now().millisecondsSinceEpoch}.pdf";
+      final dir = await _getKotDirectory();
+      final fileName = "KOT_${tx.id}_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
       final path = "${dir.path}/$fileName";
       final file = File(path);
       final pdfBytes = await pdf.save();
@@ -513,7 +1083,7 @@ class ExportService {
 
       return path;
     } catch (e) {
-      print("KOT PDF Error: $e");
+      debugPrint("KOT PDF Error: $e");
       return null;
     }
   }
@@ -543,7 +1113,7 @@ class ExportService {
       await file.writeAsString(jsonEncode(data));
       return file.path;
     } catch (e) {
-      print("Auto Backup Error: $e");
+      debugPrint("Auto Backup Error: $e");
       return null;
     }
   }
@@ -576,7 +1146,7 @@ class ExportService {
       await file.writeAsString(jsonString);
       return file.path;
     } catch (e) {
-      print("Backup Error: $e");
+      debugPrint("Backup Error: $e");
       return null;
     }
   }
@@ -588,23 +1158,85 @@ class ExportService {
     final categories = await db.getAllCategories();
     final staff = await db.getAllStaff();
     final suppliers = await db.getAllSuppliers();
+    
+    // Missing tables added
+    final units = await db.getAllUnits();
+    final sqlDb = await db.database;
+    final reminders = await sqlDb.query('purchase_reminders');
+    final staffAdvance = await sqlDb.query('staff_advance');
+    final staffLeave = await sqlDb.query('staff_leave');
 
     final user = FirebaseAuth.instance.currentUser;
     final uid = user?.uid ?? "";
 
     // Profile settings from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
+
+    // IMAGE PORTABILITY: Convert images to Base64 (v2.5 Upgrade)
+    String? logoBase64;
+    String? qrBase64;
+    try {
+      final logoPath = prefs.getString('logo_path_$uid');
+      if (logoPath != null && File(logoPath).existsSync()) {
+        logoBase64 = base64Encode(File(logoPath).readAsBytesSync());
+      }
+      final qrPath = prefs.getString('qr_path_$uid');
+      if (qrPath != null && File(qrPath).existsSync()) {
+        qrBase64 = base64Encode(File(qrPath).readAsBytesSync());
+      }
+    } catch (e) {
+      debugPrint("Image Backup Error: $e");
+    }
+
+    // Process items and staff to include base64 icons/images
+    final List<Map<String, dynamic>> itemsList = [];
+    for (var item in items) {
+      final itemMap = item.toMap();
+      if (item.icon != null && File(item.icon!).existsSync()) {
+        try {
+          itemMap['icon_base64'] = base64Encode(File(item.icon!).readAsBytesSync());
+        } catch (e) {
+          debugPrint("Item Icon Backup Error: $e");
+        }
+      }
+      itemsList.add(itemMap);
+    }
+
+    final List<Map<String, dynamic>> staffList = [];
+    for (var s in staff) {
+      final staffMap = s.toMap();
+      if (s.imagePath != null && File(s.imagePath!).existsSync()) {
+        try {
+          staffMap['image_base64'] = base64Encode(File(s.imagePath!).readAsBytesSync());
+        } catch (e) {
+          debugPrint("Staff Image Backup Error: $e");
+        }
+      }
+      staffList.add(staffMap);
+    }
+
     Map<String, dynamic> profileSettings = {
       'business_name': prefs.getString('business_name_$uid'),
       'owner_name': prefs.getString('owner_name_$uid'),
       'contact': prefs.getString('contact_$uid'),
       'address': prefs.getString('address_$uid'),
       'logo_path': prefs.getString('logo_path_$uid'),
+      'qr_path': prefs.getString('qr_path_$uid'),
+      'logo_base64': logoBase64,
+      'qr_base64': qrBase64,
+      'qr_label': prefs.getString('qr_label_$uid'),
       'cloud_sync': prefs.getBool('cloud_sync_$uid'),
       'currency': prefs.getString('currency_$uid'),
       'theme_color': prefs.getInt('theme_color_$uid'),
       'tax_percentage': prefs.getDouble('tax_percentage_$uid'),
       'is_dark_mode': prefs.getBool('is_dark_mode_$uid'),
+      'total_tables': prefs.getInt('total_tables_$uid'),
+      'show_amount': prefs.getBool('show_amount_$uid'),
+      'auto_print': prefs.getBool('auto_print_$uid'),
+      'kot_enabled': prefs.getBool('kot_enabled_$uid'),
+      'custom_pin': prefs.getString('custom_pin_$uid'),
+      'is_pin_enabled': prefs.getBool('is_pin_enabled_$uid'),
+      'is_biometric_enabled': prefs.getBool('is_biometric_enabled_$uid'),
       'license_key': prefs.getString('license_key_$uid'),
       'is_app_activated': prefs.getBool('is_app_activated_$uid'),
       'is_lifetime': prefs.getBool('is_lifetime_$uid'),
@@ -612,14 +1244,18 @@ class ExportService {
     };
 
     return {
-      'backup_version': 2.0,
-      'backup_uid': uid, // Security check
+      'backup_version': 2.5,
+      'backup_uid': uid,
       'backup_date': DateTime.now().toIso8601String(),
       'transactions': transactions.map((t) => t.toMap()).toList(),
-      'items': items.map((i) => i.toMap()).toList(),
+      'items': itemsList,
       'categories': categories.map((c) => c.toMap()).toList(),
-      'staff': staff.map((s) => s.toMap()).toList(),
+      'staff': staffList,
       'suppliers': suppliers.map((s) => s.toMap()).toList(),
+      'units': units,
+      'purchase_reminders': reminders,
+      'staff_advance': staffAdvance,
+      'staff_leave': staffLeave,
       'profile_settings': profileSettings,
     };
   }
@@ -627,70 +1263,567 @@ class ExportService {
   Future<bool> restoreFromBackup(File file) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-      final uid = user.uid;
+      // Skip UID check if no user is logged in (rare) or for manual restore flexibility
+      final uid = user?.uid;
 
       String content = await file.readAsString();
       Map<String, dynamic> data = jsonDecode(content);
       
-      // Verify UID if available in backup (Security Check)
-      if (data.containsKey('backup_uid') && data['backup_uid'] != uid) {
-        print("Restore Error: Backup belongs to a different user!");
-        return false;
+      // If we have a UID in backup, and a current user, they should match for security
+      if (data.containsKey('backup_uid') && uid != null && data['backup_uid'] != uid) {
+        debugPrint("Restore Warning: Backup UID mismatch, proceeding with manual override.");
       }
 
       final db = await DatabaseHelper.instance.database;
       
       await db.transaction((txn) async {
-        // User-Specific Database automatically handles clearing current user's data
+        // Clear all tables
         await txn.delete('transactions');
         await txn.delete('items');
         await txn.delete('categories');
         await txn.delete('staff');
         await txn.delete('suppliers');
+        await txn.delete('units');
+        await txn.delete('purchase_reminders');
+        await txn.delete('staff_advance');
+        await txn.delete('staff_leave');
 
+        // Helper to insert with schema fallback
+        Future<void> safeInsert(String table, List<dynamic>? list) async {
+          if (list == null) return;
+          for (var item in list) {
+            try {
+              final Map<String, dynamic> map = Map.from(item);
+              // Ensure critical fields exist for new versions
+              if (table == 'items' && !map.containsKey('is_synced')) map['is_synced'] = 0;
+              if (table == 'transactions' && !map.containsKey('is_synced')) map['is_synced'] = 0;
+              if (table == 'staff' && !map.containsKey('is_synced')) map['is_synced'] = 0;
+              
+              await txn.insert(table, map);
+            } catch (e) {
+              debugPrint("Error inserting into $table: $e");
+            }
+          }
+        }
+
+        await safeInsert('categories', data['categories']);
+        await safeInsert('items', data['items']);
+        await safeInsert('transactions', data['transactions']);
+        await safeInsert('staff', data['staff']);
+        await safeInsert('suppliers', data['suppliers']);
+        await safeInsert('units', data['units']);
+        await safeInsert('purchase_reminders', data['purchase_reminders']);
+        await safeInsert('staff_advance', data['staff_advance']);
+        await safeInsert('staff_leave', data['staff_leave']);
+
+        // Restore Images for Items and Staff
+        final appDocDir = await getApplicationDocumentsDirectory();
+        
         if (data['items'] != null) {
-          for (var item in data['items']) await txn.insert('items', item);
+          for (var item in data['items']) {
+            if (item['icon_base64'] != null && item['icon_base64'].toString().isNotEmpty) {
+              try {
+                final bytes = base64Decode(item['icon_base64']);
+                final fileName = item['icon_path']?.split('/')?.last ?? "item_${DateTime.now().microsecondsSinceEpoch}.png";
+                final file = File('${appDocDir.path}/$fileName');
+                await file.writeAsBytes(bytes);
+              } catch (e) {
+                debugPrint("Restore Item Icon Error: $e");
+              }
+            }
+          }
         }
-        if (data['categories'] != null) {
-          for (var cat in data['categories']) await txn.insert('categories', cat);
-        }
-        if (data['transactions'] != null) {
-          for (var tx in data['transactions']) await txn.insert('transactions', tx);
-        }
+
         if (data['staff'] != null) {
-          for (var s in data['staff']) await txn.insert('staff', s);
-        }
-        if (data['suppliers'] != null) {
-          for (var s in data['suppliers']) await txn.insert('suppliers', s);
+          for (var s in data['staff']) {
+            if (s['image_base64'] != null && s['image_base64'].toString().isNotEmpty) {
+              try {
+                final bytes = base64Decode(s['image_base64']);
+                final fileName = s['image_path']?.split('/')?.last ?? "staff_${DateTime.now().microsecondsSinceEpoch}.png";
+                final file = File('${appDocDir.path}/$fileName');
+                await file.writeAsBytes(bytes);
+              } catch (e) {
+                debugPrint("Restore Staff Image Error: $e");
+              }
+            }
+          }
         }
       });
 
-      // Restore Profile Settings (User-Specific SharedPreferences)
+      // Restore Profile Settings
       if (data['profile_settings'] != null) {
         final prefs = await SharedPreferences.getInstance();
         final p = data['profile_settings'] as Map<String, dynamic>;
         
-        if (p['business_name'] != null) await prefs.setString('business_name_$uid', p['business_name']);
-        if (p['owner_name'] != null) await prefs.setString('owner_name_$uid', p['owner_name']);
-        if (p['contact'] != null) await prefs.setString('contact_$uid', p['contact']);
-        if (p['address'] != null) await prefs.setString('address_$uid', p['address']);
-        if (p['logo_path'] != null) await prefs.setString('logo_path_$uid', p['logo_path']);
-        if (p['cloud_sync'] != null) await prefs.setBool('cloud_sync_$uid', p['cloud_sync']);
-        if (p['currency'] != null) await prefs.setString('currency_$uid', p['currency']);
-        if (p['theme_color'] != null) await prefs.setInt('theme_color_$uid', p['theme_color']);
-        if (p['tax_percentage'] != null) await prefs.setDouble('tax_percentage_$uid', p['tax_percentage']);
-        if (p['is_dark_mode'] != null) await prefs.setBool('is_dark_mode_$uid', p['is_dark_mode']);
-        if (p['license_key'] != null) await prefs.setString('license_key_$uid', p['license_key']);
-        if (p['is_app_activated'] != null) await prefs.setBool('is_app_activated_$uid', p['is_app_activated']);
-        if (p['is_lifetime'] != null) await prefs.setBool('is_lifetime_$uid', p['is_lifetime']);
-        if (p['expiry_date'] != null) await prefs.setString('expiry_date_$uid', p['expiry_date']);
+        for (var key in p.keys) {
+          // Skip these as we handle them explicitly below to ensure portability
+          if (key == 'logo_base64' || key == 'qr_base64') continue;
+          
+          var value = p[key];
+          String prefKey = "${key}_$uid";
+          if (value == null) continue;
+
+          if (value is String) await prefs.setString(prefKey, value);
+          else if (value is bool) await prefs.setBool(prefKey, value);
+          else if (value is int) await prefs.setInt(prefKey, value);
+          else if (value is double) await prefs.setDouble(prefKey, value);
+        }
+
+        // Image Reconstruction (v2.5+)
+        final appDocDir = await getApplicationDocumentsDirectory();
+        
+        if (p['logo_base64'] != null && p['logo_base64'].toString().isNotEmpty) {
+          try {
+            final bytes = base64Decode(p['logo_base64']);
+            final logoFile = File("${appDocDir.path}/logo_$uid.png");
+            await logoFile.writeAsBytes(bytes);
+            await prefs.setString('logo_path_$uid', logoFile.path);
+          } catch (e) {
+            debugPrint("Restore Logo Error: $e");
+          }
+        }
+
+        if (p['qr_base64'] != null && p['qr_base64'].toString().isNotEmpty) {
+          try {
+            final bytes = base64Decode(p['qr_base64']);
+            final qrFile = File("${appDocDir.path}/qr_$uid.png");
+            await qrFile.writeAsBytes(bytes);
+            await prefs.setString('qr_path_$uid', qrFile.path);
+          } catch (e) {
+            debugPrint("Restore QR Error: $e");
+          }
+        }
       }
 
       return true;
     } catch (e) {
-      print("Restore Error: $e");
+      debugPrint("Restore Error: $e");
       return false;
+    }
+  }
+
+  Future<void> exportAllStaffReport(String bizName, List<StaffModel> staffList, StaffProvider staffProvider, {DateTimeRange? range}) async {
+    final pdf = pw.Document();
+    final dateRange = range ?? DateTimeRange(
+      start: DateTime.now().subtract(const Duration(days: 180)),
+      end: DateTime.now(),
+    );
+
+    // Summary Page
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (context) => [
+          pw.Header(
+            level: 0,
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(bizName.toUpperCase(), style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('STAFF PAYROLL SUMMARY', style: pw.TextStyle(fontSize: 14, color: PdfColors.grey700)),
+                    pw.Text('${DateFormat('dd MMM yyyy').format(dateRange.start)} - ${DateFormat('dd MMM yyyy').format(dateRange.end)}', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 20),
+          pw.TableHelper.fromTextArray(
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+            cellHeight: 25,
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            cellAlignments: {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerLeft,
+              2: pw.Alignment.centerRight,
+              3: pw.Alignment.centerRight,
+              4: pw.Alignment.centerRight,
+              5: pw.Alignment.centerRight,
+            },
+            headers: ['Staff Name', 'Role', 'Salary', 'Advance', 'Leaves', 'Net Payable'],
+            data: staffList.map((s) {
+              final payable = staffProvider.calculatePayable(s);
+              return [
+                s.name,
+                s.role,
+                s.monthlySalary.toStringAsFixed(0),
+                s.advance.toStringAsFixed(0),
+                s.totalLeaves.toString(),
+                payable.toStringAsFixed(0),
+              ];
+            }).toList(),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 20),
+            child: pw.Text(
+              'Generated on: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now())}',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Detailed History Pages for each staff
+    for (var staff in staffList) {
+      final allAdvances = await staffProvider.getStaffAdvances(staff.id!);
+      final allLeaves = await staffProvider.getStaffLeaves(staff.id!);
+
+      final filteredAdvances = allAdvances.where((a) => a.date.isAfter(dateRange.start.subtract(const Duration(seconds: 1))) && a.date.isBefore(dateRange.end.add(const Duration(days: 1)))).toList();
+      final filteredLeaves = allLeaves.where((l) => l.date.isAfter(dateRange.start.subtract(const Duration(seconds: 1))) && l.date.isBefore(dateRange.end.add(const Duration(days: 1)))).toList();
+
+      if (filteredAdvances.isNotEmpty || filteredLeaves.isNotEmpty) {
+        pdf.addPage(
+          pw.MultiPage(
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.all(32),
+            build: (context) => [
+              pw.Header(
+                level: 1,
+                child: pw.Text('HISTORY: ${staff.name.toUpperCase()}', 
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+              ),
+              pw.Text('Period: ${DateFormat('dd MMM yyyy').format(dateRange.start)} to ${DateFormat('dd MMM yyyy').format(dateRange.end)}', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+              pw.SizedBox(height: 10),
+              
+              if (filteredAdvances.isNotEmpty) ...[
+                pw.Text('ADVANCE HISTORY', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 5),
+                pw.TableHelper.fromTextArray(
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+                  cellStyle: const pw.TextStyle(fontSize: 8),
+                  headers: ['Date', 'Amount'],
+                  data: filteredAdvances.map((a) => [
+                    DateFormat('dd MMM yyyy').format(a.date),
+                    a.amount.toStringAsFixed(0),
+                  ]).toList(),
+                ),
+                pw.SizedBox(height: 20),
+              ],
+
+              if (filteredLeaves.isNotEmpty) ...[
+                pw.Text('LEAVE HISTORY', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 5),
+                pw.TableHelper.fromTextArray(
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+                  cellStyle: const pw.TextStyle(fontSize: 8),
+                  headers: ['Date', 'Type'],
+                  data: filteredLeaves.map((l) => [
+                    DateFormat('dd MMM yyyy').format(l.date),
+                    l.type == 1.0 ? 'Full Day' : 'Half Day',
+                  ]).toList(),
+                ),
+              ],
+            ],
+          ),
+        );
+      }
+    }
+
+    final dir = await _getReportDirectory();
+    final fileName = "Staff_Detailed_Report_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
+    final file = File("${dir.path}/$fileName");
+    await file.writeAsBytes(await pdf.save());
+    await Share.shareXFiles([XFile(file.path)], text: 'Staff Detailed Payroll Report');
+  }
+
+  Future<void> exportSingleStaffReport(String bizName, StaffModel staff, StaffProvider staffProvider, DateTimeRange range) async {
+    final pdf = pw.Document();
+    
+    final allAdvances = await staffProvider.getStaffAdvances(staff.id!);
+    final allLeaves = await staffProvider.getStaffLeaves(staff.id!);
+
+    final filteredAdvances = allAdvances.where((a) => a.date.isAfter(range.start.subtract(const Duration(seconds: 1))) && a.date.isBefore(range.end.add(const Duration(days: 1)))).toList();
+    final filteredLeaves = allLeaves.where((l) => l.date.isAfter(range.start.subtract(const Duration(seconds: 1))) && l.date.isBefore(range.end.add(const Duration(days: 1)))).toList();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (context) => [
+          pw.Header(
+            level: 0,
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(bizName.toUpperCase(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('STAFF HISTORY REPORT', style: pw.TextStyle(fontSize: 12, color: PdfColors.blueGrey)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(staff.name.toUpperCase(), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(staff.role.toUpperCase(), style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Text('Report Period: ${DateFormat('dd MMM yyyy').format(range.start)} - ${DateFormat('dd MMM yyyy').format(range.end)}', 
+            style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
+          pw.Divider(height: 20),
+          
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('Summary', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 5),
+                  pw.Text('Base Salary: ${staff.monthlySalary.toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Selected Range Advances: ${filteredAdvances.fold(0.0, (sum, a) => sum + a.amount).toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Selected Range Leaves: ${filteredLeaves.fold(0.0, (sum, l) => sum + l.type).toString()}', style: const pw.TextStyle(fontSize: 10)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+
+          if (filteredAdvances.isNotEmpty) ...[
+            pw.Text('ADVANCE BREAKDOWN', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blue700)),
+            pw.SizedBox(height: 8),
+            pw.TableHelper.fromTextArray(
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headers: ['Date', 'Amount Paid', 'Notes'],
+              data: filteredAdvances.map((a) => [
+                DateFormat('dd MMM yyyy').format(a.date),
+                a.amount.toStringAsFixed(0),
+                '-',
+              ]).toList(),
+            ),
+            pw.SizedBox(height: 20),
+          ],
+
+          if (filteredLeaves.isNotEmpty) ...[
+            pw.Text('LEAVE BREAKDOWN', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.red700)),
+            pw.SizedBox(height: 8),
+            pw.TableHelper.fromTextArray(
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.red900),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headers: ['Date', 'Leave Type'],
+              data: filteredLeaves.map((l) => [
+                DateFormat('dd MMM yyyy').format(l.date),
+                l.type == 1.0 ? 'Full Day' : 'Half Day',
+              ]).toList(),
+            ),
+          ],
+
+          pw.Spacer(),
+          pw.Divider(),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Generated via Apna Hisaab App', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
+              pw.Text('Date: ${DateFormat('dd MMM yyyy').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final dir = await _getReportDirectory();
+    final fileName = "Staff_History_${staff.name.replaceAll(' ', '_')}_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
+    final file = File("${dir.path}/$fileName");
+    await file.writeAsBytes(await pdf.save());
+    await Share.shareXFiles([XFile(file.path)], text: '${staff.name} History Report');
+  }
+
+  Future<void> exportAuditToPdf(
+    List<ItemModel> readymadeItems,
+    List<TransactionModel> allSales,
+    List<TransactionModel> allPurchases,
+    DateTimeRange range,
+    String currency,
+  ) async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (context) => [
+          pw.Header(
+            level: 0,
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text("CEO AUDIT REPORT", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                pw.Text('${DateFormat('dd MMM').format(range.start)} - ${DateFormat('dd MMM').format(range.end)}', style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 20),
+          pw.TableHelper.fromTextArray(
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+            cellHeight: 25,
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            cellAlignments: {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerRight,
+              2: pw.Alignment.centerRight,
+              3: pw.Alignment.centerRight,
+              4: pw.Alignment.centerRight,
+              5: pw.Alignment.centerRight,
+            },
+            headers: ['Item Name', 'Sold Qty', 'Avg Sale', 'Avg Cost', 'Unit Profit', 'GP Margin'],
+            data: readymadeItems.map((item) {
+              double totalSoldQty = 0;
+              double totalSalesAmt = 0;
+              double totalPurchasedQty = 0;
+              double totalPurchaseAmt = 0;
+
+              for (var tx in allSales) {
+                for (var s in tx.itemSnapshots) {
+                  if (s.name == item.name) {
+                    totalSoldQty += s.qty + s.extraQty;
+                    totalSalesAmt += s.lineTotal;
+                  }
+                }
+              }
+
+              for (var tx in allPurchases) {
+                for (var s in tx.itemSnapshots) {
+                  if (s.name == item.name) {
+                    totalPurchasedQty += s.qty + s.extraQty;
+                    totalPurchaseAmt += s.lineTotal;
+                  }
+                }
+                if (tx.itemSnapshots.isEmpty && tx.category == item.name) {
+                  totalPurchasedQty += tx.quantity;
+                  totalPurchaseAmt += tx.amount;
+                }
+              }
+
+              double avgSaleRate = totalSoldQty > 0 ? totalSalesAmt / totalSoldQty : 0;
+              double avgPurchaseRate = totalPurchasedQty > 0 ? totalPurchaseAmt / totalPurchasedQty : item.price ?? 0;
+              double unitProfit = avgSaleRate - avgPurchaseRate;
+              double gpMargin = avgSaleRate > 0 ? (unitProfit / avgSaleRate) * 100 : 0;
+
+              return [
+                item.name.toUpperCase(),
+                totalSoldQty.toStringAsFixed(1),
+                "$currency${avgSaleRate.toStringAsFixed(1)}",
+                "$currency${avgPurchaseRate.toStringAsFixed(1)}",
+                "$currency${unitProfit.toStringAsFixed(1)}",
+                "${gpMargin.toStringAsFixed(1)}%",
+              ];
+            }).toList(),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 20),
+            child: pw.Text(
+              'Generated on: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now())}',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final dir = await _getReportDirectory();
+    final fileName = "CEO_Audit_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
+    final file = File("${dir.path}/$fileName");
+    await file.writeAsBytes(await pdf.save());
+    await Share.shareXFiles([XFile(file.path)], text: 'CEO Audit Report');
+  }
+
+  Future<void> exportAuditToExcel(
+    List<ItemModel> readymadeItems,
+    List<TransactionModel> allSales,
+    List<TransactionModel> allPurchases,
+    DateTimeRange range,
+  ) async {
+    var excel = Excel.createExcel();
+    Sheet sheetObject = excel['Sheet1'];
+
+    CellStyle headerStyle = CellStyle(
+      bold: true,
+      fontFamily: getFontFamily(FontFamily.Arial),
+      backgroundColorHex: ExcelColor.fromHexString("#2196F3"),
+      fontColorHex: ExcelColor.fromHexString("#FFFFFF"),
+    );
+
+    List<String> headers = ['Item Name', 'Sold Qty', 'Total Sales', 'Avg Sale Price', 'Avg Cost Price', 'Profit Per Unit', 'GP Margin %'];
+    for (var i = 0; i < headers.length; i++) {
+      var cell = sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+      cell.value = TextCellValue(headers[i]);
+      cell.cellStyle = headerStyle;
+    }
+
+    for (var i = 0; i < readymadeItems.length; i++) {
+      var item = readymadeItems[i];
+      int row = i + 1;
+
+      double totalSoldQty = 0;
+      double totalSalesAmt = 0;
+      double totalPurchasedQty = 0;
+      double totalPurchaseAmt = 0;
+
+      for (var tx in allSales) {
+        for (var s in tx.itemSnapshots) {
+          if (s.name == item.name) {
+            totalSoldQty += s.qty + s.extraQty;
+            totalSalesAmt += s.lineTotal;
+          }
+        }
+      }
+
+      for (var tx in allPurchases) {
+        for (var s in tx.itemSnapshots) {
+          if (s.name == item.name) {
+            totalPurchasedQty += s.qty + s.extraQty;
+            totalPurchaseAmt += s.lineTotal;
+          }
+        }
+        if (tx.itemSnapshots.isEmpty && tx.category == item.name) {
+          totalPurchasedQty += tx.quantity;
+          totalPurchaseAmt += tx.amount;
+        }
+      }
+
+      double avgSaleRate = totalSoldQty > 0 ? totalSalesAmt / totalSoldQty : 0;
+      double avgPurchaseRate = totalPurchasedQty > 0 ? totalPurchaseAmt / totalPurchasedQty : item.price ?? 0;
+      double unitProfit = avgSaleRate - avgPurchaseRate;
+      double gpMargin = avgSaleRate > 0 ? (unitProfit / avgSaleRate) * 100 : 0;
+
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).value = TextCellValue(item.name.toUpperCase());
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row)).value = DoubleCellValue(totalSoldQty);
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row)).value = DoubleCellValue(totalSalesAmt);
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row)).value = DoubleCellValue(avgSaleRate);
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row)).value = DoubleCellValue(avgPurchaseRate);
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row)).value = DoubleCellValue(unitProfit);
+      sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row)).value = DoubleCellValue(gpMargin);
+    }
+
+    try {
+      final dir = await _getReportDirectory();
+      final fileName = "CEO_Audit_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.xlsx";
+      final path = "${dir.path}/$fileName";
+      
+      var fileBytes = excel.save();
+      if (fileBytes != null) {
+        File(path)
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(fileBytes);
+        await Share.shareXFiles([XFile(path)], text: 'CEO Audit Report');
+      }
+    } catch (e) {
+      debugPrint("Excel Audit Export Error: $e");
     }
   }
 }

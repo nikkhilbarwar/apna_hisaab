@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
@@ -21,10 +22,60 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLogin = true;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _isTermsAccepted = false;
+
+  void _showTermsDialog() {
+    final themeColor = Provider.of<ProfileProvider>(context, listen: false).themeColor;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("Terms & Conditions", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildTermItem("1. Data Retention:", "To maintain app performance, all Sales and Purchase records older than 365 days will be automatically deleted from the cloud."),
+              _buildTermItem("2. Privacy:", "Your business data and records are stored securely. We do not share your data with third parties."),
+              _buildTermItem("3. Image Storage:", "Staff and Business images are stored as encoded text within your database. High-resolution images are compressed to optimize space."),
+              _buildTermItem("4. User Responsibility:", "You are responsible for maintaining the confidentiality of your login credentials and ensuring the accuracy of your records."),
+              _buildTermItem("5. Modifications:", "Apna Hisaab reserves the right to update these terms to improve service quality."),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("CLOSE", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTermItem(String title, String desc) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          const SizedBox(height: 4),
+          Text(desc, style: const TextStyle(fontSize: 13, color: Colors.black87)),
+        ],
+      ),
+    );
+  }
 
   Future<void> _handleEmailAuth() async {
     if (!_formKey.currentState!.validate()) return;
-
+    if (!_isTermsAccepted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please accept the Terms & Conditions to proceed")),
+      );
+      return;
+    }
+    
     setState(() => _isLoading = true);
     try {
       if (_isLogin) {
@@ -39,8 +90,24 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String message = "An error occurred";
+        if (e is FirebaseAuthException) {
+          switch (e.code) {
+            case 'invalid-credential':
+              message = "Invalid email or password. If you deleted your account, please Register again.";
+              break;
+            case 'user-disabled':
+              message = "This account has been disabled.";
+              break;
+            case 'too-many-requests':
+              message = "Too many attempts. Please try again later.";
+              break;
+            default:
+              message = e.message ?? "Authentication failed";
+          }
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${e.toString().split(']').last}")),
+          SnackBar(content: Text(message)),
         );
       }
     } finally {
@@ -49,6 +116,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
+    if (!_isTermsAccepted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please accept the Terms & Conditions to proceed")),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       final user = await _authService.signInWithGoogle();
@@ -146,7 +220,7 @@ class _LoginScreenState extends State<LoginScreen> {
         height: double.infinity,
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [themeColor.withOpacity(0.8), themeColor, Colors.black],
+            colors: [themeColor.withValues(alpha: 0.8), themeColor, Colors.black],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -183,7 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Card(
                     elevation: 10,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                    color: Colors.white.withOpacity(0.95),
+                    color: Colors.white.withValues(alpha: 0.95),
                     child: Padding(
                       padding: const EdgeInsets.all(24.0),
                       child: Form(
@@ -226,15 +300,49 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Text("Forgot Password?", style: TextStyle(color: themeColor, fontSize: 12, fontWeight: FontWeight.bold)),
                                 ),
                               ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 16.0),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: Checkbox(
+                                      value: _isTermsAccepted,
+                                      activeColor: themeColor,
+                                      onChanged: (val) => setState(() => _isTermsAccepted = val ?? false),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: _showTermsDialog,
+                                      child: Text.rich(
+                                        TextSpan(
+                                          text: "I agree to the ",
+                                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                          children: [
+                                            TextSpan(
+                                              text: "Terms & Conditions",
+                                              style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             _isLoading 
                               ? CircularProgressIndicator(color: themeColor)
                               : Column(
                                   children: [
                                     ElevatedButton(
-                                      onPressed: _handleEmailAuth,
+                                      onPressed: _isTermsAccepted ? _handleEmailAuth : null,
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: themeColor,
+                                        backgroundColor: _isTermsAccepted ? themeColor : Colors.grey,
                                         foregroundColor: Colors.white,
                                         minimumSize: const Size(double.infinity, 50), // Slightly reduced height
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -254,17 +362,20 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                     const SizedBox(height: 12),
                                     OutlinedButton.icon(
-                                      onPressed: _handleGoogleSignIn,
-                                      icon: Image.network(
-                                        'https://www.gstatic.com/marketing-cms/assets/images/d5/dc/cfe9ce8b4425b410b49b7f2dd3f3/g.webp=s96-fcrop64=1,00000000ffffffff-rw',
-                                        height: 20,
+                                      onPressed: _isTermsAccepted ? _handleGoogleSignIn : null,
+                                      icon: Opacity(
+                                        opacity: _isTermsAccepted ? 1.0 : 0.5,
+                                        child: Image.network(
+                                          'https://www.gstatic.com/marketing-cms/assets/images/d5/dc/cfe9ce8b4425b410b49b7f2dd3f3/g.webp=s96-fcrop64=1,00000000ffffffff-rw',
+                                          height: 20,
+                                        ),
                                       ),
-                                      label: const Text("Sign in with Google", style: TextStyle(fontSize: 13)),
+                                      label: Text("Sign in with Google", style: TextStyle(fontSize: 13, color: _isTermsAccepted ? Colors.black87 : Colors.grey)),
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: Colors.black87,
                                         minimumSize: const Size(double.infinity, 50),
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                        side: BorderSide(color: Colors.grey.shade300),
+                                        side: BorderSide(color: _isTermsAccepted ? Colors.grey.shade300 : Colors.grey.shade200),
                                       ),
                                     ),
                                   ],

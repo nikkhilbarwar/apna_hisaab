@@ -115,7 +115,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(2))),
+              Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
               Row(
                 children: [
                   Icon(Icons.cloud_sync_rounded, color: profile.themeColor, size: 28),
@@ -124,7 +124,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                 ],
               ),
               const SizedBox(height: 24),
-              
+
               // Cloud Sync Toggle
               Container(
                 decoration: BoxDecoration(
@@ -146,9 +146,9 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: profile.themeColor.withOpacity(0.05),
+                    color: profile.themeColor.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: profile.themeColor.withOpacity(0.1)),
+                    border: Border.all(color: profile.themeColor.withValues(alpha: 0.1)),
                   ),
                   child: Column(
                     children: [
@@ -166,7 +166,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                           value: syncProvider.syncProgress, 
                           minHeight: 10,
                           color: profile.themeColor, 
-                          backgroundColor: profile.themeColor.withOpacity(0.1),
+                          backgroundColor: profile.themeColor.withValues(alpha: 0.1),
                         ),
                       ),
                     ],
@@ -297,7 +297,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
           IconButton(
             icon: Icon(
               globalSyncing ? Icons.cloud_sync_rounded : Icons.cloud_done_rounded, 
-              color: globalSyncing ? appBarContentColor.withOpacity(0.5) : Colors.greenAccent,
+              color: globalSyncing ? appBarContentColor.withValues(alpha: 0.5) : Colors.greenAccent,
               size: 26,
             ),
             onPressed: () => _showSyncStatus(context, txProvider, profile),
@@ -308,8 +308,8 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
               width: 32, height: 32, 
               child: CircularProgressIndicator(
                 strokeWidth: 2, 
-                color: appBarContentColor.withOpacity(0.8),
-                backgroundColor: appBarContentColor.withOpacity(0.1),
+                color: appBarContentColor.withValues(alpha: 0.8),
+                backgroundColor: appBarContentColor.withValues(alpha: 0.1),
               )
             ),
         ],
@@ -350,7 +350,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
       child: Scaffold(
         backgroundColor: profile.scaffoldColor,
         appBar: AppBar(
-          toolbarHeight: 62,
+          toolbarHeight: 45,
           elevation: 0,
           backgroundColor: themeColor,
           centerTitle: !isTablet,
@@ -389,7 +389,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
             child: Column(
               children: [
                 Container(height: 1, width: double.infinity, color: appBarContentColor.withValues(alpha: 0.1)),
-                Container(
+                Container(height: 55,
                   color: themeColor,
                   child: TabBar(
                     controller: _tabController,

@@ -44,7 +44,7 @@ class TransactionProvider with ChangeNotifier {
 
   Future<void> _initializeData() async {
     await fetchTransactions();
-    // Do not trigger masterRestoreFromCloud here anymore. 
+    // Do not trigger masterRestoreFromCloud here anymore.
     // AuthWrapper handles it globally now.
     await syncAllUnsynced();
   }
@@ -287,20 +287,24 @@ class TransactionProvider with ChangeNotifier {
   Future<TransactionModel?> addTransaction(TransactionModel tx, ItemProvider itemProvider) async {
     try {
       tx.status = _normalizeStatus(tx.status).isEmpty ? 'completed' : _normalizeStatus(tx.status);
+      tx.category = tx.category.trim();
       
       // Assign Token
       await _ensureToken(tx);
 
+      // Insert in DB
       int id = await DatabaseHelper.instance.insertTransaction(tx);
+      tx.id = id; 
+
+      // Update in memory immediately for "Realtime" feel
+      _allTransactions.insert(0, tx); 
+      notifyListeners(); // UI updates instantly
+
+      await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
       
-      // Nuclear Refetch: Query DB to get the object with auto-generated ID and Token
-      final dbTxs = await DatabaseHelper.instance.getAllTransactions();
-      final savedTx = dbTxs.firstWhere((t) => t.id == id);
-      
-      await _applyStockEffect(savedTx, itemProvider, isAddingEffect: true);
-      await fetchTransactions();
-      _syncSingleTransaction(savedTx);
-      return savedTx;
+      // Sync in background - doesn't block UI
+      _syncSingleTransaction(tx);
+      return tx;
     } catch (e) {
       debugPrint("Error adding transaction: $e");
       return null;
@@ -310,6 +314,7 @@ class TransactionProvider with ChangeNotifier {
   Future<TransactionModel?> updateTransaction(TransactionModel tx, ItemProvider itemProvider, {TransactionModel? oldTx}) async {
     try {
       tx.status = _normalizeStatus(tx.status).isEmpty ? 'completed' : _normalizeStatus(tx.status);
+      tx.category = tx.category.trim();
       tx.isSynced = 0;
 
       // Preserve or Assign Token
@@ -318,19 +323,23 @@ class TransactionProvider with ChangeNotifier {
       if (oldTx != null) await _applyStockEffect(oldTx, itemProvider, isAddingEffect: false);
       await DatabaseHelper.instance.updateTransaction(tx);
       
-      // Nuclear Refetch
-      final dbTxs = await DatabaseHelper.instance.getAllTransactions();
-      final savedTx = dbTxs.firstWhere((t) => t.id == tx.id);
-      
-      await _applyStockEffect(savedTx, itemProvider, isAddingEffect: true);
-
-      if (savedTx.status == 'completed' && savedTx.id != null) {
-        await NotificationService().cancelOrderReminders(savedTx.id!);
+      // Update in memory immediately for "Realtime" feel
+      final index = _allTransactions.indexWhere((t) => t.id == tx.id);
+      if (index != -1) {
+        _allTransactions[index] = tx;
+        notifyListeners(); // Immediate UI Update
       }
 
-      await fetchTransactions();
-      _syncSingleTransaction(savedTx);
-      return savedTx;
+      // Stock and side effects
+      await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
+
+      if (tx.status == 'completed' && tx.id != null) {
+        await NotificationService().cancelOrderReminders(tx.id!);
+      }
+
+      // Background Sync
+      _syncSingleTransaction(tx);
+      return tx;
     } catch (e) {
       debugPrint("Error updating transaction: $e");
       return null;
@@ -361,8 +370,12 @@ class TransactionProvider with ChangeNotifier {
 
       tx.description = jsonEncode(items) + metadata;
       tx.isSynced = 0;
-      await DatabaseHelper.instance.updateTransaction(tx);
+      
+      // Update memory first
+      _allTransactions[index] = tx;
       notifyListeners();
+
+      await DatabaseHelper.instance.updateTransaction(tx);
       _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error toggling item check: $e");
@@ -376,6 +389,7 @@ class TransactionProvider with ChangeNotifier {
 
       final originalTx = _allTransactions[index];
       final tx = TransactionModel.fromMap(originalTx.toMap());
+      // ... logic for qty ...
       bool isSale = tx.type.toLowerCase() == 'sale' || tx.type.toLowerCase() == 'income';
 
       String cleanJson = tx.description;
@@ -549,13 +563,20 @@ class TransactionProvider with ChangeNotifier {
 
   Future<void> softDeleteTransaction(int id, ItemProvider itemProvider) async {
     try {
-      final tx = _allTransactions.firstWhere((t) => t.id == id);
+      final index = _allTransactions.indexWhere((t) => t.id == id);
+      if (index == -1) return;
+
+      final tx = _allTransactions[index];
+      
+      // Update memory immediately
+      tx.isDeleted = 1;
+      tx.deletedAt = DateTime.now();
+      notifyListeners();
+
       await DatabaseHelper.instance.softDeleteTransaction(id);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: false);
       await NotificationService().cancelOrderReminders(id);
-      tx.isDeleted = 1;
-      tx.deletedAt = DateTime.now();
-      await fetchTransactions();
+      
       _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error soft deleting transaction: $e");
@@ -564,12 +585,19 @@ class TransactionProvider with ChangeNotifier {
 
   Future<void> restoreTransaction(int id, ItemProvider itemProvider) async {
     try {
-      final tx = _allTransactions.firstWhere((t) => t.id == id);
-      await DatabaseHelper.instance.restoreTransaction(id);
-      await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
+      final index = _allTransactions.indexWhere((t) => t.id == id);
+      if (index == -1) return;
+
+      final tx = _allTransactions[index];
+      
+      // Update memory immediately
       tx.isDeleted = 0;
       tx.deletedAt = null;
-      await fetchTransactions();
+      notifyListeners();
+
+      await DatabaseHelper.instance.restoreTransaction(id);
+      await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
+
       _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error restoring transaction: $e");
@@ -592,24 +620,40 @@ class TransactionProvider with ChangeNotifier {
     for (var itemMap in items) {
       try {
         final name = itemMap['name']!;
-        int? targetId;
         ItemModel? masterItem;
         try {
           masterItem = itemProvider.items.firstWhere((i) => i.name == name);
-          targetId = masterItem.id;
         } catch (_) {}
 
-        if (targetId != null && masterItem != null) {
-          final displayQty = double.tryParse(itemMap['qty'] ?? '0') ?? 0;
-          final extraQty = double.tryParse(itemMap['extra_qty'] ?? '0') ?? 0;
+        if (masterItem != null && masterItem.id != null) {
+          final displayQty = (double.tryParse(itemMap['qty']?.toString() ?? '0') ?? 0).toDouble();
+          final extraQty = (double.tryParse(itemMap['extra_qty']?.toString() ?? '0') ?? 0).toDouble();
           final totalDisplayQty = displayQty + extraQty;
 
-          double piecesToAdjust = totalDisplayQty * (masterItem.fullQty ?? 1.0);
+          double piecesToAdjust = totalDisplayQty;
+          
+          // Ready-made items are handled 1:1, but selling items need their full_qty multiplier
+          if (masterItem.itemType == 'selling') {
+            piecesToAdjust = totalDisplayQty * (masterItem.fullQty ?? 1.0);
+          }
           
           if (piecesToAdjust == 0) continue;
 
-          bool shouldIncrease = (tx.type == 'sale' || tx.type == 'income') ? !isAddingEffect : isAddingEffect;
-          await itemProvider.adjustStock(targetId, piecesToAdjust, shouldIncrease);
+          bool shouldIncrease;
+          if (tx.type == 'sale' || tx.type == 'income') {
+            // Sales decrease stock. If we are removing the effect (undoing sale), increase it.
+            shouldIncrease = !isAddingEffect;
+          } else if (tx.type == 'purchase') {
+            // Purchases increase stock. If we are removing the effect, decrease it.
+            shouldIncrease = isAddingEffect;
+          } else {
+            // Regular expenses/others don't automatically adjust item stock
+            // unless they are explicitly marked as 'purchase' type.
+            continue;
+          }
+          
+          // Centralized stock adjustment logic in ItemProvider
+          await itemProvider.adjustStock(masterItem.id!, piecesToAdjust, shouldIncrease);
         }
       } catch (e) {
         debugPrint("Stock adjustment failed: $e");
@@ -740,11 +784,5 @@ class TransactionProvider with ChangeNotifier {
 
   double get profitToday => getProfitForRange(null);
 
-  List<TransactionModel> _activeDayTransactions(DateTime day) {
-    return _allTransactions.where((tx) =>
-      tx.isDeleted == 0 &&
-      _normalizeStatus(tx.status) == 'completed' &&
-      tx.date.year == day.year && tx.date.month == day.month && tx.date.day == day.day
-    ).toList();
-  }
+
 }

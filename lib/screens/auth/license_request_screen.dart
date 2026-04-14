@@ -97,7 +97,7 @@ class _LicenseRequestScreenState extends State<LicenseRequestScreen> {
         height: double.infinity,
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [themeColor.withOpacity(0.1), profile.scaffoldColor],
+            colors: [themeColor.withValues(alpha: 0.1), profile.scaffoldColor],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -133,7 +133,7 @@ class _LicenseRequestScreenState extends State<LicenseRequestScreen> {
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
-                    side: BorderSide(color: themeColor.withOpacity(0.2)),
+                    side: BorderSide(color: themeColor.withValues(alpha: 0.2)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(24.0),
@@ -180,7 +180,7 @@ class _LicenseRequestScreenState extends State<LicenseRequestScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: themeColor.withOpacity(0.05),
+                    color: themeColor.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(

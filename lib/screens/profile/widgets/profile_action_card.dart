@@ -35,7 +35,7 @@ class ProfileActionCard extends StatelessWidget {
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: profile.themeColor.withOpacity(0.1),
+            color: profile.themeColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: profile.themeColor, size: 24),

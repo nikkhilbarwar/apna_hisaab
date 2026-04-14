@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 import '../screens/items/icon_crop_screen.dart';
 
 class ImageHelper {
@@ -11,7 +13,6 @@ class ImageHelper {
   }) async {
     final ImagePicker picker = ImagePicker();
     
-    // 1. Pick Image
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
       maxWidth: 1024,
@@ -20,7 +21,6 @@ class ImageHelper {
 
     if (image == null) return null;
 
-    // 2. Open Custom Crop Screen (Pure Flutter, handles Safe Area)
     if (!context.mounted) return image.path;
     
     final String? croppedPath = await Navigator.push(
@@ -34,6 +34,17 @@ class ImageHelper {
       ),
     );
 
-    return croppedPath; // Sirf cropped path return karega, cancel hone par null aayega
+    if (croppedPath == null) return null;
+
+    // Move from Temp to Permanent Directory
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final fileName = 'staff_${DateTime.now().millisecondsSinceEpoch}${path.extension(croppedPath)}';
+      final savedImage = await File(croppedPath).copy('${appDir.path}/$fileName');
+      return savedImage.path;
+    } catch (e) {
+      debugPrint("Error saving permanent image: $e");
+      return croppedPath;
+    }
   }
 }

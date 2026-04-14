@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:path_provider/path_provider.dart';
 import '../services/license_service.dart';
 import '../services/local_auth_service.dart';
+import '../services/firebase_service.dart';
 
 class ProfileProvider with ChangeNotifier {
+  final FirebaseService _firebaseService = FirebaseService();
   String _businessName = 'My Business';
   String _ownerName = '';
   String _contact = '';
@@ -17,6 +22,9 @@ class ProfileProvider with ChangeNotifier {
   bool _isCloudSyncEnabled = true;
   String _currencySymbol = '₹';
   int _themeColorValue = 0xFF5E35B1;
+  List<int> _customThemeColors = [0xFF5E35B1]; 
+
+  List<int> get customThemeColors => _customThemeColors;
   double _taxPercentage = 0.0;
   bool _isDarkMode = false;
   int _totalTables = 20;
@@ -37,6 +45,7 @@ class ProfileProvider with ChangeNotifier {
   bool _isReminderEnabled = true;
   bool _saleBlocked = false;
   bool _expenseBlocked = false;
+  bool _isLoading = true;
   
   StreamSubscription? _licenseSub;
   StreamSubscription? _authSub;
@@ -61,6 +70,7 @@ class ProfileProvider with ChangeNotifier {
 
   Color get themeColor => Color(_themeColorValue);
   int get themeColorValue => _themeColorValue;
+  int get customThemeColor => _customThemeColors.isNotEmpty ? _customThemeColors.first : 0xFF5E35B1;
   double get taxPercentage => _taxPercentage;
   bool get isActivated => _isActivated;
   DateTime? get expiryDate => _expiryDate;
@@ -70,6 +80,7 @@ class ProfileProvider with ChangeNotifier {
   bool get isReminderEnabled => _isReminderEnabled;
   bool get saleBlocked => _saleBlocked;
   bool get expenseBlocked => _expenseBlocked;
+  bool get isLoading => _isLoading;
 
   Color get scaffoldColor => _isDarkMode ? const Color(0xFF0F111A) : const Color(0xFFF8F9FE);
   Color get cardColor => _isDarkMode ? const Color(0xFF1A1D2D) : Colors.white;
@@ -78,9 +89,9 @@ class ProfileProvider with ChangeNotifier {
 
   List<BoxShadow> get themeShadow {
     if (_isDarkMode) {
-      return [BoxShadow(color: themeColor.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 4))];
+      return [BoxShadow(color: themeColor.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 4))];
     }
-    return [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2))];
+    return [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2))];
   }
 
   int get remainingDays {
@@ -126,48 +137,110 @@ class ProfileProvider with ChangeNotifier {
 
   Future<void> loadProfile() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
     final uid = user.uid;
 
     try {
+      _isLoading = true;
       final prefs = await SharedPreferences.getInstance();
-      _businessName = prefs.getString('business_name_$uid') ?? 'My Business';
-      _ownerName = prefs.getString('owner_name_$uid') ?? '';
-      _contact = prefs.getString('contact_$uid') ?? '';
-      _address = prefs.getString('address_$uid') ?? '';
-      _logoPath = prefs.getString('logo_path_$uid') ?? '';
-      _qrPath = prefs.getString('qr_path_$uid') ?? '';
-      _qrLabel = prefs.getString('qr_label_$uid') ?? 'Scan for Payment/Review';
-      _isCloudSyncEnabled = prefs.getBool('cloud_sync_$uid') ?? true;
-      _currencySymbol = prefs.getString('currency_$uid') ?? '₹';
-      _themeColorValue = prefs.getInt('theme_color_$uid') ?? 0xFF5E35B1;
-      _taxPercentage = prefs.getDouble('tax_percentage_$uid') ?? 0.0;
-      _isDarkMode = prefs.getBool('is_dark_mode_$uid') ?? false;
-      _totalTables = prefs.getInt('total_tables_$uid') ?? 20;
-      _showAmount = prefs.getBool('show_amount_$uid') ?? true;
-      _isAutoPrintEnabled = prefs.getBool('auto_print_$uid') ?? false;
-      _isKotEnabled = prefs.getBool('kot_enabled_$uid') ?? true;
-
-      _customPin = prefs.getString('custom_pin_$uid') ?? '';
-      _isPinEnabled = prefs.getBool('is_pin_enabled_$uid') ?? false;
-      _isBiometricEnabled = prefs.getBool('is_biometric_enabled_$uid') ?? false;
-
-      _licenseKey = prefs.getString('license_key_$uid') ?? '';
-      _isActivated = prefs.getBool('is_app_activated_$uid') ?? false;
-      _isLifetime = prefs.getBool('is_lifetime_$uid') ?? false;
       
-      String? expiryStr = prefs.getString('expiry_date_$uid');
-      if (expiryStr != null && expiryStr.isNotEmpty) {
-        _expiryDate = DateTime.tryParse(expiryStr);
+      // Check if we have local data, if not try fetching from cloud
+      final hasLocalData = prefs.containsKey('business_name_$uid');
+      
+      if (!hasLocalData && _isCloudSyncEnabled) {
+        await fetchProfileFromCloud();
+      } else {
+        _businessName = prefs.getString('business_name_$uid') ?? 'My Business';
+        _ownerName = prefs.getString('owner_name_$uid') ?? '';
+        _contact = prefs.getString('contact_$uid') ?? '';
+        _address = prefs.getString('address_$uid') ?? '';
+        _logoPath = prefs.getString('logo_path_$uid') ?? '';
+        _qrPath = prefs.getString('qr_path_$uid') ?? '';
+        _qrLabel = prefs.getString('qr_label_$uid') ?? 'Scan for Payment/Review';
+        _isCloudSyncEnabled = prefs.getBool('cloud_sync_$uid') ?? true;
+        _currencySymbol = prefs.getString('currency_$uid') ?? '₹';
+        _themeColorValue = prefs.getInt('theme_color_$uid') ?? 0xFF5E35B1;
+        final colorStrings = prefs.getStringList('custom_theme_colors_$uid');
+        if (colorStrings != null) {
+          _customThemeColors = colorStrings.map((s) => int.parse(s)).toList();
+        } else {
+          _customThemeColors = [0xFF5E35B1];
+        }
+        _taxPercentage = prefs.getDouble('tax_percentage_$uid') ?? 0.0;
+        _isDarkMode = prefs.getBool('is_dark_mode_$uid') ?? false;
+        _totalTables = prefs.getInt('total_tables_$uid') ?? 20;
+        _showAmount = prefs.getBool('show_amount_$uid') ?? true;
+        _isAutoPrintEnabled = prefs.getBool('auto_print_$uid') ?? false;
+        _isKotEnabled = prefs.getBool('kot_enabled_$uid') ?? true;
+
+        _customPin = prefs.getString('custom_pin_$uid') ?? '';
+        _isPinEnabled = prefs.getBool('is_pin_enabled_$uid') ?? false;
+        _isBiometricEnabled = prefs.getBool('is_biometric_enabled_$uid') ?? false;
+
+        _licenseKey = prefs.getString('license_key_$uid') ?? '';
+        _isActivated = prefs.getBool('is_app_activated_$uid') ?? false;
+        _isLifetime = prefs.getBool('is_lifetime_$uid') ?? false;
+        
+        String? expiryStr = prefs.getString('expiry_date_$uid');
+        if (expiryStr != null && expiryStr.isNotEmpty) {
+          _expiryDate = DateTime.tryParse(expiryStr);
+        }
       }
 
+      _isLoading = false;
       notifyListeners();
       
       if (_licenseKey.isNotEmpty) {
         listenToLicenseRealTime();
       }
     } catch (e) {
+      _isLoading = false;
       debugPrint("Profile Load Error: $e");
+      notifyListeners();
+    }
+  }
+
+  Future<bool> fetchProfileFromCloud() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+
+    try {
+      final cloudData = await _firebaseService.fetchProfile();
+      if (cloudData != null) {
+        // First restore logo and QR if they are base64
+        if (cloudData['logo_path'] != null && cloudData['logo_path'].startsWith('base64:')) {
+          cloudData['logo_path'] = await _saveBase64Image(cloudData['logo_path'], 'business_logo');
+        }
+        if (cloudData['qr_path'] != null && cloudData['qr_path'].startsWith('base64:')) {
+          cloudData['qr_path'] = await _saveBase64Image(cloudData['qr_path'], 'payment_qr');
+        }
+
+        await loadFromMap(cloudData);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint("Error fetching profile from cloud: $e");
+      return false;
+    }
+  }
+
+  Future<String?> _saveBase64Image(String base64Data, String prefix) async {
+    try {
+      final String pureBase64 = base64Data.replaceFirst('base64:', '');
+      final bytes = base64Decode(pureBase64);
+      final directory = await getApplicationDocumentsDirectory();
+      final String filePath = '${directory.path}/${prefix}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+      return filePath;
+    } catch (e) {
+      debugPrint("Error saving base64 image: $e");
+      return null;
     }
   }
 
@@ -295,7 +368,7 @@ class ProfileProvider with ChangeNotifier {
       notifyListeners();
     } else {
       final authenticated = await authenticate(context);
-      if (authenticated) {
+      if (authenticated && context.mounted) {
         _showAmount = true;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(_getUKey('show_amount'), _showAmount);
@@ -307,7 +380,36 @@ class ProfileProvider with ChangeNotifier {
   Future<void> updateThemeColor(Color color) async {
     final prefs = await SharedPreferences.getInstance();
     _themeColorValue = color.toARGB32();
-    await prefs.setInt(_getUKey('theme_color'), color.toARGB32());
+    
+    // Add to custom colors if not already present
+    if (!_customThemeColors.contains(_themeColorValue)) {
+      _customThemeColors.insert(0, _themeColorValue);
+      // Keep only top 10
+      if (_customThemeColors.length > 10) {
+        _customThemeColors = _customThemeColors.sublist(0, 10);
+      }
+      final colorStrings = _customThemeColors.map((c) => c.toString()).toList();
+      await prefs.setStringList(_getUKey('custom_theme_colors'), colorStrings);
+    }
+    
+    await prefs.setInt(_getUKey('theme_color'), _themeColorValue);
+    notifyListeners();
+    if (_isCloudSyncEnabled) _syncToFirebase();
+  }
+
+  Future<void> removeCustomColor(int colorValue) async {
+    final prefs = await SharedPreferences.getInstance();
+    _customThemeColors.remove(colorValue);
+    final colorStrings = _customThemeColors.map((c) => c.toString()).toList();
+    await prefs.setStringList(_getUKey('custom_theme_colors'), colorStrings);
+    notifyListeners();
+    if (_isCloudSyncEnabled) _syncToFirebase();
+  }
+
+  Future<void> savePresetTheme(Color color) async {
+    final prefs = await SharedPreferences.getInstance();
+    _themeColorValue = color.toARGB32();
+    await prefs.setInt(_getUKey('theme_color'), _themeColorValue);
     notifyListeners();
     if (_isCloudSyncEnabled) _syncToFirebase();
   }
@@ -326,7 +428,17 @@ class ProfileProvider with ChangeNotifier {
     _isCloudSyncEnabled = value;
     await prefs.setBool('cloud_sync_$uid', value);
     notifyListeners();
-    if (value) _syncToFirebase();
+    if (value) {
+      String? logoB64;
+      if (_logoPath.isNotEmpty && !_logoPath.startsWith('base64:')) {
+        logoB64 = await _firebaseService.uploadBusinessLogo(File(_logoPath));
+      }
+      String? qrB64;
+      if (_qrPath.isNotEmpty && !_qrPath.startsWith('base64:')) {
+        qrB64 = await _firebaseService.uploadBusinessLogo(File(_qrPath));
+      }
+      await _syncToFirebase(overrideLogo: logoB64, overrideQR: qrB64);
+    }
   }
 
   Future<void> updateProfile({String? businessName, String? ownerName, String? contact, String? address, String? logoPath, String? qrPath, String? qrLabel, bool? isCloudSyncEnabled, String? currencySymbol, double? taxPercentage, int? totalTables}) async {
@@ -335,15 +447,35 @@ class ProfileProvider with ChangeNotifier {
     if (ownerName != null) { _ownerName = ownerName; await prefs.setString(_getUKey('owner_name'), ownerName); }
     if (contact != null) { _contact = contact; await prefs.setString(_getUKey('contact'), contact); }
     if (address != null) { _address = address; await prefs.setString(_getUKey('address'), address); }
-    if (logoPath != null) { _logoPath = logoPath; await prefs.setString(_getUKey('logo_path'), logoPath); }
-    if (qrPath != null) { _qrPath = qrPath; await prefs.setString(_getUKey('qr_path'), qrPath); }
+    
+    String? logoB64;
+    if (logoPath != null) { 
+      _logoPath = logoPath; 
+      await prefs.setString(_getUKey('logo_path'), logoPath); 
+      if (_isCloudSyncEnabled && logoPath.isNotEmpty && !logoPath.startsWith('base64:')) {
+        logoB64 = await _firebaseService.uploadBusinessLogo(File(logoPath));
+      }
+    }
+    
+    String? qrB64;
+    if (qrPath != null) { 
+      _qrPath = qrPath; 
+      await prefs.setString(_getUKey('qr_path'), qrPath); 
+      if (_isCloudSyncEnabled && qrPath.isNotEmpty && !qrPath.startsWith('base64:')) {
+        qrB64 = await _firebaseService.uploadBusinessLogo(File(qrPath));
+      }
+    }
+
     if (qrLabel != null) { _qrLabel = qrLabel; await prefs.setString(_getUKey('qr_label'), qrLabel); }
     if (isCloudSyncEnabled != null) { _isCloudSyncEnabled = isCloudSyncEnabled; await prefs.setBool(_getUKey('cloud_sync'), isCloudSyncEnabled); }
     if (currencySymbol != null) { _currencySymbol = currencySymbol; await prefs.setString(_getUKey('currency'), currencySymbol); }
     if (taxPercentage != null) { _taxPercentage = taxPercentage; await prefs.setDouble(_getUKey('tax_percentage'), taxPercentage); }
     if (totalTables != null) { _totalTables = totalTables; await prefs.setInt(_getUKey('total_tables'), totalTables); }
+    
     notifyListeners();
-    if (_isCloudSyncEnabled) _syncToFirebase();
+    if (_isCloudSyncEnabled) {
+      await _syncToFirebase(overrideLogo: logoB64, overrideQR: qrB64);
+    }
   }
 
   Map<String, dynamic> getProfileMap() {
@@ -357,6 +489,7 @@ class ProfileProvider with ChangeNotifier {
       'qr_label': _qrLabel,
       'currency': _currencySymbol,
       'theme_color': _themeColorValue,
+      'custom_theme_colors': _customThemeColors,
       'tax_percentage': _taxPercentage,
       'is_dark_mode': _isDarkMode,
       'total_tables': _totalTables,
@@ -381,12 +514,31 @@ class ProfileProvider with ChangeNotifier {
     if (map['owner_name'] != null) { _ownerName = map['owner_name']; await prefs.setString('owner_name_$uid', _ownerName); }
     if (map['contact'] != null) { _contact = map['contact']; await prefs.setString('contact_$uid', _contact); }
     if (map['address'] != null) { _address = map['address']; await prefs.setString('address_$uid', _address); }
+    if (map['logo_path'] != null) { _logoPath = map['logo_path']; await prefs.setString('logo_path_$uid', _logoPath); }
     if (map['qr_path'] != null) { _qrPath = map['qr_path']; await prefs.setString('qr_path_$uid', _qrPath); }
     if (map['qr_label'] != null) { _qrLabel = map['qr_label']; await prefs.setString('qr_label_$uid', _qrLabel); }
     if (map['currency'] != null) { _currencySymbol = map['currency']; await prefs.setString('currency_$uid', _currencySymbol); }
-    if (map['theme_color'] != null) { _themeColorValue = map['theme_color']; await prefs.setInt('theme_color_$uid', _themeColorValue); }
+    
+    // Theme color can be stored as 'theme_color' or 'themeColor' in older backups
+    final themeCol = map['theme_color'] ?? map['themeColor'];
+    if (themeCol != null) { 
+      _themeColorValue = themeCol is String ? int.parse(themeCol) : themeCol; 
+      await prefs.setInt('theme_color_$uid', _themeColorValue); 
+    }
+
+    if (map['custom_theme_colors'] != null) {
+      _customThemeColors = List<int>.from(map['custom_theme_colors']);
+      await prefs.setStringList('custom_theme_colors_$uid', _customThemeColors.map((e) => e.toString()).toList());
+    }
+
     if (map['tax_percentage'] != null) { _taxPercentage = (map['tax_percentage'] as num).toDouble(); await prefs.setDouble('tax_percentage_$uid', _taxPercentage); }
-    if (map['is_dark_mode'] != null) { _isDarkMode = map['is_dark_mode']; await prefs.setBool('is_dark_mode_$uid', _isDarkMode); }
+    
+    final darkMode = map['is_dark_mode'] ?? map['isDarkMode'];
+    if (darkMode != null) { 
+      _isDarkMode = darkMode is bool ? darkMode : (darkMode.toString() == 'true');
+      await prefs.setBool('is_dark_mode_$uid', _isDarkMode); 
+    }
+
     if (map['total_tables'] != null) { _totalTables = map['total_tables']; await prefs.setInt('total_tables_$uid', _totalTables); }
     if (map['show_amount'] != null) { _showAmount = map['show_amount']; await prefs.setBool('show_amount_$uid', _showAmount); }
     if (map['auto_print'] != null) { _isAutoPrintEnabled = map['auto_print']; await prefs.setBool('auto_print_$uid', _isAutoPrintEnabled); }
@@ -397,17 +549,31 @@ class ProfileProvider with ChangeNotifier {
     if (map['license_key'] != null) { _licenseKey = map['license_key']; await prefs.setString('license_key_$uid', _licenseKey); }
     if (map['is_app_activated'] != null) { _isActivated = map['is_app_activated']; await prefs.setBool('is_app_activated_$uid', _isActivated); }
     if (map['is_lifetime'] != null) { _isLifetime = map['is_lifetime']; await prefs.setBool('is_lifetime_$uid', _isLifetime); }
-    if (map['expiry_date'] != null) { _expiryDate = DateTime.tryParse(map['expiry_date']); await prefs.setString('expiry_date_$uid', map['expiry_date']); }
+    if (map['expiry_date'] != null) { _expiryDate = DateTime.tryParse(map['expiry_date'].toString()); await prefs.setString('expiry_date_$uid', map['expiry_date'].toString()); }
 
     notifyListeners();
   }
 
-  Future<void> _syncToFirebase() async {
+  Future<void> _syncToFirebase({String? overrideLogo, String? overrideQR}) async {
     if (!_isCloudSyncEnabled) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     try {
       final profileData = getProfileMap();
+      
+      // Safety: Never sync a local file path to cloud. Only sync if it's base64 or overridden.
+      if (overrideLogo != null) {
+        profileData['logo_path'] = overrideLogo;
+      } else if (_logoPath.isNotEmpty && !_logoPath.startsWith('base64:')) {
+        profileData.remove('logo_path');
+      }
+
+      if (overrideQR != null) {
+        profileData['qr_path'] = overrideQR;
+      } else if (_qrPath.isNotEmpty && !_qrPath.startsWith('base64:')) {
+        profileData.remove('qr_path');
+      }
+
       profileData['last_updated'] = FieldValue.serverTimestamp();
       await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('profile').doc('business_info').set(profileData, SetOptions(merge: true));
     } catch (e) { debugPrint("Error syncing profile: $e"); }
@@ -504,7 +670,7 @@ class _PinEntryDialogState extends State<_PinEntryDialog> {
                     filled: true,
                     fillColor: widget.scaffoldColor,
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: widget.themeColor.withOpacity(0.1), width: 1)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: widget.themeColor.withValues(alpha: 0.1), width: 1)),
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: widget.themeColor, width: 2)),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                   ),

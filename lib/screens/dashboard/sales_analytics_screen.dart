@@ -60,8 +60,8 @@ class SalesAnalyticsScreen extends StatelessWidget {
         decoration: BoxDecoration(
           color: profile.cardColor,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.1)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+          border: Border.all(color: color.withValues(alpha: 0.1)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,7 +82,7 @@ class SalesAnalyticsScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: profile.cardColor,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
       ),
       child: LineChart(
         LineChartData(
@@ -102,7 +102,7 @@ class SalesAnalyticsScreen extends StatelessWidget {
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                color: profile.themeColor.withOpacity(0.1),
+                color: profile.themeColor.withValues(alpha: 0.1),
               ),
             ),
           ],
@@ -118,7 +118,7 @@ class SalesAnalyticsScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: profile.cardColor,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
       ),
       child: PieChart(
         PieChartData(

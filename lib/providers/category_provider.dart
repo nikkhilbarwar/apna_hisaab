@@ -8,42 +8,58 @@ class CategoryProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
   
   List<CategoryModel> get categories {
-    return _categories;
+    return _categories.where((c) => c.isDeleted == 0).toList();
   }
+
+  List<CategoryModel> get deletedCategories => _categories.where((c) => c.isDeleted == 1).toList();
 
   Future<void> fetchCategories() async {
     _categories = await DatabaseHelper.instance.getAllCategories();
     
+    // Always check for duplicates and required categories
+    await _cleanupDuplicateCategories();
+    
     if (_categories.isEmpty) {
       await _insertDefaultCategories();
     } else {
-      // Remove duplicates if any (cleanup)
-      await _cleanupDuplicateCategories();
       notifyListeners();
     }
   }
 
   Future<void> _cleanupDuplicateCategories() async {
     bool changed = false;
-    final Map<String, CategoryModel> uniqueCats = {};
-    final List<int> idsToDelete = [];
+    final Map<String, CategoryModel> seen = {};
+    final List<CategoryModel> duplicates = [];
 
+    // Force rename logic can be removed or kept for general cleanup
+    // But since we want to allow deleting "General", we don't need to force it anymore.
+
+    // Identify duplicates (Same Name and Same Type)
     for (var cat in _categories) {
       String key = "${cat.name.toLowerCase().trim()}_${cat.type}";
-      if (uniqueCats.containsKey(key)) {
-        idsToDelete.add(cat.id!);
-        changed = true;
+      if (seen.containsKey(key)) {
+        duplicates.add(cat);
       } else {
-        uniqueCats[key] = cat;
+        seen[key] = cat;
       }
     }
 
-    if (changed) {
-      for (var id in idsToDelete) {
-        await DatabaseHelper.instance.deleteCategory(id);
+    if (duplicates.isNotEmpty) {
+      final db = await DatabaseHelper.instance.database;
+      for (var dup in duplicates) {
+        String originalName = seen["${dup.name.toLowerCase().trim()}_${dup.type}"]!.name;
+        // Move items and transactions to the original category
+        await db.update('items', {'category': originalName}, where: 'category = ?', whereArgs: [dup.name]);
+        await db.update('transactions', {'category': originalName}, where: 'category = ?', whereArgs: [dup.name]);
+        
+        await DatabaseHelper.instance.permanentDeleteCategory(dup.id!);
+        _firebaseService.deleteCategory(dup.id!);
       }
       _categories = await DatabaseHelper.instance.getAllCategories();
+      changed = true;
     }
+
+    if (changed) notifyListeners();
   }
 
   Future<void> _insertDefaultCategories() async {
@@ -51,7 +67,6 @@ class CategoryProvider with ChangeNotifier {
       CategoryModel(name: 'Sales', iconName: 'point_of_sale', type: 'selling', displayOrder: 0),
       CategoryModel(name: 'Raw Material', iconName: 'inventory_2', type: 'purchase', displayOrder: 1),
       CategoryModel(name: 'Utility', iconName: 'bolt', type: 'purchase', displayOrder: 2),
-      CategoryModel(name: 'General', iconName: 'category', type: 'selling', displayOrder: 3),
     ];
 
     for (var cat in defaults) {
@@ -65,6 +80,7 @@ class CategoryProvider with ChangeNotifier {
   }
 
   Future<bool> addCategory(CategoryModel category) async {
+    category.name = category.name.trim();
     if (isCategoryExists(category.name)) return false;
     category.displayOrder = _categories.length;
     int id = await DatabaseHelper.instance.insertCategory(category);
@@ -87,23 +103,77 @@ class CategoryProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteCategory(int id, String name) async {
-    if (name == 'General') return;
+  Future<void> softDeleteCategory(int id, String name) async {
     final db = await DatabaseHelper.instance.database;
-    await db.update('items', {'category': 'General'}, where: 'category = ?', whereArgs: [name]);
-    await db.update('transactions', {'category': 'General'}, where: 'category = ?', whereArgs: [name]);
-    await DatabaseHelper.instance.deleteCategory(id);
-    _categories.removeWhere((cat) => cat.id == id);
-    _firebaseService.deleteCategory(id);
+    
+    // Find a fallback category (the first one that isn't the one being deleted)
+    String fallbackCategory = 'Uncategorized';
+    final otherCats = _categories.where((c) => c.id != id && c.isDeleted == 0).toList();
+    if (otherCats.isNotEmpty) {
+      fallbackCategory = otherCats.first.name;
+    }
+
+    await db.update('items', {'category': fallbackCategory}, where: 'category = ?', whereArgs: [name]);
+    await db.update('transactions', {'category': fallbackCategory}, where: 'category = ?', whereArgs: [name]);
+
+    await DatabaseHelper.instance.softDeleteCategory(id);
+    int index = _categories.indexWhere((cat) => cat.id == id);
+    if (index != -1) {
+      _categories[index].isDeleted = 1;
+      _categories[index].deletedAt = DateTime.now();
+      _firebaseService.syncCategory(_categories[index]);
+    }
     notifyListeners();
+  }
+
+  Future<void> restoreCategory(int id) async {
+    try {
+      await DatabaseHelper.instance.restoreCategory(id);
+      int index = _categories.indexWhere((cat) => cat.id == id);
+      if (index != -1) {
+        _categories[index].isDeleted = 0;
+        _categories[index].deletedAt = null;
+        _firebaseService.syncCategory(_categories[index]);
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error restoring category: $e");
+    }
+  }
+
+  Future<void> permanentDeleteCategory(int id) async {
+    try {
+      await DatabaseHelper.instance.permanentDeleteCategory(id);
+      await _firebaseService.deleteCategory(id);
+      _categories.removeWhere((cat) => cat.id == id);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error permanent deleting category: $e");
+    }
   }
   
   Future<bool> updateCategory(CategoryModel category, String oldName) async {
+    category.name = category.name.trim();
     if (isCategoryExists(category.name, excludeId: category.id)) return false;
     final db = await DatabaseHelper.instance.database;
     await DatabaseHelper.instance.updateCategory(category);
     await db.update('items', {'category': category.name}, where: 'category = ?', whereArgs: [oldName]);
     await db.update('transactions', {'category': category.name}, where: 'category = ?', whereArgs: [oldName]);
+
+    // Sync item stocks if shared stock is enabled
+    if (category.useCategoryStock == 1) {
+      await db.update(
+        'items',
+        {
+          'current_stock': category.stockQty,
+          'low_stock_alert': 1,
+          'is_synced': 0
+        },
+        where: 'category = ?',
+        whereArgs: [category.name],
+      );
+    }
+
     int index = _categories.indexWhere((c) => c.id == category.id);
     if (index != -1) {
       _categories[index] = category;

@@ -75,7 +75,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> with Sing
         ],
       ),
       bottomNavigationBar: _isScanning 
-        ? LinearProgressIndicator(color: profile.themeColor, backgroundColor: profile.themeColor.withOpacity(0.1))
+        ? LinearProgressIndicator(color: profile.themeColor, backgroundColor: profile.themeColor.withValues(alpha: 0.1))
         : null,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _scan,
@@ -101,7 +101,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> with Sing
               color: profile.cardColor,
               borderRadius: BorderRadius.circular(16),
               boxShadow: profile.themeShadow,
-              border: Border.all(color: profile.themeColor.withOpacity(0.2)),
+              border: Border.all(color: profile.themeColor.withValues(alpha: 0.2)),
             ),
             child: SwitchListTile(
               secondary: Icon(isKot ? Icons.kitchen : Icons.receipt, color: config.isEnabled ? profile.themeColor : profile.secondaryTextColor),
@@ -125,7 +125,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> with Sing
                 color: profile.cardColor,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: profile.themeShadow,
-                border: Border.all(color: profile.themeColor.withOpacity(0.1)),
+                border: Border.all(color: profile.themeColor.withValues(alpha: 0.1)),
               ),
               child: Column(
                 children: [
@@ -206,13 +206,13 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> with Sing
                 width: double.infinity,
                 padding: const EdgeInsets.all(30),
                 decoration: BoxDecoration(
-                  color: profile.cardColor.withOpacity(0.5),
+                  color: profile.cardColor.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: profile.secondaryTextColor.withOpacity(0.1)),
+                  border: Border.all(color: profile.secondaryTextColor.withValues(alpha: 0.1)),
                 ),
                 child: Column(
                   children: [
-                    Icon(Icons.bluetooth_searching, size: 40, color: profile.secondaryTextColor.withOpacity(0.5)),
+                    Icon(Icons.bluetooth_searching, size: 40, color: profile.secondaryTextColor.withValues(alpha: 0.5)),
                     const SizedBox(height: 10),
                     Text("No devices found. Tap 'Scan Bluetooth'.", style: TextStyle(color: profile.secondaryTextColor)),
                   ],
@@ -229,7 +229,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> with Sing
                   bool isSelected = config.bluetoothDevice?.address == d.address;
                   return Card(
                     elevation: 0,
-                    color: isSelected ? profile.themeColor.withOpacity(0.1) : profile.cardColor,
+                    color: isSelected ? profile.themeColor.withValues(alpha: 0.1) : profile.cardColor,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                       side: BorderSide(color: isSelected ? profile.themeColor : Colors.transparent),
@@ -258,7 +258,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> with Sing
                 color: profile.cardColor,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: profile.themeShadow,
-                border: Border.all(color: profile.themeColor.withOpacity(0.2)),
+                border: Border.all(color: profile.themeColor.withValues(alpha: 0.2)),
               ),
               child: SwitchListTile(
                 title: const Text("Auto Print on Checkout"),

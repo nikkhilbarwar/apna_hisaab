@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../../models/category_model.dart';
 import '../../models/transaction_model.dart';
 import '../../providers/transaction_provider.dart';
 import '../../providers/item_provider.dart';
@@ -36,11 +39,43 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   final TextEditingController _contactController = TextEditingController();
   final TextEditingController _cashSplitController = TextEditingController();
   final TextEditingController _upiSplitController = TextEditingController();
+  final TextEditingController _vendorNameController = TextEditingController();
 
   String _paymentMode = 'Cash';
   bool _isLoading = false;
   String _globalServingMethod = 'Dine-in';
   String _selectedTable = '1';
+  String _selectedCountryCode = '+91';
+
+  final List<Map<String, String>> _countryCodes = [
+    {'code': '+91', 'name': 'IN'},
+    {'code': '+1', 'name': 'US'},
+    {'code': '+44', 'name': 'UK'},
+    {'code': '+971', 'name': 'AE'},
+    {'code': '+92', 'name': 'PK'},
+    {'code': '+880', 'name': 'BD'},
+    {'code': '+977', 'name': 'NP'},
+    {'code': '+61', 'name': 'AU'},
+    {'code': '+1', 'name': 'CA'},
+    {'code': '+966', 'name': 'SA'},
+    {'code': '+974', 'name': 'QA'},
+    {'code': '+965', 'name': 'KW'},
+    {'code': '+968', 'name': 'OM'},
+    {'code': '+65', 'name': 'SG'},
+    {'code': '+60', 'name': 'MY'},
+    {'code': '+62', 'name': 'ID'},
+    {'code': '+49', 'name': 'DE'},
+    {'code': '+33', 'name': 'FR'},
+    {'code': '+39', 'name': 'IT'},
+    {'code': '+34', 'name': 'ES'},
+    {'code': '+7', 'name': 'RU'},
+    {'code': '+81', 'name': 'JP'},
+    {'code': '+86', 'name': 'CN'},
+    {'code': '+27', 'name': 'ZA'},
+    {'code': '+234', 'name': 'NG'},
+    {'code': '+55', 'name': 'BR'},
+    {'code': '+52', 'name': 'MX'},
+  ];
 
   bool get _isSellingType => widget.type.toLowerCase() == 'sale' || widget.type.toLowerCase() == 'income';
 
@@ -51,11 +86,27 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     
     if (widget.existingTransaction != null) {
       _paymentMode = widget.existingTransaction!.paymentMode;
-      _contactController.text = widget.existingTransaction!.customerContact;
+      String contact = widget.existingTransaction!.customerContact;
+      if (contact.startsWith('+')) {
+        for (var c in _countryCodes) {
+          if (contact.startsWith(c['code']!)) {
+            _selectedCountryCode = c['code']!;
+            _contactController.text = contact.substring(c['code']!.length);
+            break;
+          }
+        }
+        if (_contactController.text.isEmpty) _contactController.text = contact;
+      } else {
+        _contactController.text = contact;
+      }
+      
       _discountController.text = widget.existingTransaction!.discountValue.toStringAsFixed(0);
       _paidAmountController.text = widget.existingTransaction!.paidAmount.toStringAsFixed(0);
       _cashSplitController.text = widget.existingTransaction!.cashAmount.toStringAsFixed(0);
       _upiSplitController.text = widget.existingTransaction!.upiAmount.toStringAsFixed(0);
+      _vendorNameController.text = widget.existingTransaction!.description.contains(' | Vendor: ') 
+          ? widget.existingTransaction!.description.split(' | Vendor: ').last.split(' | ').first 
+          : '';
 
       final items = widget.existingTransaction!.parsedItems;
       if (items.isNotEmpty) {
@@ -78,6 +129,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     _contactController.dispose();
     _cashSplitController.dispose();
     _upiSplitController.dispose();
+    _vendorNameController.dispose();
     super.dispose();
   }
 
@@ -129,12 +181,25 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     }
 
     // Logic Fix: Extras multiplication
-    double totalExtra = c.extraPieces > 0 ? (c.extraPieces * c.extraPrice) : c.extraPrice;
+    double totalExtra = c.extraPieces * c.extraPrice;
 
     return base + totalExtra;
   }
 
   void _showManualQuantityDialog(CartItem cartItem) {
+    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+    final cat = itemProvider.categories.firstWhere(
+      (c) => c.name == cartItem.item.category, 
+      orElse: () => CategoryModel(name: 'General')
+    );
+    
+    if (cat.useCategoryStock == 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Manual quantity adjustment disabled for shared stock categories.'))
+      );
+      return;
+    }
+
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final controller = TextEditingController(text: cartItem.quantity.toString());
 
@@ -190,96 +255,90 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     final isSale = _isSellingType;
     final isPurchase = widget.type == 'purchase';
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (bool didPop, dynamic result) async {
-        if (didPop) return;
-        Navigator.pop(context, widget.cart.isEmpty);
-      },
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          bottomSheetTheme: const BottomSheetThemeData(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-          ),
-        ),
-        child: Scaffold(
-          backgroundColor: profileProvider.scaffoldColor,
-          appBar: AppBar(
-            backgroundColor: profileProvider.cardColor,
-            foregroundColor: profileProvider.textColor,
-            elevation: 0,
-            centerTitle: true,
-            title: Text(widget.existingTransaction == null ? 'FINAL REVIEW' : 'EDIT BILL',
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-          ),
-          body: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    return Scaffold(
+      backgroundColor: profileProvider.scaffoldColor,
+      resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        backgroundColor: profileProvider.cardColor,
+        foregroundColor: profileProvider.textColor,
+        elevation: 0,
+        centerTitle: true,
+        title: Text(widget.existingTransaction == null ? 'FINAL REVIEW' : 'EDIT BILL',
+          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSummaryCard(profileProvider),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildSummaryCard(profileProvider),
-                      const SizedBox(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('ORDER ITEMS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
-                          Text('${widget.cart.length} Items', style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 12)),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _buildItemsList(profileProvider),
-                      const SizedBox(height: 2),
-                      Text('FINANCIAL DETAILS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
-                      const SizedBox(height: 12),
-
-                      _entryField(_discountController, 'Add Discount (₹)', Icons.local_offer_rounded, themeColor, profileProvider, onChanged: (_) => _syncPaidAmount()),
-                      const SizedBox(height: 24),
-
-                      Text('PAYMENT METHOD', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
-                      const SizedBox(height: 12),
-                      _buildPaymentMethodSelector(themeColor, profileProvider),
-                      const SizedBox(height: 16),
-                      if (_paymentMode == 'Split') ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _entryField(_cashSplitController, 'Cash Paid', Icons.money_rounded, Colors.green, profileProvider, onChanged: (val) {
-                                double total = _currentGrandTotal;
-                                double cash = double.tryParse(val) ?? 0;
-                                if (cash > total) cash = total;
-                                setState(() {
-                                  _upiSplitController.text = (total - cash).toStringAsFixed(0);
-                                });
-                              }),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _upiSplitField(profileProvider),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (_paymentMode == 'Credit' || _paymentMode == 'UPI' || _paymentMode == 'Split')
-                        _entryField(_contactController, isPurchase ? 'Supplier Mobile' : 'Customer Mobile', Icons.phone_android_rounded, themeColor, profileProvider, type: TextInputType.phone),
-                      if (_paymentMode == 'Credit')
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: _entryField(_paidAmountController, 'Paid Amount (Deposit)', Icons.account_balance_wallet_rounded, themeColor, profileProvider),
-                        ),
-                      const SizedBox(height: 180),
+                      Text('ORDER ITEMS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
+                      Text('${widget.cart.length} Items', style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 12)),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  _buildItemsList(profileProvider),
+                  const SizedBox(height: 2),
+                  Text('FINANCIAL DETAILS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
+                  const SizedBox(height: 12),
+
+                  _entryField(_discountController, 'Add Discount (₹)', Icons.local_offer_rounded, themeColor, profileProvider, onChanged: (_) => _syncPaidAmount()),
+                  const SizedBox(height: 24),
+
+                  Text('PAYMENT METHOD', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: profileProvider.secondaryTextColor, letterSpacing: 0.5)),
+                  const SizedBox(height: 12),
+                  _buildPaymentMethodSelector(themeColor, profileProvider),
+                  const SizedBox(height: 16),
+                  if (_paymentMode == 'Split') ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _entryField(_cashSplitController, 'Cash Paid', Icons.money_rounded, Colors.green, profileProvider, onChanged: (val) {
+                            double total = _currentGrandTotal;
+                            double cash = double.tryParse(val) ?? 0;
+                            if (cash > total) cash = total;
+                            setState(() {
+                              _upiSplitController.text = (total - cash).toStringAsFixed(0);
+                            });
+                          }),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _upiSplitField(profileProvider),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_paymentMode == 'Credit' || _paymentMode == 'UPI' || _paymentMode == 'Split')
+                    Column(
+                      children: [
+                        if (isPurchase) 
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _entryField(_vendorNameController, 'Shop / Vendor Name', Icons.store_rounded, themeColor, profileProvider),
+                          ),
+                        _contactFieldWithCode(profileProvider, isPurchase),
+                      ],
+                    ),
+                  if (_paymentMode == 'Credit')
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: _entryField(_paidAmountController, 'Paid Amount (Deposit)', Icons.account_balance_wallet_rounded, themeColor, profileProvider),
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
-          bottomSheet: _buildBottomActionArea(profileProvider, isSale, isPurchase),
-        ),
+          _buildBottomActionArea(profileProvider, isSale, isPurchase),
+        ],
       ),
     );
   }
@@ -289,6 +348,18 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     double tax = sub * (profile.taxPercentage / 100);
     double disc = double.tryParse(_discountController.text) ?? 0;
     double total = _currentGrandTotal;
+    double paid = 0;
+    
+    if (_paymentMode == 'Credit') {
+      paid = double.tryParse(_paidAmountController.text) ?? 0;
+    } else if (_paymentMode == 'Split') {
+      paid = (double.tryParse(_cashSplitController.text) ?? 0) + 
+             (double.tryParse(_upiSplitController.text) ?? 0);
+    } else {
+      paid = total;
+    }
+    
+    double balance = total - paid;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -310,12 +381,28 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
               child: _summaryRow('Tax (${profile.taxPercentage}%)', '${profile.currencySymbol}${tax.toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
             ),
           const SizedBox(height: 8),
-          _summaryRow('Discount', '- ${profile.currencySymbol}${disc.toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
+          if (disc > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: _summaryRow('Discount', '- ${profile.currencySymbol}${disc.toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
+            ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Divider(color: Colors.white24, height: 1),
           ),
           _summaryRow('Grand Total', '${profile.currencySymbol}${total.toStringAsFixed(0)}', Colors.white, isBold: true),
+          
+          if (_paymentMode == 'Credit') ...[
+            const SizedBox(height: 12),
+            _summaryRow('Paid (Deposit)', '${profile.currencySymbol}${paid.toStringAsFixed(0)}', Colors.greenAccent.withValues(alpha: 0.9), isBold: false),
+            _summaryRow('Remaining', '${profile.currencySymbol}${balance.toStringAsFixed(0)}', Colors.redAccent.shade100, isBold: true),
+          ],
+          
+          if (_paymentMode == 'Split') ...[
+             const SizedBox(height: 12),
+             _summaryRow('Cash Part', '${profile.currencySymbol}${(double.tryParse(_cashSplitController.text) ?? 0).toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
+             _summaryRow('UPI Part', '${profile.currencySymbol}${(double.tryParse(_upiSplitController.text) ?? 0).toStringAsFixed(0)}', Colors.white.withValues(alpha: 0.9)),
+          ]
         ],
       ),
     );
@@ -358,7 +445,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                   Container(
                     height: 48, width: 48,
                     decoration: BoxDecoration(
-                      color: themeColor.withValues(alpha: 0.05), 
+                      color: themeColor.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: themeColor.withValues(alpha: 0.1)),
                     ),
@@ -434,7 +521,7 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     const Spacer(),
                     if (c.servingMethod == 'Dine-in' && profile.totalTables > 0)
                       Text('Table: ${c.tableNumber.isEmpty ? _selectedTable : c.tableNumber}', 
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: themeColor.withValues(alpha: 0.7))),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: themeColor.withValues(alpha: 0.7))),
                   ],
                 ),
               ],
@@ -573,13 +660,20 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     bool canShowPending = isSale && (widget.existingTransaction == null || widget.existingTransaction?.status == 'pending');
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
       decoration: BoxDecoration(
         color: profile.cardColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -5))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          ),
+        ],
       ),
       child: SafeArea(
+        top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -696,6 +790,97 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     );
   }
 
+  Future<void> _pickContact() async {
+    if (await Permission.contacts.request().isGranted) {
+      final contact = await FlutterContacts.openExternalPick();
+      if (contact != null) {
+        // Re-fetch the full contact details because openExternalPick returns limited info
+        final fullContact = await FlutterContacts.getContact(contact.id);
+        if (fullContact != null && fullContact.phones.isNotEmpty) {
+          String phone = fullContact.phones.first.number.replaceAll(RegExp(r'\s+|-|\(|\)'), '');
+          
+          // Handle if phone already contains country code
+          bool foundCode = false;
+          for (var c in _countryCodes) {
+            if (phone.startsWith(c['code']!)) {
+              setState(() {
+                _selectedCountryCode = c['code']!;
+                _contactController.text = phone.substring(c['code']!.length);
+              });
+              foundCode = true;
+              break;
+            }
+          }
+          
+          if (!foundCode) {
+            setState(() {
+              _contactController.text = phone;
+            });
+          }
+        }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Contacts permission is required to pick a contact')),
+        );
+      }
+    }
+  }
+
+  Widget _contactFieldWithCode(ProfileProvider profile, bool isPurchase) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: profile.scaffoldColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedCountryCode,
+                  icon: const Icon(Icons.arrow_drop_down, size: 20),
+                  dropdownColor: profile.cardColor,
+                  style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold, fontSize: 13),
+                  items: _countryCodes.map((c) => DropdownMenuItem(
+                    value: c['code'],
+                    child: Text('${c['name']} ${c['code']}'),
+                  )).toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _selectedCountryCode = v);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextFormField(
+                controller: _contactController,
+                keyboardType: TextInputType.phone,
+                style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold, fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: isPurchase ? 'Supplier Mobile' : 'Customer Mobile',
+                  prefixIcon: Icon(Icons.phone_android_rounded, size: 20, color: profile.themeColor),
+                  suffixIcon: IconButton(
+                    icon: Icon(Icons.contact_page_rounded, color: profile.themeColor),
+                    onPressed: _pickContact,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _upiSplitField(ProfileProvider profileProvider) {
     return _entryField(_upiSplitController, 'UPI Paid', Icons.qr_code_rounded, Colors.blue, profileProvider, onChanged: (val) {
       double total = _currentGrandTotal;
@@ -710,8 +895,11 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   Widget _entryField(TextEditingController controller, String label, IconData icon, Color themeColor, ProfileProvider profile, {TextInputType type = TextInputType.number, Function(String)? onChanged}) {
     return TextFormField(
       controller: controller,
-      keyboardType: type,
-      onChanged: onChanged,
+      keyboardType: TextInputType.name,
+      onChanged: (val) {
+        setState(() {}); // Trigger rebuild to update Summary Card in real-time
+        if (onChanged != null) onChanged(val);
+      },
       onTap: () {
         if (controller.text == '0' || controller.text == '0.0') {
           controller.clear();
@@ -743,12 +931,15 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         'unit': e.unit,
         'variant': e.variant,
         'price': e.price,
+        'purchase_price': e.item.purchasePrice ?? 0,
+        'transport_cost': e.item.transportCost ?? 0,
         'full_price': e.item.price ?? 0,
         'half_price': e.item.halfPrice ?? 0,
         'extra_qty': e.extraPieces,
         'extra_price': e.extraPrice,
         'serving_method': e.servingMethod,
         'table_number': _selectedTable,
+        'item_type': e.item.itemType,
       }).toList());
 
       double sub = _currentSubtotal;
@@ -756,6 +947,10 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       double discAmt = double.tryParse(_discountController.text) ?? 0;
 
       description += " | Subtotal: ₹$sub | Tax: ₹${taxAmt.toStringAsFixed(0)} | Discount: ₹${discAmt.toStringAsFixed(0)}";
+      
+      if (widget.type.toLowerCase() == 'purchase' && _vendorNameController.text.isNotEmpty) {
+        description += " | Vendor: ${_vendorNameController.text.trim()}";
+      }
 
       double paidAmt = totalAmt;
       if (_paymentMode == 'Credit') {
@@ -771,7 +966,11 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
         description: description,
         paymentMode: _paymentMode,
         date: widget.selectedDate,
-        customerContact: _contactController.text.trim(),
+        customerContact: _contactController.text.trim().isEmpty 
+          ? '' 
+          : (_contactController.text.trim().startsWith('+') 
+              ? _contactController.text.trim() 
+              : '$_selectedCountryCode${_contactController.text.trim()}'),
         cashAmount: _paymentMode == 'Split' ? (double.tryParse(_cashSplitController.text) ?? 0) : (_paymentMode == 'Cash' ? totalAmt : 0),
         upiAmount: _paymentMode == 'Split' ? (double.tryParse(_upiSplitController.text) ?? 0) : (_paymentMode == 'UPI' ? totalAmt : 0),
         status: isPending ? 'pending' : 'completed',

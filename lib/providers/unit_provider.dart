@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import '../models/unit_model.dart';
 import '../core/database/database_helper.dart';
-import '../services/firebase_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class UnitProvider with ChangeNotifier {
   List<UnitModel> _units = [];
-  final FirebaseService _firebaseService = FirebaseService();
 
   List<UnitModel> get units => _units;
 

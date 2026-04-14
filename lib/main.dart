@@ -1,9 +1,16 @@
+import 'dart:ui';
+import 'dart:developer' as dev;
+import 'package:apna_hisaab/services/firebase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
+import 'models/category_model.dart';
+import 'models/item_model.dart';
+import 'models/staff_model.dart';
 import 'providers/transaction_provider.dart';
 import 'providers/item_provider.dart';
 import 'providers/profile_provider.dart';
@@ -73,58 +80,150 @@ void callbackDispatcher() {
       return Future.value(true);
     }
 
+    if (task == "syncTask") {
+      try {
+        final db = DatabaseHelper.instance;
+        final firebaseService = FirebaseService();
+        
+        // Basic silent sync logic
+        final unsyncedCats = await db.getUnsyncedData('categories');
+        for (var map in unsyncedCats) {
+          final cat = CategoryModel.fromMap(map);
+          await firebaseService.syncCategory(cat);
+          await db.updateSyncStatus('categories', cat.id!, 1);
+        }
+
+        final unsyncedItems = await db.getUnsyncedData('items');
+        for (var map in unsyncedItems) {
+          final item = ItemModel.fromMap(map);
+          await firebaseService.syncItem(item);
+          await db.updateSyncStatus('items', item.id!, 1);
+        }
+
+        final unsyncedStaff = await db.getUnsyncedData('staff');
+        for (var map in unsyncedStaff) {
+          final staff = StaffModel.fromMap(map);
+          await firebaseService.syncStaff(staff);
+          await db.updateSyncStatus('staff', staff.id!, 1);
+        }
+
+        final unsyncedAdvances = await db.getUnsyncedData('staff_advance');
+        for (var map in unsyncedAdvances) {
+          final adv = StaffAdvanceModel.fromMap(map);
+          await firebaseService.syncStaffAdvance(adv);
+          await db.updateSyncStatus('staff_advance', adv.id!, 1);
+        }
+
+        final unsyncedLeaves = await db.getUnsyncedData('staff_leave');
+        for (var map in unsyncedLeaves) {
+          final leave = StaffLeaveModel.fromMap(map);
+          await firebaseService.syncStaffLeave(leave);
+          await db.updateSyncStatus('staff_leave', leave.id!, 1);
+        }
+
+        final unsyncedTxs = await db.getUnsyncedTransactions();
+        for (var tx in unsyncedTxs) {
+          await firebaseService.syncTransaction(tx);
+          await db.updateTransactionSyncStatus(tx.id!, 1);
+        }
+        return Future.value(true);
+      } catch (e) {
+        return Future.value(false);
+      }
+    }
+
     return Future.value(true);
   });
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await NotificationService().init();
 
-  Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
-  
-  Workmanager().registerPeriodicTask(
-    "1", "dailyBackupTask",
-    frequency: const Duration(hours: 24),
-    initialDelay: const Duration(minutes: 30),
-    existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
-  );
+  // Handle Flutter-level errors
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    dev.log("FLUTTER_ERROR: ${details.exception}", stackTrace: details.stack, name: 'Main');
+  };
 
-  Workmanager().registerPeriodicTask(
-    "pending_order_reminder", "pendingOrdersCheck",
-    frequency: const Duration(hours: 1),
-    existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
-  );
+  // Handle errors not caught by Flutter (e.g. async errors)
+  PlatformDispatcher.instance.onError = (error, stack) {
+    dev.log("PLATFORM_ERROR: $error", stackTrace: stack, name: 'Main');
+    return true; // Error was handled
+  };
 
-  Workmanager().registerPeriodicTask(
-    "3", "dailySalesSummary",
-    frequency: const Duration(hours: 24),
-    initialDelay: const Duration(hours: 10),
-    existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
-  );
-  
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  
-  runApp(
-    RestartWidget(
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => TransactionProvider()..fetchTransactions()),
-          ChangeNotifierProvider(create: (_) => ItemProvider()..fetchItems()),
-          ChangeNotifierProvider(create: (_) => ProfileProvider()),
-          ChangeNotifierProvider(create: (_) => CategoryProvider()..fetchCategories()),
-          ChangeNotifierProvider(create: (_) => StaffProvider()..fetchStaff()),
-          ChangeNotifierProvider(create: (_) => SupplierProvider()..fetchSuppliers()),
-          ChangeNotifierProvider(create: (_) => UnitProvider()..fetchUnits()),
-          ChangeNotifierProvider(create: (_) => SyncProvider()),
-          ChangeNotifierProvider(create: (_) => PurchaseReminderProvider()..fetchReminders()),
-          ChangeNotifierProvider(create: (_) => PrinterProvider()),
-        ],
-        child: const MyApp(),
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    
+    final notificationService = NotificationService();
+    await notificationService.init();
+    notificationService.setupInteractions();
+    FirebaseMessaging.onBackgroundMessage(NotificationService.firebaseMessagingBackgroundHandler);
+
+    Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+    
+    Workmanager().registerPeriodicTask(
+      "1", "dailyBackupTask",
+      frequency: const Duration(hours: 24),
+      initialDelay: const Duration(minutes: 30),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+    );
+
+    Workmanager().registerPeriodicTask(
+      "pending_order_reminder", "pendingOrdersCheck",
+      frequency: const Duration(hours: 1),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+    );
+
+    Workmanager().registerPeriodicTask(
+      "3", "dailySalesSummary",
+      frequency: const Duration(hours: 24),
+      initialDelay: const Duration(hours: 10),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+    );
+
+    Workmanager().registerPeriodicTask(
+      "cloud_sync", "syncTask",
+      frequency: const Duration(minutes: 15),
+      constraints: Constraints(
+        networkType: NetworkType.connected,
       ),
-    ),
-  );
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+    );
+    
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    
+    runApp(
+      RestartWidget(
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => TransactionProvider()..fetchTransactions()),
+            ChangeNotifierProvider(create: (_) => ItemProvider()..fetchItems()),
+            ChangeNotifierProvider(create: (_) => ProfileProvider()),
+            ChangeNotifierProvider(create: (_) => CategoryProvider()..fetchCategories()),
+            ChangeNotifierProvider(create: (_) => StaffProvider()..fetchStaff()),
+            ChangeNotifierProvider(create: (_) => SupplierProvider()..fetchSuppliers()),
+            ChangeNotifierProvider(create: (_) => UnitProvider()..fetchUnits()),
+            ChangeNotifierProvider(create: (_) => SyncProvider()),
+            ChangeNotifierProvider(create: (_) => PurchaseReminderProvider()..fetchReminders()),
+            ChangeNotifierProvider(create: (_) => PrinterProvider()),
+          ],
+          child: const MyApp(),
+        ),
+      ),
+    );
+  } catch (e, stack) {
+    dev.log("CRITICAL_INIT_ERROR: $e", stackTrace: stack, name: 'Main');
+    // Still try to run the app so it doesn't just hang on splash
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text("A critical error occurred during initialization. Please restart the app.\n\n$e"),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class RestartWidget extends StatefulWidget {

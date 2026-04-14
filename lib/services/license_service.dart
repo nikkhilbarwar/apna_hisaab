@@ -6,36 +6,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:io';
 
 class LicenseService {
-  static FirebaseApp? _licenseApp;
-  static FirebaseFirestore? _licenseFirestore;
-
+  // Simplified: No need for secondary FirebaseApp since we use Single Project now.
   static Future<void> init() async {
-    if (_licenseFirestore != null) return;
-    try {
-      _licenseApp = await Firebase.initializeApp(
-        name: 'TheGrillerZone',
-        options: const FirebaseOptions(
-          apiKey: "AIzaSyCa-EEAFEujhHqEuWz1vAeiYROgdQRxtBU",
-          authDomain: "the-griller-zone-pos.firebaseapp.com",
-          projectId: "the-griller-zone-pos",
-          storageBucket: "the-griller-zone-pos.firebasestorage.app",
-          messagingSenderId: "49958796947",
-          appId: "1:49958796947:web:3a34af44934689523f5766",
-        ),
-      );
-      _licenseFirestore = FirebaseFirestore.instanceFor(app: _licenseApp!);
-    } catch (e) {
-      try {
-        _licenseApp = Firebase.app('TheGrillerZone');
-        _licenseFirestore = FirebaseFirestore.instanceFor(app: _licenseApp!);
-      } catch (_) {}
-    }
+    // The default app is already initialized in main.dart
   }
 
-  static FirebaseFirestore get firestore {
-    if (_licenseFirestore == null) throw "License System Offline";
-    return _licenseFirestore!;
-  }
+  // Uses the default Firestore instance
+  static FirebaseFirestore get firestore => FirebaseFirestore.instance;
 
   static Future<String> getDeviceId() async {
     var deviceInfo = DeviceInfoPlugin();
@@ -47,19 +24,15 @@ class LicenseService {
   // Admin Authentication Logic (Supports Email or Phone)
   static Future<Map<String, dynamic>> loginAdmin(String identifier, String password) async {
     try {
-      await init();
-      // Check for email OR phone
-      final emailSnapshot = await firestore.collection('admins')
-          .where('email', isEqualTo: identifier)
-          .where('password', isEqualTo: password)
-          .get();
-
-      final phoneSnapshot = await firestore.collection('admins')
-          .where('phone', isEqualTo: identifier)
-          .where('password', isEqualTo: password)
-          .get();
-
-      final docs = emailSnapshot.docs.isNotEmpty ? emailSnapshot.docs : phoneSnapshot.docs;
+      // Check for BOTH Email or Phone
+      var query = firestore.collection('admins')
+          .where('password', isEqualTo: password);
+      
+      var docs = await query.where('phone', isEqualTo: identifier).get().then((s) => s.docs);
+      
+      if (docs.isEmpty) {
+        docs = await query.where('email', isEqualTo: identifier).get().then((s) => s.docs);
+      }
 
       if (docs.isNotEmpty) {
         final data = docs.first.data();
@@ -67,7 +40,15 @@ class LicenseService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('is_sys_admin', true);
           await prefs.setString('admin_id', identifier);
-          return {'success': true, 'data': data};
+          
+          // Force nikkhilbarwar@gmail.com as super_admin always
+          String role = data['role'] ?? 'staff';
+          if (identifier.toLowerCase() == 'nikkhilbarwar@gmail.com') {
+            role = 'super_admin';
+          }
+          
+          await prefs.setString('admin_role', role);
+          return {'success': true, 'data': {...data, 'role': role}};
         }
         return {'success': false, 'message': 'Admin account disabled'};
       }
@@ -79,7 +60,6 @@ class LicenseService {
 
   static Future<Map<String, dynamic>> verifyLicense(String key) async {
     try {
-      await init();
       final doc = await firestore.collection('licenses').doc(key).get();
       if (!doc.exists) return {'success': false, 'message': 'Invalid License Key'};
 
@@ -110,7 +90,6 @@ class LicenseService {
           'appVersion': version,
         });
       } else {
-        // Update last used and version even if already activated
         final version = await getAppVersion();
         await firestore.collection('licenses').doc(key).update({
           'lastUsedAt': FieldValue.serverTimestamp(),
@@ -151,6 +130,100 @@ class LicenseService {
       'action': action,
       'details': details,
       'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // --- Support Ticket System ---
+
+  static Future<void> createTicket({
+    required String licenseKey,
+    required String restaurantName,
+    required String phone,
+    required String subject,
+    required String message,
+  }) async {
+    await firestore.collection('support_tickets').add({
+      'licenseKey': licenseKey,
+      'restaurantName': restaurantName,
+      'phone': phone,
+      'subject': subject,
+      'message': message,
+      'status': 'open',
+      'createdAt': FieldValue.serverTimestamp(),
+      'lastUpdate': FieldValue.serverTimestamp(),
+      'replies': [],
+    });
+  }
+
+  static Future<void> addTicketReply({
+    required String ticketId,
+    required String message,
+    required String senderRole,
+    required String senderName,
+  }) async {
+    await firestore.collection('support_tickets').doc(ticketId).update({
+      'replies': FieldValue.arrayUnion([{
+        'message': message,
+        'senderRole': senderRole,
+        'senderName': senderName,
+        'timestamp': DateTime.now().toIso8601String(),
+      }]),
+      'lastUpdate': FieldValue.serverTimestamp(),
+      if (senderRole == 'admin') 'status': 'answered',
+    });
+  }
+
+  static Future<void> resolveTicket(String ticketId) async {
+    await firestore.collection('support_tickets').doc(ticketId).update({
+      'status': 'resolved',
+      'lastUpdate': FieldValue.serverTimestamp(),
+    });
+  }
+
+  static Stream<QuerySnapshot> getTickets(String licenseKey) {
+    return firestore.collection('support_tickets')
+        .where('licenseKey', isEqualTo: licenseKey)
+        .orderBy('lastUpdate', descending: true)
+        .snapshots();
+  }
+
+  static Stream<DocumentSnapshot> getTicketStream(String ticketId) {
+    return firestore.collection('support_tickets').doc(ticketId).snapshots();
+  }
+
+  // --- Staff / Admin Management ---
+
+  static Stream<QuerySnapshot> getAdminStream() {
+    return firestore.collection('admins').snapshots();
+  }
+
+  static Future<void> updateAdmin({
+    required String id,
+    required String email,
+    required String password,
+    required String role,
+    required String status,
+  }) async {
+    await firestore.collection('admins').doc(id).set({
+      'email': email,
+      'password': password,
+      'role': role,
+      'status': status,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  static Future<void> deleteAdmin(String id) async {
+    await firestore.collection('admins').doc(id).delete();
+  }
+
+  static Future<void> queueAnnouncementNotification(String title, String body) async {
+    await firestore.collection('notifications_queue').add({
+      'title': title,
+      'body': body,
+      'topic': 'announcements',
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 }
