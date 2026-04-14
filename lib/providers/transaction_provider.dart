@@ -784,5 +784,57 @@ class TransactionProvider with ChangeNotifier {
 
   double get profitToday => getProfitForRange(null);
 
+  Future<void> updateTransactionSnapshots(int? txId, List<TransactionItemSnapshot> updatedSnapshots) async {
+    if (txId == null) return;
+    try {
+      final index = _allTransactions.indexWhere((t) => t.id == txId);
+      if (index == -1) return;
 
+      final originalTx = _allTransactions[index];
+      final tx = TransactionModel.fromMap(originalTx.toMap());
+
+      String cleanJson = tx.description;
+      String metadata = "";
+      if (tx.description.contains(' | ')) {
+        cleanJson = tx.description.split(' | ').first;
+        metadata = tx.description.substring(tx.description.indexOf(' | '));
+      }
+
+      // Convert snapshots back to Map for JSON
+      final List<Map<String, dynamic>> jsonList = updatedSnapshots.map((s) {
+        return {
+          'id': s.id,
+          'name': s.name,
+          'category': s.category,
+          'qty': s.qty,
+          'unit': s.unit,
+          'variant': s.variant,
+          'price': s.price,
+          'purchase_price': s.purchasePrice,
+          'transport_cost': s.transportCost,
+          'full_price': s.fullPrice,
+          'half_price': s.halfPrice,
+          'extra_qty': s.extraQty,
+          'extra_price': s.extraPrice,
+          'serving_method': s.servingMethod,
+          'table_number': s.tableNumber,
+          'checked': s.checked,
+          'item_type': s.itemType,
+        };
+      }).toList();
+
+      tx.description = jsonEncode(jsonList) + metadata;
+      tx.isSynced = 0;
+
+      // Update in local DB and memory
+      await DatabaseHelper.instance.updateTransaction(tx);
+      _allTransactions[index] = tx;
+      notifyListeners();
+
+      // Sync to cloud
+      _syncSingleTransaction(tx);
+    } catch (e) {
+      debugPrint("Error updating transaction snapshots: $e");
+    }
+  }
 }

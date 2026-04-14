@@ -383,6 +383,19 @@ class StaffProvider with ChangeNotifier {
       debugPrint("Error clearing advances: $e");
     }
   }
+  Future<void> clearStaffLeaves(int staffId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('staff_leaves', where: 'staff_id = ?', whereArgs: [staffId]);
+
+      // Update from Firebase (Delete docs if needed)
+      // await _firebaseService.deleteStaffLeavesByStaffId(staffId);
+
+      await fetchStaff();
+    } catch (e) {
+      debugPrint("Error clearing leaves: $e");
+    }
+  }
 
   double calculatePayable(StaffModel staff) {
     return staff.calculateCurrentPayable();

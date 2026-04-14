@@ -35,16 +35,27 @@ class PrinterConfig {
   }
 
   factory PrinterConfig.fromMap(Map<String, dynamic> map) {
+    bool toBool(dynamic value, {bool defaultValue = false}) {
+      if (value == null) return defaultValue;
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      if (value is String) {
+        final lower = value.toLowerCase();
+        return lower == 'true' || lower == '1' || lower == 'yes';
+      }
+      return defaultValue;
+    }
+
     return PrinterConfig(
-      isEnabled: map['isEnabled'] ?? true,
-      type: AppPrinterType.values[map['type'] ?? 2],
-      networkIp: map['networkIp'] ?? "",
+      isEnabled: toBool(map['isEnabled'], defaultValue: true),
+      type: AppPrinterType.values[(map['type'] as num? ?? 2).toInt()],
+      networkIp: map['networkIp']?.toString() ?? "",
       bluetoothDevice: map['bluetoothDevice'] != null ? PrinterDevice(
-        name: map['bluetoothDevice']['name'] ?? '',
-        address: map['bluetoothDevice']['address'] ?? '',
+        name: map['bluetoothDevice']['name']?.toString() ?? '',
+        address: map['bluetoothDevice']['address']?.toString() ?? '',
       ) : null,
-      paperWidth: map['paperWidth'] ?? 80,
-      isKot: map['isKot'] ?? false,
+      paperWidth: (map['paperWidth'] as num? ?? 80).toInt(),
+      isKot: toBool(map['isKot']),
     );
   }
 

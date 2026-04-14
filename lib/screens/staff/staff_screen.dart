@@ -144,7 +144,7 @@ class _StaffScreenState extends State<StaffScreen> {
                                       ? Colors.white
                                       : profileProvider.themeColor,
                                   fontWeight: FontWeight.w900,
-                                  fontSize: 12,
+                                  fontSize: 10,
                                   letterSpacing: 0.5,
                                 ),
                               ),

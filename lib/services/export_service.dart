@@ -23,20 +23,19 @@ class ExportService {
     Directory? baseDir;
 
     if (Platform.isAndroid) {
-      // Use the public Downloads folder for best visibility on Android
-      // This is generally accessible and visible to users in File Managers
-      baseDir = Directory('/storage/emulated/0/Downloads');
+      // Use the public Documents folder for better visibility in File Manager
+      baseDir = Directory('/storage/emulated/0/Documents');
       
       try {
         if (!await baseDir.exists()) {
           await baseDir.create(recursive: true);
         }
       } catch (e) {
-        debugPrint("Downloads folder access failed: $e");
-        // Fallback to app-specific external storage if Downloads is restricted
-        final external = await getExternalStorageDirectory();
-        if (external != null) {
-          baseDir = external;
+        debugPrint("Documents folder access failed: $e");
+        // Fallback to Downloads if Documents is restricted
+        baseDir = Directory('/storage/emulated/0/Downloads');
+        if (!await baseDir.exists()) {
+          await baseDir.create(recursive: true);
         }
       }
     } else {
@@ -44,7 +43,11 @@ class ExportService {
       baseDir = await getApplicationDocumentsDirectory();
     }
     
-    final appDir = Directory('${baseDir!.path}/Apna Hisab');
+    // Check if the base directory is public to use a clean name
+    final isPublic = baseDir.path.contains('Documents') || baseDir.path.contains('Downloads');
+    final folderName = isPublic ? 'Apna Hisaab' : '.ApnaHisaab';
+    
+    final appDir = Directory('${baseDir.path}/$folderName');
     if (!await appDir.exists()) {
       await appDir.create(recursive: true);
     }
@@ -1141,7 +1144,7 @@ class ExportService {
       String jsonString = jsonEncode(backupData);
       final baseDir = await _getBackupDirectory();
 
-      final fileName = "Backup_${user.uid}_${DateFormat('ddMMM_yyyy_HHmm').format(DateTime.now())}.json";
+      final fileName = "Backup_${DateFormat('ddMMM_yyyy_HHmm').format(DateTime.now())}.json";
       final file = File("${baseDir.path}/$fileName");
       await file.writeAsString(jsonString);
       return file.path;
@@ -1355,6 +1358,18 @@ class ExportService {
         final prefs = await SharedPreferences.getInstance();
         final p = data['profile_settings'] as Map<String, dynamic>;
         
+        // Helper to safely convert dynamic to bool (v2.5 Fix for numeric booleans)
+        bool toBool(dynamic val) {
+          if (val == null) return false;
+          if (val is bool) return val;
+          if (val is num) return val.toInt() != 0;
+          if (val is String) {
+            final s = val.toLowerCase();
+            return s == 'true' || s == '1' || s == 'yes';
+          }
+          return false;
+        }
+
         for (var key in p.keys) {
           // Skip these as we handle them explicitly below to ensure portability
           if (key == 'logo_base64' || key == 'qr_base64') continue;
@@ -1363,10 +1378,22 @@ class ExportService {
           String prefKey = "${key}_$uid";
           if (value == null) continue;
 
-          if (value is String) await prefs.setString(prefKey, value);
-          else if (value is bool) await prefs.setBool(prefKey, value);
-          else if (value is int) await prefs.setInt(prefKey, value);
-          else if (value is double) await prefs.setDouble(prefKey, value);
+          // Critical Fix: Type-safe restore to prevent "double is not subtype of bool"
+          if (value is String) {
+            await prefs.setString(prefKey, value);
+          } else if (value is bool) {
+            await prefs.setBool(prefKey, value);
+          } else if (value is int) {
+            await prefs.setInt(prefKey, value);
+          } else if (value is double) {
+            // Some keys might be booleans stored as doubles (1.0/0.0) in legacy backups
+            final boolKeys = ['cloud_sync', 'is_dark_mode', 'show_amount', 'auto_print', 'kot_enabled', 'is_pin_enabled', 'is_biometric_enabled', 'is_app_activated', 'is_lifetime'];
+            if (boolKeys.contains(key)) {
+              await prefs.setBool(prefKey, toBool(value));
+            } else {
+              await prefs.setDouble(prefKey, value);
+            }
+          }
         }
 
         // Image Reconstruction (v2.5+)

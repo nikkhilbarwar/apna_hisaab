@@ -40,6 +40,46 @@ class TransactionItemSnapshot {
     this.itemType = 'regular',
   });
 
+  TransactionItemSnapshot copyWith({
+    int? id,
+    String? name,
+    String? category,
+    double? qty,
+    String? unit,
+    String? variant,
+    double? price,
+    double? purchasePrice,
+    double? transportCost,
+    double? fullPrice,
+    double? halfPrice,
+    double? extraQty,
+    double? extraPrice,
+    String? servingMethod,
+    String? tableNumber,
+    bool? checked,
+    String? itemType,
+  }) {
+    return TransactionItemSnapshot(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      category: category ?? this.category,
+      qty: qty ?? this.qty,
+      unit: unit ?? this.unit,
+      variant: variant ?? this.variant,
+      price: price ?? this.price,
+      purchasePrice: purchasePrice ?? this.purchasePrice,
+      transportCost: transportCost ?? this.transportCost,
+      fullPrice: fullPrice ?? this.fullPrice,
+      halfPrice: halfPrice ?? this.halfPrice,
+      extraQty: extraQty ?? this.extraQty,
+      extraPrice: extraPrice ?? this.extraPrice,
+      servingMethod: servingMethod ?? this.servingMethod,
+      tableNumber: tableNumber ?? this.tableNumber,
+      checked: checked ?? this.checked,
+      itemType: itemType ?? this.itemType,
+    );
+  }
+
   /// Logic Fix: Robust portion math for both New and Old transactions
   double get lineTotal {
     double base;
@@ -68,6 +108,17 @@ class TransactionItemSnapshot {
   }
 
   factory TransactionItemSnapshot.fromMap(Map<dynamic, dynamic> map) {
+    bool toBool(dynamic value, {bool defaultValue = false}) {
+      if (value == null) return defaultValue;
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      if (value is String) {
+        final lower = value.toLowerCase();
+        return lower == 'true' || lower == '1' || lower == 'yes';
+      }
+      return defaultValue;
+    }
+
     return TransactionItemSnapshot(
       id: int.tryParse(map['id']?.toString() ?? '0') ?? 0,
       name: map['name']?.toString() ?? 'Item',
@@ -84,7 +135,7 @@ class TransactionItemSnapshot {
       extraPrice: double.tryParse(map['extra_price']?.toString() ?? '0') ?? 0.0,
       servingMethod: map['serving_method']?.toString() ?? 'Dine-in',
       tableNumber: map['table_number']?.toString() ?? '',
-      checked: map['checked']?.toString() == 'true',
+      checked: toBool(map['checked']),
       itemType: map['item_type']?.toString() ?? 'regular',
     );
   }

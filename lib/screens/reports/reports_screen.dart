@@ -39,29 +39,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
   List<String> _selectedItems = ['All'];
   String _selectedPaymentMode = 'All';
 
-  ImageProvider? _getStaffImage(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) {
-      return FileImage(File(staff.imagePath!));
-    }
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) {
-      if (staff.imageUrl!.startsWith('base64:')) {
-        try {
-          return MemoryImage(base64Decode(staff.imageUrl!.replaceFirst('base64:', '')));
-        } catch (e) {
-          return null;
-        }
-      }
-      return NetworkImage(staff.imageUrl!);
-    }
-    return null;
-  }
-
-  bool _shouldShowPlaceholder(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) return false;
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) return false;
-    return true;
-  }
-
   @override
   Widget build(BuildContext context) {
     final profile = Provider.of<ProfileProvider>(context);
@@ -88,13 +65,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
         String name = s.name;
         String cat = s.category;
 
-        if (cat == '' || cat.toLowerCase() == 'general' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'sale') {
-          try {
-            final master = itemProvider.items.firstWhere((i) => i.name == name);
-            cat = master.category;
-          } catch (_) {
-            cat = 'General';
+        // Robust Lookup from Stock
+        try {
+          final master = itemProvider.items.firstWhere(
+            (i) => i.name.trim().toLowerCase() == name.trim().toLowerCase()
+          );
+          if (master.category.isNotEmpty) {
+            String newCat = master.category;
+            if (cat != newCat) {
+              cat = newCat;
+              Future.microtask(() {
+                final updatedSnapshot = s.copyWith(category: newCat);
+                final updatedSnapshots = tx.itemSnapshots.map((item) => item.id == s.id ? updatedSnapshot : item).toList();
+                Provider.of<TransactionProvider>(context, listen: false)
+                    .updateTransactionSnapshots(tx.id, updatedSnapshots);
+              });
+            }
           }
+        } catch (_) {}
+
+        if (cat.isEmpty || cat.toLowerCase() == 'sale' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'general') {
+          cat = 'General';
         }
 
         bool catMatch = _selectedCategories.contains('All') || _selectedCategories.contains(cat);
@@ -126,7 +117,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       appBar: AppBar(
         elevation: 0,
         title: Text(
-          _currentIndex == 3 ? 'TRASH BIN' : (_currentIndex == 4 ? 'AUDIT REPORT' : 'BUSINESS REPORTS'),
+          _currentIndex == 2 ? 'TRASH BIN' : 'BUSINESS REPORTS',
           style: const TextStyle(
             fontWeight: FontWeight.w900,
             fontSize: 16,
@@ -138,10 +129,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                _currentIndex == 3
+                _currentIndex == 2
                     ? Colors.red.shade400
                     : themeColor.withValues(alpha: 0.8),
-                _currentIndex == 3
+                _currentIndex == 2
                     ? Colors.red.shade700
                     : themeColor,
               ],
@@ -149,33 +140,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
         ),
         actions: [
-          if (_currentIndex == 2)
-            IconButton(
-              tooltip: 'Filter Staff Range',
-              icon: const Icon(Icons.filter_list_rounded, color: Colors.white, size: 24),
-              onPressed: () async {
-                final DateTimeRange? picked = await showDateRangePicker(
-                  context: context,
-                  initialDateRange: _selectedRange,
-                  firstDate: DateTime(2023),
-                  lastDate: DateTime.now().add(const Duration(days: 1)),
-                  builder: (context, child) => Theme(
-                    data: Theme.of(context).copyWith(
-                      colorScheme: ColorScheme.light(
-                        primary: themeColor,
-                        onPrimary: Colors.white,
-                        onSurface: profile.textColor,
-                      ),
-                    ),
-                    child: child!,
-                  ),
-                );
-                if (picked != null) {
-                  setState(() => _selectedRange = picked);
-                }
-              },
-            ),
-          if (_currentIndex < 3 || _currentIndex == 4)
+          if (_currentIndex < 2)
             IconButton(
               tooltip: 'Download Report',
               icon: const Icon(
@@ -189,7 +154,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
-          if (_currentIndex < 2 || _currentIndex == 4)
+          if (_currentIndex < 2)
             SliverToBoxAdapter(
               child: Column(
                 children: [
@@ -227,9 +192,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               items: _selectedItems,
               paymentMode: _selectedPaymentMode,
             ),
-            const _StaffReportList(key: PageStorageKey('staff_report')),
             const _TrashList(key: PageStorageKey('trash_report')),
-            _CEOAuditView(key: const PageStorageKey('audit_report'), range: _selectedRange),
           ],
         ),
       ),
@@ -252,7 +215,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               _selectedPaymentMode = 'All';
             });
           },
-          selectedItemColor: _currentIndex == 3 ? Colors.red : themeColor,
+          selectedItemColor: _currentIndex == 2 ? Colors.red : themeColor,
           unselectedItemColor: profile.secondaryTextColor,
           selectedLabelStyle: const TextStyle(
             fontWeight: FontWeight.w900,
@@ -274,16 +237,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
               label: 'EXPENSES',
             ),
             const BottomNavigationBarItem(
-              icon: Icon(Icons.people_alt_rounded),
-              label: 'STAFF',
-            ),
-            const BottomNavigationBarItem(
               icon: Icon(Icons.delete_outline_rounded),
               label: 'TRASH',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.analytics_rounded),
-              label: 'AUDIT',
             ),
           ],
         ),
@@ -325,41 +280,45 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ],
             ),
           ),
-          if (revenue > 0) ...[
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: LinearProgressIndicator(
-                value: (revenue > 0) ? (revenue - expense).clamp(0, revenue) / revenue : 0,
-                backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-                valueColor: AlwaysStoppedAnimation<Color>(profit >= 0 ? profile.themeColor : Colors.redAccent),
-                minHeight: 4,
-              ),
-            ),
-          ],
+          // if (revenue > 0) ...[
+          //   const SizedBox(height: 8),
+            // ClipRRect(
+            //   borderRadius: BorderRadius.circular(10),
+            //   child: LinearProgressIndicator(
+            //     value: (revenue > 0) ? (revenue - expense).clamp(0, revenue) / revenue : 0,
+            //     backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
+            //     valueColor: AlwaysStoppedAnimation<Color>(profit >= 0 ? profile.themeColor : Colors.redAccent),
+            //     minHeight: 4,
+            //   ),
+            // ),
+          // ],
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.orange.withValues(alpha: 0.1)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.pending_actions_rounded, size: 14, color: Colors.orange),
-                    SizedBox(width: 6),
-                    Text('UPCOMING SALARY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.orange)),
-                  ],
-                ),
-                Text(
-                  profile.showAmount ? '${profile.currencySymbol}${pending.toStringAsFixed(0)}' : '${profile.currencySymbol}****',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.orange),
-                ),
-              ],
+          InkWell(
+            onTap: () => _showStaffPayrollSheet(context, profile, pending),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.1)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.pending_actions_rounded, size: 14, color: Colors.orange),
+                      SizedBox(width: 6),
+                      Text('UPCOMING SALARY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.orange)),
+                    ],
+                  ),
+                  Text(
+                    profile.showAmount ? '${profile.currencySymbol}${pending.toStringAsFixed(0)}' : '${profile.currencySymbol}****',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.orange),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -678,32 +637,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
           _exportTile(
             Icons.picture_as_pdf_rounded,
             'Save as PDF Report',
-            _currentIndex == 0 ? 'Sales summary report' : (_currentIndex == 1 ? 'Expense summary report' : (_currentIndex == 4 ? 'CEO Audit GP Margin Report' : 'Professional business summary')),
+            _currentIndex == 0 ? 'Sales summary report' : 'Expense summary report',
             Colors.red,
             () async {
               final exportService = ExportService();
               final txProvider = Provider.of<TransactionProvider>(context, listen: false);
-              final itemProvider = Provider.of<ItemProvider>(context, listen: false);
 
-              if (_currentIndex == 4) {
-                 // Get date range from CEO view if possible, or use current month
-                 // For now, using a simple month range or the selected range if global
-                 final readymadeItems = itemProvider.items.where((i) => i.itemType == 'readymade').toList();
-                 final allSales = txProvider.getFilteredTransactions(type: 'sale', range: _selectedRange, status: 'completed');
-                 final allPurchases = txProvider.getFilteredTransactions(type: 'purchase', range: _selectedRange, status: 'completed');
-
-                 await exportService.exportAuditToPdf(
-                   readymadeItems,
-                   allSales,
-                   allPurchases,
-                   _selectedRange,
-                   profile.currencySymbol,
-                 );
-                 Navigator.pop(context);
-                 return;
-              }
-
-              final type = _currentIndex == 0 ? 'sale' : (_currentIndex == 1 ? 'purchase' : 'all');
+              final type = _currentIndex == 0 ? 'sale' : 'purchase';
 
                 // Helper to check category match
                 bool matches(String cat) => _selectedCategories.contains('All') || _selectedCategories.contains(cat);
@@ -750,28 +690,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
           _exportTile(
             Icons.table_view_rounded,
             'Export to Excel',
-            _currentIndex == 0 ? 'Export only Sales' : (_currentIndex == 1 ? 'Export only Expenses' : (_currentIndex == 4 ? 'Export Audit to Spreadsheet' : 'Spreadsheet for bookkeeping')),
+            _currentIndex == 0 ? 'Export only Sales' : 'Export only Expenses',
             Colors.green,
             () async {
               final exportService = ExportService();
-              final itemProvider = Provider.of<ItemProvider>(context, listen: false);
 
-              if (_currentIndex == 4) {
-                 final readymadeItems = itemProvider.items.where((i) => i.itemType == 'readymade').toList();
-                 final allSales = txProvider.getFilteredTransactions(type: 'sale', range: _selectedRange, status: 'completed');
-                 final allPurchases = txProvider.getFilteredTransactions(type: 'purchase', range: _selectedRange, status: 'completed');
-
-                 await exportService.exportAuditToExcel(
-                   readymadeItems,
-                   allSales,
-                   allPurchases,
-                   _selectedRange,
-                 );
-                 Navigator.pop(context);
-                 return;
-              }
-
-              final type = _currentIndex == 0 ? 'sale' : (_currentIndex == 1 ? 'purchase' : 'all');
+              final type = _currentIndex == 0 ? 'sale' : 'purchase';
               final allTransactions = txProvider.getFilteredTransactions(
                 type: type,
                 range: _selectedRange,
@@ -815,6 +739,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
       trailing: const Icon(Icons.chevron_right, size: 20),
     );
   }
+
+  void _showStaffPayrollSheet(BuildContext context, ProfileProvider profile, double pending) {
+    AppBottomSheet.show(
+      context: context,
+      profile: profile,
+      title: 'STAFF PAYROLL',
+      child: Consumer<StaffProvider>(
+        builder: (context, staffProvider, child) {
+          final staffList = staffProvider.staffList;
+          if (staffList.isEmpty) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Text('No staff found'),
+              ),
+            );
+          }
+          return Column(
+            children: staffList.map((staff) => _StaffPayrollCard(
+              staff: staff,
+              profile: profile,
+              staffProvider: staffProvider,
+            )).toList(),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _StickySummaryHeader extends SliverPersistentHeaderDelegate {
@@ -856,29 +808,6 @@ class _ReportList extends StatelessWidget {
     required this.items,
     required this.paymentMode,
   });
-
-  ImageProvider? _getStaffImage(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) {
-      return FileImage(File(staff.imagePath!));
-    }
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) {
-      if (staff.imageUrl!.startsWith('base64:')) {
-        try {
-          return MemoryImage(base64Decode(staff.imageUrl!.replaceFirst('base64:', '')));
-        } catch (e) {
-          return null;
-        }
-      }
-      return NetworkImage(staff.imageUrl!);
-    }
-    return null;
-  }
-
-  bool _shouldShowPlaceholder(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) return false;
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) return false;
-    return true;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1002,7 +931,7 @@ class _ReportList extends StatelessWidget {
                           return tx.paymentMode == 'Credit' && (tx.amount - tx.paidAmount) > 0;
                         }).map((data) => data['tx'] as TransactionModel).toList();
 
-                        _showPendingDetails(context, pendingTxs, profile);
+                        _showPendingDetails(context, pendingTxs, profile, itemProvider);
                       } : null,
                     ),
                   ],
@@ -1116,7 +1045,7 @@ class _ReportList extends StatelessWidget {
                     ],
                     Expanded(
                       child: Text(
-                        _getMixedCategoryLabel(tx),
+                        _getMixedCategoryLabel(tx, itemProvider),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: profile.textColor,
@@ -1198,17 +1127,37 @@ class _ReportList extends StatelessWidget {
     return DateFormat('dd MMMM yyyy').format(date).toUpperCase();
   }
 
-  String _getMixedCategoryLabel(TransactionModel tx) {
+  String _getMixedCategoryLabel(TransactionModel tx, ItemProvider itemProvider) {
     final items = tx.itemSnapshots;
     if (items.isEmpty) {
-      return (tx.category.isEmpty || tx.category == 'All') ? 'General' : tx.category;
+      String cat = tx.category;
+      try {
+        final lookupName = tx.type == 'sale' ? 'Quick Sale' : tx.category;
+        final master = itemProvider.items.firstWhere(
+          (i) => i.name.trim().toLowerCase() == lookupName.trim().toLowerCase()
+        );
+        if (master.category.isNotEmpty) cat = master.category;
+      } catch (_) {}
+
+      if (cat.isEmpty || cat.toLowerCase() == 'sale' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'all') {
+        return 'General';
+      }
+      return cat;
     }
 
-    final categories = items.map((e) => e.category).where((c) => c != 'All' && c.isNotEmpty).toSet().toList();
+    final categories = items.map((s) {
+      String c = s.category;
+      try {
+        final master = itemProvider.items.firstWhere(
+          (i) => i.name.trim().toLowerCase() == s.name.trim().toLowerCase()
+        );
+        if (master.category.isNotEmpty) c = master.category;
+      } catch (_) {}
+      return c;
+    }).where((c) => c.isNotEmpty && c != 'All' && c.toLowerCase() != 'sale' && c.toLowerCase() != 'uncategorized').toSet().toList();
+
     if (categories.isEmpty) return 'General';
-    if (categories.length > 1) {
-      return 'Mix';
-    }
+    if (categories.length > 1) return 'Mix';
     return categories.first;
   }
 
@@ -1233,7 +1182,19 @@ class _ReportList extends StatelessWidget {
 
       if (snapshots.isEmpty) {
         String cat = tx.category;
-        if (cat.isEmpty || cat.toLowerCase() == 'sale') cat = 'General';
+        
+        // Step 1: Lookup Current Category from Stock
+        String name = tx.type == 'sale' ? 'Quick Sale' : tx.category;
+        try {
+          final master = itemProvider.items.firstWhere(
+            (i) => i.name.trim().toLowerCase() == name.trim().toLowerCase()
+          );
+          if (master.category.isNotEmpty) cat = master.category;
+        } catch (_) {}
+
+        if (cat.isEmpty || cat.toLowerCase() == 'sale' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'general' || cat == 'All') {
+          cat = 'General';
+        }
 
         // FILTER CHECK: Skip if category/item not in selected filters
         bool catMatch = categories.contains('All') || categories.contains(cat);
@@ -1271,17 +1232,18 @@ class _ReportList extends StatelessWidget {
         String name = s.name;
         String cat = s.category;
 
-        // Resolve "General" Category using Item Menu Lookup
-        if (cat == '' ||
-            cat.toLowerCase() == 'general' ||
-            cat.toLowerCase() == 'uncategorized' ||
-            cat.toLowerCase() == 'sale') {
-          try {
-            final master = itemProvider.items.firstWhere((i) => i.name == name);
+        // Step 1: Lookup Current Category from Stock
+        try {
+          final master = itemProvider.items.firstWhere(
+            (i) => i.name.trim().toLowerCase() == name.trim().toLowerCase()
+          );
+          if (master.category.isNotEmpty) {
             cat = master.category;
-          } catch (_) {
-            cat = 'General';
           }
+        } catch (_) {}
+
+        if (cat.isEmpty || cat.toLowerCase() == 'sale' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'general') {
+          cat = 'General';
         }
 
         // FILTER CHECK: Precision filtering for snapshots
@@ -1444,6 +1406,7 @@ class _ReportList extends StatelessWidget {
     BuildContext context,
     List<TransactionModel> txs,
     ProfileProvider profile,
+    ItemProvider itemProvider,
   ) {
     AppBottomSheet.show(
       context: context,
@@ -1516,7 +1479,7 @@ class _ReportList extends StatelessWidget {
                         ],
                         Expanded(
                           child: Text(
-                            _getMixedCategoryLabel(tx),
+                            _getMixedCategoryLabel(tx, itemProvider),
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: profile.textColor,
@@ -2383,428 +2346,31 @@ class _ReportList extends StatelessWidget {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
-}
 
-class _StaffReportList extends StatelessWidget {
-  const _StaffReportList({super.key});
-
-  Color _getRoleColor(String role, Color themeColor) {
-    switch (role.toLowerCase()) {
-      case 'manager':
-        return Colors.amber.shade700;
-      case 'chef':
-        return Colors.orangeAccent.shade700;
-      case 'waiter':
-        return themeColor;
-      case 'cleaner':
-        return Colors.teal.shade700;
-      case 'security':
-        return Colors.indigo.shade700;
-      default:
-        return themeColor;
-    }
-  }
-
-  ImageProvider? _getStaffImage(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) {
-      return FileImage(File(staff.imagePath!));
-    }
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) {
-      if (staff.imageUrl!.startsWith('base64:')) {
-        try {
-          return MemoryImage(base64Decode(staff.imageUrl!.replaceFirst('base64:', '')));
-        } catch (e) {
-          return null;
-        }
-      }
-      return NetworkImage(staff.imageUrl!);
-    }
-    return null;
-  }
-
-  bool _shouldShowPlaceholder(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) return false;
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) return false;
-    return true;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final staffProvider = Provider.of<StaffProvider>(context);
-    final profile = Provider.of<ProfileProvider>(context);
-    final themeColor = profile.themeColor;
-    final staffList = staffProvider.staffList;
-
-    if (staffList.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.people_outline,
-              size: 64,
-              color: profile.secondaryTextColor.withValues(alpha: 0.1),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No staff records found',
-              style: TextStyle(
-                color: profile.secondaryTextColor,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      itemCount: staffList.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: ElevatedButton.icon(
-            onPressed: () async {
-                final exportService = ExportService();
-                await exportService.exportAllStaffReport(
-                  profile.businessName,
-                  staffList,
-                  staffProvider,
-                  range: (context.findAncestorStateOfType<_ReportsScreenState>())?._selectedRange,
-                );
-              },
-              icon: const Icon(Icons.picture_as_pdf_rounded),
-              label: const Text("DOWNLOAD ALL STAFF REPORT"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: themeColor.withValues(alpha: 0.1),
-                foregroundColor: themeColor,
-                elevation: 0,
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          );
-        }
-
-        final staff = staffList[index - 1];
-        final payable = staffProvider.calculatePayable(staff);
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: profile.cardColor,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100,
-            ),
-          ),
-          child: ExpansionTile(
-            shape: const RoundedRectangleBorder(side: BorderSide.none),
-            collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
-            leading: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: themeColor.withValues(alpha: 0.2),
-                  width: 1,
-                ),
-              ),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: themeColor.withValues(alpha: 0.1),
-                backgroundImage: _getStaffImage(staff),
-                child: _shouldShowPlaceholder(staff)
-                    ? Icon(Icons.person_outline, color: themeColor, size: 18)
-                    : null,
-              ),
-            ),
-            title: Text(
-              staff.name,
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                color: profile.textColor,
-                fontSize: 15,
-                letterSpacing: 0.3,
-              ),
-            ),
-            subtitle: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _getRoleColor(
-                      staff.role,
-                      themeColor,
-                    ).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(
-                      color: _getRoleColor(
-                        staff.role,
-                        themeColor,
-                      ).withValues(alpha: 0.2),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: Text(
-                    staff.role.toUpperCase(),
-                    style: TextStyle(
-                      color: _getRoleColor(staff.role, themeColor),
-                      fontSize: 8,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  'Base: ${profile.currencySymbol}${staff.monthlySalary.toStringAsFixed(0)}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: profile.secondaryTextColor,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Column(
-                  children: [
-                    const Divider(),
-                    _row(
-                      label: 'Base Salary',
-                      value: '${profile.currencySymbol}${profile.showAmount ? staff.monthlySalary.toStringAsFixed(0) : "****"}',
-                      profile: profile,
-                    ),
-                    _row(
-                      label: 'Advance Given (Total)',
-                      value: '${profile.currencySymbol}${profile.showAmount ? staff.advance.toStringAsFixed(0) : "****"}',
-                      profile: profile,
-                      color: Colors.red,
-                    ),
-
-                    // --- ADVANCE HISTORY ---
-                    FutureBuilder<List<StaffAdvanceModel>>(
-                      future: staffProvider.getStaffAdvances(staff.id ?? 0),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const SizedBox(height: 20, child: Center(child: LinearProgressIndicator(minHeight: 1)));
-                        }
-                        if (snapshot.hasData && snapshot.data != null && snapshot.data!.isNotEmpty) {
-                          final List<StaffAdvanceModel> advList = snapshot.data!;
-                          return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 8),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: profile.scaffoldColor,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  "ADVANCE BREAKDOWN",
-                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)
-                                ),
-                                const SizedBox(height: 6),
-                                ...advList.map((adv) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              DateFormat('dd MMM yyyy').format(adv.date),
-                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)
-                                            ),
-                                            Text(
-                                              DateFormat('hh:mm a').format(adv.date),
-                                              style: const TextStyle(fontSize: 9, color: Colors.grey)
-                                            ),
-                                          ],
-                                        ),
-                                        Text(
-                                          "${profile.currencySymbol}${adv.amount.toStringAsFixed(0)}",
-                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red)
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }).toList(),
-                              ],
-                            ),
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    ),
-
-                    _row(
-                      label: 'Leaves (${staff.totalLeaves.toStringAsFixed(1)})',
-                      value: '- ${profile.currencySymbol}${profile.showAmount ? (staff.monthlySalary / 30 * staff.totalLeaves).toStringAsFixed(0) : "****"}',
-                      profile: profile,
-                      color: Colors.red,
-                    ),
-                    const Divider(),
-                    _row(
-                      label: 'NET PAYABLE',
-                      value: '${profile.currencySymbol}${profile.showAmount ? payable.toStringAsFixed(0) : "****"}',
-                      profile: profile,
-                      isBold: true,
-                      color: Colors.green,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => _paySalary(context, staff, payable),
-                            icon: const Icon(Icons.payments_outlined, size: 18),
-                            label: const Text('PAY & ADD TO EXPENSE'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              minimumSize: const Size(0, 45),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 0,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: () async {
-                            final DateTimeRange? picked = await showDateRangePicker(
-                              context: context,
-                              initialDateRange: DateTimeRange(
-                                start: DateTime.now().subtract(const Duration(days: 30)),
-                                end: DateTime.now(),
-                              ),
-                              firstDate: DateTime(2023),
-                              lastDate: DateTime.now(),
-                              builder: (context, child) => Theme(
-                                data: Theme.of(context).copyWith(
-                                  colorScheme: ColorScheme.light(
-                                    primary: themeColor,
-                                    onPrimary: Colors.white,
-                                    onSurface: profile.textColor,
-                                  ),
-                                ),
-                                child: child!,
-                              ),
-                            );
-                            if (picked != null) {
-                              final exportService = ExportService();
-                              await exportService.exportSingleStaffReport(
-                                profile.businessName,
-                                staff,
-                                staffProvider,
-                                picked,
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.red),
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.red.withValues(alpha: 0.1),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _paySalary(BuildContext context, dynamic staff, double amount) async {
-    final txProvider = Provider.of<TransactionProvider>(context, listen: false);
-    final staffProvider = Provider.of<StaffProvider>(context, listen: false);
-    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
-    final profile = Provider.of<ProfileProvider>(context, listen: false);
-
-    final confirm = await AppBottomSheet.showAction(
+  void _showStaffPayrollSheet(BuildContext context, ProfileProvider profile, double pending) {
+    AppBottomSheet.show(
       context: context,
       profile: profile,
-      title: 'Confirm Salary Payment',
-      message:
-          'Add ${profile.currencySymbol}${amount.toStringAsFixed(0)} as an expense and reset leaves/advance for ${staff.name}?',
-      confirmLabel: 'PAY SALARY',
-      confirmColor: Colors.green,
-      icon: Icons.payments_outlined,
-    );
-
-    if (confirm == true) {
-      final tx = TransactionModel(
-        type: 'purchase',
-        category: 'Salary',
-        description:
-            'Salary Paid to ${staff.name} for ${DateFormat('MMMM yyyy').format(DateTime.now())}',
-        amount: amount,
-        date: DateTime.now(),
-        paymentMode: 'Cash',
-        status: 'completed',
-      );
-      await txProvider.addTransaction(tx, itemProvider);
-
-      staff.totalLeaves = 0;
-      await staffProvider.updateStaff(staff);
-      await staffProvider.clearStaffAdvances(staff.id!);
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Salary paid and added to expenses!'),
-          ),
-        );
-      }
-    }
-  }
-
-
-  Widget _row({
-    required String label,
-    required String value,
-    required ProfileProvider profile,
-    bool isBold = false,
-    Color? color,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: profile.secondaryTextColor,
-              fontSize: 12,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: isBold ? FontWeight.w900 : FontWeight.bold,
-              color: color ?? profile.textColor,
-              fontSize: isBold ? 14 : 12,
-            ),
-          ),
-        ],
+      title: 'STAFF PAYROLL',
+      child: Consumer<StaffProvider>(
+        builder: (context, staffProvider, child) {
+          final staffList = staffProvider.staffList;
+          if (staffList.isEmpty) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Text('No staff found'),
+              ),
+            );
+          }
+          return Column(
+            children: staffList.map((staff) => _StaffPayrollCard(
+              staff: staff,
+              profile: profile,
+              staffProvider: staffProvider,
+            )).toList(),
+          );
+        },
       ),
     );
   }
@@ -2975,29 +2541,6 @@ class _TrashListState extends State<_TrashList> {
         visualDensity: VisualDensity.compact,
       ),
     );
-  }
-
-  ImageProvider? _getStaffImage(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) {
-      return FileImage(File(staff.imagePath!));
-    }
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) {
-      if (staff.imageUrl!.startsWith('base64:')) {
-        try {
-          return MemoryImage(base64Decode(staff.imageUrl!.replaceFirst('base64:', '')));
-        } catch (e) {
-          return null;
-        }
-      }
-      return NetworkImage(staff.imageUrl!);
-    }
-    return null;
-  }
-
-  bool _shouldShowPlaceholder(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) return false;
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) return false;
-    return true;
   }
 
   @override
@@ -3671,29 +3214,6 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
     });
   }
 
-  ImageProvider? _getStaffImage(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) {
-      return FileImage(File(staff.imagePath!));
-    }
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) {
-      if (staff.imageUrl!.startsWith('base64:')) {
-        try {
-          return MemoryImage(base64Decode(staff.imageUrl!.replaceFirst('base64:', '')));
-        } catch (e) {
-          return null;
-        }
-      }
-      return NetworkImage(staff.imageUrl!);
-    }
-    return null;
-  }
-
-  bool _shouldShowPlaceholder(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) return false;
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) return false;
-    return true;
-  }
-
   @override
   Widget build(BuildContext context) {
     final profile = widget.profile;
@@ -3862,151 +3382,245 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
       ),
     );
   }
-}
 
-class _CEOAuditView extends StatelessWidget {
-  final DateTimeRange range;
-  const _CEOAuditView({required this.range, super.key});
-
-  ImageProvider? _getStaffImage(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) {
-      return FileImage(File(staff.imagePath!));
-    }
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) {
-      if (staff.imageUrl!.startsWith('base64:')) {
-        try {
-          return MemoryImage(base64Decode(staff.imageUrl!.replaceFirst('base64:', '')));
-        } catch (e) {
-          return null;
-        }
-      }
-      return NetworkImage(staff.imageUrl!);
-    }
-    return null;
-  }
-
-  bool _shouldShowPlaceholder(StaffModel staff) {
-    if (staff.imagePath != null && File(staff.imagePath!).existsSync()) return false;
-    if (staff.imageUrl != null && staff.imageUrl!.isNotEmpty) return false;
-    return true;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final profile = Provider.of<ProfileProvider>(context);
-    final txProvider = Provider.of<TransactionProvider>(context);
-    final itemProvider = Provider.of<ItemProvider>(context);
-
-    // Filter only Readymade items
-    final readymadeItems = itemProvider.items.where((i) => i.itemType == 'readymade' && i.isDeleted == 0).toList();
-
-    // Get sales and purchases for these items in the range
-    final allSales = txProvider.getFilteredTransactions(type: 'sale', range: range, status: 'completed');
-    final allPurchases = txProvider.getFilteredTransactions(type: 'purchase', range: range, status: 'completed');
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-      children: [
-        ...readymadeItems.map((item) {
-          double totalSoldQty = 0;
-          double totalSalesAmt = 0;
-          double totalCostAmt = 0;
-
-          // Calculate Sales for this item
-          for (var tx in allSales) {
-            for (var s in tx.itemSnapshots) {
-              if (s.name == item.name) {
-                double qty = s.qty + s.extraQty;
-                totalSoldQty += qty;
-                totalSalesAmt += s.lineTotal;
-                // Use purchase price from snapshot if available, else from master item
-                double cost = (s.purchasePrice > 0 ? s.purchasePrice : (item.purchasePrice ?? 0)) +
-                              (s.transportCost > 0 ? s.transportCost : (item.transportCost ?? 0));
-                totalCostAmt += qty * cost;
-              }
-            }
+  void _showStaffPayrollSheet(BuildContext context, ProfileProvider profile, double pending) {
+    AppBottomSheet.show(
+      context: context,
+      profile: profile,
+      title: 'STAFF PAYROLL',
+      child: Consumer<StaffProvider>(
+        builder: (context, staffProvider, child) {
+          final staffList = staffProvider.staffList;
+          if (staffList.isEmpty) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Text('No staff found'),
+              ),
+            );
           }
-
-          double avgSaleRate = totalSoldQty > 0 ? totalSalesAmt / totalSoldQty : 0;
-          double avgCostRate = totalSoldQty > 0 ? totalCostAmt / totalSoldQty : (item.purchasePrice ?? 0) + (item.transportCost ?? 0);
-          double unitProfit = avgSaleRate - avgCostRate;
-          double gpMargin = avgSaleRate > 0 ? (unitProfit / avgSaleRate) * 100 : 0;
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: profile.cardColor,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: profile.themeColor.withValues(alpha: 0.3), width: 1.5),
-              boxShadow: [
-                BoxShadow(color: profile.themeColor.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(item.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.5)),
-                          Text(item.category, style: TextStyle(color: profile.secondaryTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(color: profile.themeColor, borderRadius: BorderRadius.circular(8)),
-                      child: const Text('READYMADE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
-                    ),
-                  ],
-                ),
-                const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, thickness: 0.5)),
-                Row(
-                  children: [
-                    _auditStat('Sold Qty', totalSoldQty.toStringAsFixed(1), profile.themeColor),
-                    _auditStat('Avg Sale', '${profile.currencySymbol}${avgSaleRate.toStringAsFixed(1)}', Colors.green),
-                    _auditStat('Avg Cost', '${profile.currencySymbol}${avgCostRate.toStringAsFixed(1)}', Colors.orange),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: (gpMargin >= 0 ? Colors.green : Colors.red).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('GP MARGIN', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: gpMargin >= 0 ? Colors.green : Colors.red)),
-                      Text('${gpMargin.toStringAsFixed(1)}%', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: gpMargin >= 0 ? Colors.green : Colors.red)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          return Column(
+            children: staffList.map((staff) => _StaffPayrollCard(
+              staff: staff,
+              profile: profile,
+              staffProvider: staffProvider,
+            )).toList(),
           );
-        }),
-      ],
-    );
-  }
-
-  Widget _auditStat(String label, String value, Color color) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 2),
-          Text(value, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: color)),
-        ],
+        },
       ),
     );
   }
 }
 
+class _StaffPayrollCard extends StatefulWidget {
+  final StaffModel staff;
+  final ProfileProvider profile;
+  final StaffProvider staffProvider;
+
+  const _StaffPayrollCard({
+    required this.staff,
+    required this.profile,
+    required this.staffProvider,
+  });
+
+  @override
+  State<_StaffPayrollCard> createState() => _StaffPayrollCardState();
+}
+
+class _StaffPayrollCardState extends State<_StaffPayrollCard> {
+  bool _isExpanded = false;
+  List<StaffAdvanceModel> _advances = [];
+  List<StaffLeaveModel> _leaves = [];
+  bool _isLoadingHistory = false;
+
+  Future<void> _loadHistory() async {
+    if (_advances.isNotEmpty || _leaves.isNotEmpty) return;
+    setState(() => _isLoadingHistory = true);
+    final adv = await widget.staffProvider.getStaffAdvances(widget.staff.id!);
+    final lv = await widget.staffProvider.getStaffLeaves(widget.staff.id!);
+    if (mounted) {
+      setState(() {
+        _advances = adv;
+        _leaves = lv;
+        _isLoadingHistory = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final payable = widget.staff.calculateCurrentPayable();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: widget.profile.scaffoldColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: widget.profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            onTap: () {
+              setState(() => _isExpanded = !_isExpanded);
+              if (_isExpanded) _loadHistory();
+            },
+            leading: CircleAvatar(
+              backgroundColor: widget.profile.themeColor.withValues(alpha: 0.1),
+              child: Text(widget.staff.name[0].toUpperCase(), style: TextStyle(color: widget.profile.themeColor, fontWeight: FontWeight.bold)),
+            ),
+            title: Text(widget.staff.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(widget.staff.role, style: TextStyle(fontSize: 12, color: widget.profile.secondaryTextColor)),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${widget.profile.currencySymbol}${payable.toStringAsFixed(0)}',
+                  style: TextStyle(fontWeight: FontWeight.w900, color: widget.profile.themeColor, fontSize: 16),
+                ),
+                Text('Payable', style: TextStyle(fontSize: 10, color: widget.profile.secondaryTextColor)),
+              ],
+            ),
+          ),
+          if (_isExpanded) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _infoRow('Join Date', DateFormat('dd MMM yyyy').format(widget.staff.joinDate)),
+                  const SizedBox(height: 16),
+                  const Text('HISTORY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  if (_isLoadingHistory)
+                    const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2)))
+                  else ...[
+                    if (_advances.isEmpty && _leaves.isEmpty)
+                      const Text('No recent history', style: TextStyle(fontSize: 12, color: Colors.grey))
+                    else ...[
+                      ..._advances.map((a) => _historyItem(Icons.money_off_rounded, 'Advance', a.amount, a.date, Colors.redAccent)),
+                      ..._leaves.map((l) => _historyItem(Icons.event_busy_rounded, l.type == 1.0 ? 'Full Leave' : 'Half Leave', l.type, l.date, Colors.orange)),
+                    ],
+                  ],
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            ExportService().exportSingleStaffReport(
+                              widget.profile.businessName,
+                              widget.staff,
+                              widget.staffProvider,
+                              DateTimeRange(start: widget.staff.joinDate, end: DateTime.now()),
+                            );
+                          },
+                          icon: const Icon(Icons.download_rounded, size: 18),
+                          label: const Text('REPORT'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: widget.profile.themeColor,
+                            side: BorderSide(color: widget.profile.themeColor),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => _showPaySalaryDialog(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: widget.profile.themeColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('PAY SALARY', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(fontSize: 13, color: widget.profile.secondaryTextColor)),
+        Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _historyItem(IconData icon, String label, double amount, DateTime date, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 8),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 12))),
+          Text(DateFormat('dd MMM').format(date), style: TextStyle(fontSize: 11, color: widget.profile.secondaryTextColor)),
+          const SizedBox(width: 12),
+          Text(
+            label.contains('Leave') ? '${amount.toStringAsFixed(1)}' : '${widget.profile.currencySymbol}${amount.toStringAsFixed(0)}',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPaySalaryDialog(BuildContext context) {
+    final payable = widget.staff.calculateCurrentPayable();
+    AppBottomSheet.showAction(
+      context: context,
+      profile: widget.profile,
+      title: 'Pay Salary',
+      message: 'Confirm paying ${widget.profile.currencySymbol}${payable.toStringAsFixed(0)} to ${widget.staff.name}?\nThis will clear all advances and leaves for this period.',
+      confirmLabel: 'PAY NOW',
+      icon: Icons.payments_rounded,
+    ).then((confirmed) {
+      if (confirmed == true) {
+        _handlePaySalary(payable);
+      }
+    });
+  }
+
+  Future<void> _handlePaySalary(double amount) async {
+    // 1. Add to Expenses
+    final txProvider = Provider.of<TransactionProvider>(context, listen: false);
+    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+    
+    final expenseTx = TransactionModel(
+      amount: amount,
+      type: 'expense',
+      category: 'Salary',
+      description: 'Salary paid to ${widget.staff.name}',
+      date: DateTime.now(),
+      paymentMode: 'Cash',
+      isSynced: 0,
+    );
+    await txProvider.addTransaction(expenseTx, itemProvider);
+
+    // 2. Clear Staff Advances & Leaves
+    await widget.staffProvider.clearStaffAdvances(widget.staff.id!);
+    await widget.staffProvider.clearStaffLeaves(widget.staff.id!);
+    
+    if (mounted) {
+      Navigator.pop(context); // Close sheet
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Salary paid successfully to ${widget.staff.name}')),
+      );
+    }
+  }
+}

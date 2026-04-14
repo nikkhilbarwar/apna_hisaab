@@ -506,6 +506,17 @@ class ProfileProvider with ChangeNotifier {
     };
   }
 
+  bool _toBool(dynamic val) {
+    if (val == null) return false;
+    if (val is bool) return val;
+    if (val is num) return val.toInt() != 0;
+    if (val is String) {
+      final s = val.toLowerCase();
+      return s == 'true' || s == '1' || s == 'yes';
+    }
+    return false;
+  }
+
   Future<void> loadFromMap(Map<String, dynamic> map) async {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
     final prefs = await SharedPreferences.getInstance();
@@ -535,24 +546,25 @@ class ProfileProvider with ChangeNotifier {
     
     final darkMode = map['is_dark_mode'] ?? map['isDarkMode'];
     if (darkMode != null) { 
-      _isDarkMode = darkMode is bool ? darkMode : (darkMode.toString() == 'true');
+      _isDarkMode = _toBool(darkMode);
       await prefs.setBool('is_dark_mode_$uid', _isDarkMode); 
     }
 
     if (map['total_tables'] != null) { _totalTables = map['total_tables']; await prefs.setInt('total_tables_$uid', _totalTables); }
-    if (map['show_amount'] != null) { _showAmount = map['show_amount']; await prefs.setBool('show_amount_$uid', _showAmount); }
-    if (map['auto_print'] != null) { _isAutoPrintEnabled = map['auto_print']; await prefs.setBool('auto_print_$uid', _isAutoPrintEnabled); }
-    if (map['kot_enabled'] != null) { _isKotEnabled = map['kot_enabled']; await prefs.setBool('kot_enabled_$uid', _isKotEnabled); }
+    if (map['show_amount'] != null) { _showAmount = _toBool(map['show_amount']); await prefs.setBool('show_amount_$uid', _showAmount); }
+    if (map['auto_print'] != null) { _isAutoPrintEnabled = _toBool(map['auto_print']); await prefs.setBool('auto_print_$uid', _isAutoPrintEnabled); }
+    if (map['kot_enabled'] != null) { _isKotEnabled = _toBool(map['kot_enabled']); await prefs.setBool('kot_enabled_$uid', _isKotEnabled); }
     if (map['custom_pin'] != null) { _customPin = map['custom_pin']; await prefs.setString('custom_pin_$uid', _customPin); }
-    if (map['is_pin_enabled'] != null) { _isPinEnabled = map['is_pin_enabled']; await prefs.setBool('is_pin_enabled_$uid', _isPinEnabled); }
-    if (map['is_biometric_enabled'] != null) { _isBiometricEnabled = map['is_biometric_enabled']; await prefs.setBool('is_biometric_enabled_$uid', _isBiometricEnabled); }
+    if (map['is_pin_enabled'] != null) { _isPinEnabled = _toBool(map['is_pin_enabled']); await prefs.setBool('is_pin_enabled_$uid', _isPinEnabled); }
+    if (map['is_biometric_enabled'] != null) { _isBiometricEnabled = _toBool(map['is_biometric_enabled']); await prefs.setBool('is_biometric_enabled_$uid', _isBiometricEnabled); }
     if (map['license_key'] != null) { _licenseKey = map['license_key']; await prefs.setString('license_key_$uid', _licenseKey); }
-    if (map['is_app_activated'] != null) { _isActivated = map['is_app_activated']; await prefs.setBool('is_app_activated_$uid', _isActivated); }
-    if (map['is_lifetime'] != null) { _isLifetime = map['is_lifetime']; await prefs.setBool('is_lifetime_$uid', _isLifetime); }
+    if (map['is_app_activated'] != null) { _isActivated = _toBool(map['is_app_activated']); await prefs.setBool('is_app_activated_$uid', _isActivated); }
+    if (map['is_lifetime'] != null) { _isLifetime = _toBool(map['is_lifetime']); await prefs.setBool('is_lifetime_$uid', _isLifetime); }
     if (map['expiry_date'] != null) { _expiryDate = DateTime.tryParse(map['expiry_date'].toString()); await prefs.setString('expiry_date_$uid', map['expiry_date'].toString()); }
 
     notifyListeners();
   }
+
 
   Future<void> _syncToFirebase({String? overrideLogo, String? overrideQR}) async {
     if (!_isCloudSyncEnabled) return;
