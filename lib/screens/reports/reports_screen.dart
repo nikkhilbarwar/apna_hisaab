@@ -3721,8 +3721,14 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
     final double leaveDeduction = widget.staffProvider.calculateLeaveDeduction(widget.staff);
     final double advanceDeduction = widget.staffProvider.calculateAdvanceTotal(widget.staff);
     
-    // Estimate leave days from deduction if monthly salary is available
-    final int estLeaveDays = mSalary > 0 ? (leaveDeduction / (mSalary / 30)).round() : 0;
+    // Accurate Day Count: Uses the same logic as StaffProvider (getDaysInMonth)
+    final int daysInThisMonth = DateUtils.getDaysInMonth(DateTime.now().year, DateTime.now().month);
+    final double perDaySalary = mSalary / daysInThisMonth;
+    
+    // Estimate leave days based on the current month's per-day rate
+    final double estLeaveDays = perDaySalary > 0 ? (leaveDeduction / perDaySalary) : 0;
+    // Format to 1 decimal if half day exists, else round
+    final String leaveDaysStr = (estLeaveDays % 1 == 0) ? estLeaveDays.toInt().toString() : estLeaveDays.toStringAsFixed(1);
 
     salarySnapshots.add(TransactionItemSnapshot(
       id: -1,
@@ -3741,7 +3747,7 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
     if (leaveDeduction > 0) {
       salarySnapshots.add(TransactionItemSnapshot(
         id: -2,
-        name: 'Leave Deductions ($estLeaveDays Days)',
+        name: 'Leave Deductions ($leaveDaysStr Days)',
         category: 'Salary',
         qty: 1,
         unit: 'days',

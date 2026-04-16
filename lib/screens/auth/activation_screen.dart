@@ -6,7 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../providers/profile_provider.dart';
 import '../../services/license_service.dart';
 import '../../services/auth_service.dart';
-import '../dashboard/dashboard_screen.dart';
+import '../../main.dart';
+import '../main_navigation.dart';
 import 'login_screen.dart';
 import '../../core/widgets/app_bottom_sheet.dart';
 
@@ -36,7 +37,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
   }
 
   void _contactSupport() async {
-    const phone = "+919992256959"; // REPLACE WITH YOUR ACTUAL WHATSAPP NUMBER
+    const phone = "+919992256959"; 
     final message = "Hello, I need a license key for Apna Hisaab.\nMy Device ID: $_deviceId";
     final url = Uri.parse("https://wa.me/$phone?text=${Uri.encodeComponent(message)}");
     
@@ -74,16 +75,12 @@ class _ActivationScreenState extends State<ActivationScreen> {
           bool success = await profile.activateLicense(key);
           
           if (success) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Premium Activated! Welcome to Apna Hisaab."), backgroundColor: Colors.green),
-            );
-            // Navigate to Dashboard after activation
             if (mounted) {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const DashboardScreen()),
-                (route) => false,
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Premium Activated! Welcome to Apna Hisaab."), backgroundColor: Colors.green),
               );
+              // Restart app to refresh all providers and navigation state
+              RestartWidget.restartApp(context);
             }
           }
         }
@@ -292,7 +289,6 @@ class _ActivationScreenState extends State<ActivationScreen> {
             const SizedBox(height: 20),
             Text("NEED HELP?", style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold, fontSize: 12)),
             const SizedBox(height: 16),
-            // Device ID Card
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(

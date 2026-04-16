@@ -1000,8 +1000,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                           const SizedBox(height: 12),
                           _buildHistoryList(filteredDocs, profile),
                           const SizedBox(height: 30),
-                          _buildChatSectionHeader(profile),
-                          _buildRecentChatsList(profile),
                         ],
                       ),
                     );
@@ -1139,76 +1137,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildChatSectionHeader(ProfileProvider profile) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        children: [
-          const Icon(Icons.chat_outlined, color: Colors.blue, size: 20),
-          const SizedBox(width: 8),
-          Text("USER CHATS & REPLIES", style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold, letterSpacing: 1)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecentChatsList(ProfileProvider profile) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: LicenseService.firestore.collection('support_tickets').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox.shrink();
-        
-        final allDocs = snapshot.data!.docs;
-        final tickets = allDocs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          return data['status'] != 'deleted';
-        }).toList();
-
-        // Sort manually by lastUpdate descending
-        tickets.sort((a, b) {
-          final aTime = (a.data() as Map<String, dynamic>)['lastUpdate'] as Timestamp?;
-          final bTime = (b.data() as Map<String, dynamic>)['lastUpdate'] as Timestamp?;
-          if (aTime == null || bTime == null) return 0;
-          return bTime.compareTo(aTime);
-        });
-
-        // Limit to top 5
-        final limitedTickets = tickets.take(5).toList();
-
-        if (limitedTickets.isEmpty) return Center(child: Text("No messages yet", style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)));
-
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: limitedTickets.length,
-          itemBuilder: (context, i) {
-            final ticket = limitedTickets[i].data() as Map<String, dynamic>;
-            final id = limitedTickets[i].id;
-            return Card(
-              color: profile.cardColor,
-              margin: const EdgeInsets.only(bottom: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: ListTile(
-                onTap: () => _showTicketChat(id, ticket, profile),
-                leading: CircleAvatar(
-                  backgroundColor: profile.themeColor.withValues(alpha: 0.1),
-                  child: Text(ticket['restaurantName']?[0] ?? "U", style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.bold))),
-                title: Row(
-                  children: [
-                    Expanded(child: Text(ticket['restaurantName'] ?? "Unknown", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                    _buildSmallStatusBadge(ticket['status'] ?? 'open'),
-                  ],
-                ),
-                subtitle: Text(ticket['message'] ?? "", maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
-                trailing: const Icon(Icons.chevron_right_rounded, size: 20),
-              ),
-            );
-          },
-        );
-      },
     );
   }
 
@@ -1529,11 +1457,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
             const Divider(),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('support_tickets').orderBy('lastUpdate', descending: true).snapshots(),
+                stream: FirebaseFirestore.instance.collection('support_tickets').orderBy('createdAt', descending: true).snapshots(),
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
                   if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                   
-                  // Filter out deleted tickets
                   final docs = (snapshot.data?.docs ?? []).where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     return data['status'] != 'deleted';
@@ -1550,12 +1478,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                     itemBuilder: (context, index) {
                       final data = docs[index].data() as Map<String, dynamic>;
                       final status = data['status'] ?? 'open';
-                      final lastUpdate = data['lastUpdate'] as Timestamp?;
+                      final lastUpdate = data['lastUpdate'] as Timestamp? ?? data['createdAt'] as Timestamp?;
                       
                       Color statusColor;
-                      if (status == 'deleted') {
-                        statusColor = Colors.grey;
-                      } else if (status == 'open') {
+                      if (status == 'open') {
                         statusColor = Colors.red;
                       } else if (status == 'answered') {
                         statusColor = Colors.orange;
@@ -1563,45 +1489,61 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                         statusColor = Colors.green;
                       }
 
-                      return Card(
-                        elevation: 0,
-                        color: profile.scaffoldColor,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: statusColor.withValues(alpha: 0.3))),
-                        child: ListTile(
-                          onTap: () => _showAdminChat(docs[index].id, profile),
-                          leading: CircleAvatar(
-                            backgroundColor: statusColor.withValues(alpha: 0.1),
-                            child: Icon(Icons.help_center_outlined, color: statusColor),
-                          ),
-                          title: Text(data['restaurantName'] ?? 'Unknown Business', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("${data['ownerName'] ?? 'No Name'} • ${data['phone'] ?? 'No Phone'}", 
-                                style: TextStyle(color: profile.themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 2),
-                              Text(data['subject'] ?? 'No Subject', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
-                              Text("Updated: ${lastUpdate != null ? DateFormat('dd-MMM HH:mm').format(lastUpdate.toDate()) : 'N/A'}", style: const TextStyle(fontSize: 9)),
-                            ],
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                                child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                      final licenseKey = data['licenseKey'] ?? '';
+
+                      return FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance.collection('licenses').doc(licenseKey).get(),
+                        builder: (context, licSnapshot) {
+                          // If still loading from licenses, show ticket data as fallback immediately
+                          final licData = licSnapshot.data?.data() as Map<String, dynamic>? ?? {};
+                          
+                          final businessName = licData['restaurantName'] ?? data['restaurantName'] ?? data['businessName'] ?? 'Loading...';
+                          final ownerName = licData['ownerName'] ?? data['ownerName'] ?? 'User';
+                          final subject = data['subject'] ?? 'No Subject';
+                          final message = data['message'] ?? 'No Message';
+
+                          return Card(
+                            elevation: 0,
+                            color: profile.scaffoldColor,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: statusColor.withValues(alpha: 0.3))),
+                            child: ListTile(
+                              onTap: () => _showAdminChat(docs[index].id, profile),
+                              leading: CircleAvatar(
+                                backgroundColor: statusColor.withValues(alpha: 0.1),
+                                child: Icon(Icons.help_center_outlined, color: statusColor),
                               ),
-                              const SizedBox(width: 4),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                                onPressed: () => _deleteTicket(docs[index].id, data['restaurantName'] ?? 'Unknown', profile),
-                                constraints: const BoxConstraints(),
-                                padding: const EdgeInsets.all(4),
+                              title: Text(businessName, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("By: $ownerName", style: TextStyle(color: profile.secondaryTextColor, fontSize: 10)),
+                                  const SizedBox(height: 2),
+                                  Text(subject, style: TextStyle(color: profile.themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 2),
+                                  Text(message, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
+                                  Text("Updated: ${lastUpdate != null ? DateFormat('dd-MMM HH:mm').format(lastUpdate.toDate()) : 'N/A'}", style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                                    child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                                    onPressed: () => _deleteTicket(docs[index].id, businessName, profile),
+                                    constraints: const BoxConstraints(),
+                                    padding: const EdgeInsets.all(4),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
                       );
                     },
                   );
@@ -1665,171 +1607,186 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
           color: profile.cardColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         ),
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         height: MediaQuery.of(context).size.height * 0.9,
-        child: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance.collection('support_tickets').doc(ticketId).snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-            final data = snapshot.data!.data() as Map<String, dynamic>;
-            final List replies = data['replies'] ?? [];
-            final status = data['status'] ?? 'open';
-            final bool isDeleted = status == 'deleted';
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          child: Scaffold(
+            backgroundColor: profile.cardColor,
+            resizeToAvoidBottomInset: true,
+            appBar: AppBar(
+              backgroundColor: profile.cardColor,
+              elevation: 0,
+              automaticallyImplyLeading: false,
+              title: StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance.collection('support_tickets').doc(ticketId).snapshots(),
+                builder: (context, snapshot) {
+                  final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+                  final licenseKey = data['licenseKey'] ?? '';
+                  
+                  return FutureBuilder<DocumentSnapshot>(
+                    future: FirebaseFirestore.instance.collection('licenses').doc(licenseKey).get(),
+                    builder: (context, licSnapshot) {
+                      final licData = licSnapshot.data?.data() as Map<String, dynamic>? ?? {};
+                      final bName = licData['restaurantName'] ?? data['restaurantName'] ?? data['businessName'] ?? 'Support Chat';
+                      final oName = licData['ownerName'] ?? data['ownerName'] ?? 'User';
+                      final phone = (licData['phone'] ?? licData['mobile'] ?? data['phone'] ?? '').toString();
 
-            return Column(
-              children: [
-                const SizedBox(height: 12),
-                Container(width: 40, height: 4, decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2))),
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(data['restaurantName'] ?? 'Support Chat', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                            Text("${data['ownerName']} (${data['phone']})", style: TextStyle(color: profile.themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                            Text("Subject: ${data['subject']}", style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                      if (status != 'resolved' && !isDeleted)
-                        TextButton.icon(
-                          onPressed: () => LicenseService.resolveTicket(ticketId),
-                          icon: const Icon(Icons.check_circle_outline, size: 18),
-                          label: const Text("Resolve"),
-                        ),
-                      IconButton(
-                        onPressed: () => _deleteTicket(ticketId, data['restaurantName'] ?? 'Support Chat', profile, shouldPop: true),
-                        icon: const Icon(Icons.delete_forever_rounded, color: Colors.red),
-                        tooltip: "Delete Ticket",
-                      ),
-                    ],
-                  ),
-                ),
-                if (isDeleted)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    color: Colors.red.withValues(alpha: 0.1),
-                    child: const Text(
-                      "USER HAS DELETED THIS ACCOUNT/DATA",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10),
-                    ),
-                  ),
-                const Divider(height: 1),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(20),
-                    reverse: true,
-                    children: [
-                      // Replies
-                      ...replies.reversed.map((reply) {
-                        bool isAdmin = reply['senderRole'] == 'admin';
-                        final replyId = reply['id']?.toString() ?? '';
-                        return GestureDetector(
-                          onLongPress: () => _confirmDeleteReply(ticketId, replyId, profile),
-                          child: _buildChatBubble(
-                            message: reply['message'],
-                            sender: reply['senderName'],
-                            time: reply['timestamp'] ?? '',
-                            isMe: isAdmin,
-                            profile: profile,
-                          ),
-                        );
-                      }),
-                      // Original Message
-                      _buildChatBubble(
-                        message: data['message'] ?? '',
-                        sender: data['restaurantName'] ?? "User",
-                        time: data['createdAt'] != null ? (data['createdAt'] as Timestamp).toDate().toIso8601String() : '',
-                        isMe: false,
-                        profile: profile,
-                      ),
-                    ],
-                  ),
-                ),
-                if (!isDeleted)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: replyController,
-                            decoration: InputDecoration(
-                              hintText: "Type a reply...",
-                              filled: true,
-                              fillColor: profile.scaffoldColor,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(bName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                Text("$oName ${phone.isNotEmpty ? '• $phone' : ''}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                              ],
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          onPressed: () async {
-                            if (replyController.text.trim().isNotEmpty) {
-                              await LicenseService.addTicketReply(
-                                ticketId: ticketId,
-                                message: replyController.text.trim(),
-                                senderRole: 'admin',
-                                senderName: 'Support Team',
-                              );
-                              replyController.clear();
-                            }
-                          },
-                          icon: const Icon(Icons.send),
-                          style: IconButton.styleFrom(backgroundColor: profile.themeColor),
-                        ),
-                      ],
+                          if (phone.isNotEmpty)
+                            IconButton(
+                              icon: const Icon(Icons.call, color: Colors.green),
+                              onPressed: () => launchUrl(Uri.parse('tel:$phone')),
+                              tooltip: 'Call $oName',
+                            ),
+                        ],
+                      );
+                    },
+                  );
+                }
+              ),
+              actions: [
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            body: StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('support_tickets').doc(ticketId).snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                final data = snapshot.data!.data() as Map<String, dynamic>;
+                final List replies = data['replies'] ?? [];
+                
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                  reverse: true,
+                  children: [
+                    ...replies.reversed.map((reply) {
+                      return _buildChatBubble(
+                        message: reply['message'] ?? '',
+                        sender: reply['senderName'] ?? '',
+                        time: reply['timestamp'],
+                        isMe: reply['senderRole'] == 'admin',
+                        profile: profile,
+                      );
+                    }),
+                    _buildChatBubble(
+                      message: data['message'] ?? '',
+                      sender: data['restaurantName'] ?? "User",
+                      time: data['createdAt'],
+                      isMe: false,
+                      profile: profile,
                     ),
-                  )
-                else
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      "This ticket is deleted. Replies are disabled.",
-                      style: TextStyle(color: profile.secondaryTextColor, fontStyle: FontStyle.italic),
+                  ],
+                );
+              },
+            ),
+            bottomNavigationBar: Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+                left: 16, right: 16, top: 8
+              ),
+              decoration: BoxDecoration(
+                color: profile.cardColor,
+                border: Border(top: BorderSide(color: profile.secondaryTextColor.withValues(alpha: 0.1))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: replyController,
+                      style: TextStyle(color: profile.textColor),
+                      decoration: InputDecoration(
+                        hintText: "Type reply...",
+                        filled: true,
+                        fillColor: profile.scaffoldColor,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                      ),
                     ),
                   ),
-              ],
-            );
-          },
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    onPressed: () async {
+                      if (replyController.text.trim().isNotEmpty) {
+                        await LicenseService.addTicketReply(
+                          ticketId: ticketId,
+                          message: replyController.text.trim(),
+                          senderRole: 'admin',
+                          senderName: 'Support Team',
+                        );
+                        replyController.clear();
+                      }
+                    },
+                    icon: const Icon(Icons.send),
+                    style: IconButton.styleFrom(backgroundColor: profile.themeColor),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildChatBubble({required String message, required String sender, required String time, required bool isMe, required ProfileProvider profile}) {
+  Widget _buildChatBubble({required String message, required String sender, required dynamic time, required bool isMe, required ProfileProvider profile}) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
         crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            child: Text(sender, style: TextStyle(fontSize: 9, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
-          ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            margin: const EdgeInsets.only(bottom: 8),
-            constraints: const BoxConstraints(maxWidth: 250),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            margin: const EdgeInsets.only(bottom: 2),
+            constraints: const BoxConstraints(maxWidth: 280),
             decoration: BoxDecoration(
-              color: isMe ? profile.themeColor : profile.cardColor,
+              color: isMe ? profile.themeColor : (profile.isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade200),
               borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
-                bottomLeft: Radius.circular(isMe ? 16 : 0),
-                bottomRight: Radius.circular(isMe ? 0 : 16),
+                topLeft: const Radius.circular(12),
+                topRight: const Radius.circular(12),
+                bottomLeft: Radius.circular(isMe ? 12 : 0),
+                bottomRight: Radius.circular(isMe ? 0 : 12),
               ),
             ),
-            child: Text(message, style: TextStyle(color: isMe ? Colors.white : profile.textColor, fontSize: 13)),
+            child: Text(message, style: TextStyle(color: isMe ? Colors.white : profile.textColor, fontSize: 14)),
           ),
+          if (time != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
+              child: Text(
+                _formatTime(time),
+                style: TextStyle(fontSize: 9, color: profile.secondaryTextColor),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  String _formatTime(dynamic timeData) {
+    if (timeData == null) return "";
+    try {
+      DateTime dt;
+      if (timeData is Timestamp) {
+        dt = timeData.toDate();
+      } else if (timeData is String) {
+        if (timeData.isEmpty) return "";
+        dt = DateTime.tryParse(timeData) ?? DateTime.now();
+      } else {
+        return "";
+      }
+      return DateFormat('hh:mm a').format(dt);
+    } catch (e) {
+      return "";
+    }
   }
 
   Widget _buildSmallStatusBadge(String status) {

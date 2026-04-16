@@ -717,10 +717,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showSupportTickets(ProfileProvider profile) async {
-    // लॉगिन होने तक इंतज़ार करें, ताकि Firestore को पता चले कि आप कौन हैं
+    // Ensure auth once
     await LicenseService.ensureAuth();
-
     if (!mounted) return;
+
+    // Create the stream instance once here so it's stable inside the bottom sheet
+    final ticketsStream = LicenseService.getTickets(profile.licenseKey);
 
     showModalBottomSheet(
       context: context,
@@ -756,117 +758,107 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const Divider(),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: LicenseService.getTickets(profile.licenseKey),
+                stream: ticketsStream,
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
-                    return Center(child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Text("Error loading tickets: ${snapshot.error}", textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
-                    ));
+                    return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
                   }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                  
+                  // Fix: Only show loader if we have NO data and are waiting.
+                  // If hasData is true, we keep showing the cards even if connectionState is waiting.
+                  if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.confirmation_number_outlined, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.5)),
-                          const SizedBox(height: 16),
-                          Text("No tickets found", style: TextStyle(color: profile.secondaryTextColor)),
-                          if (profile.licenseKey.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
-                              child: Text("Warning: Your profile does not have a license key associated. Tickets might not be visible.",
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold)),
-                            ),
-                          TextButton(
-                            onPressed: () => _showCreateTicketDialog(profile),
-                            child: const Text("Create a Support Ticket"),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
 
-                  final allDocs = snapshot.data!.docs;
+                  final allDocs = snapshot.data?.docs ?? [];
                   final docs = allDocs.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     return data['status'] != 'deleted';
                   }).toList();
 
-                  if (docs.isEmpty) {
+                  if (docs.isEmpty && snapshot.connectionState != ConnectionState.waiting) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.confirmation_number_outlined, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.5)),
+                          Icon(Icons.confirmation_number_outlined, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.3)),
                           const SizedBox(height: 16),
-                          Text("No tickets found", style: TextStyle(color: profile.secondaryTextColor)),
-                          TextButton(
+                          Text(profile.licenseKey.isEmpty ? "License not found" : "No tickets yet", 
+                            style: TextStyle(color: profile.secondaryTextColor)),
+                          TextButton.icon(
                             onPressed: () => _showCreateTicketDialog(profile),
-                            child: const Text("Create a Support Ticket"),
+                            icon: const Icon(Icons.add_circle_outline),
+                            label: const Text("Create Ticket"),
                           ),
                         ],
                       ),
                     );
                   }
 
-                  // Client-side sorting since server-side orderBy was disabled
+                  // Sorting
                   docs.sort((a, b) {
-                    final aData = a.data() as Map<String, dynamic>;
-                    final bData = b.data() as Map<String, dynamic>;
-
-                    final aTime = aData['lastUpdate'] as Timestamp?;
-                    final bTime = bData['lastUpdate'] as Timestamp?;
-
-                    // Put newest (including null/just created) at the top
-                    if (aTime == null && bTime == null) return 0;
-                    if (aTime == null) return -1;
-                    if (bTime == null) return 1;
+                    final aTime = (a.data() as Map<String, dynamic>)['lastUpdate'] as Timestamp?;
+                    final bTime = (b.data() as Map<String, dynamic>)['lastUpdate'] as Timestamp?;
+                    if (aTime == null) return 1;
+                    if (bTime == null) return -1;
                     return bTime.compareTo(aTime);
                   });
 
                   return ListView.builder(
                     itemCount: docs.length,
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 30),
                     itemBuilder: (context, index) {
                       final doc = docs[index];
                       final data = doc.data() as Map<String, dynamic>;
                       final status = data['status'] ?? 'open';
                       final lastUpdate = data['lastUpdate'] as Timestamp?;
 
-                      Color statusColor;
-                      switch(status) {
-                        case 'answered': statusColor = Colors.orange; break;
-                        case 'resolved': statusColor = Colors.green; break;
-                        case 'closed': statusColor = Colors.grey; break;
-                        default: statusColor = Colors.blue;
-                      }
+                      Color statusColor = status == 'answered' ? Colors.orange : (status == 'resolved' ? Colors.green : Colors.blue);
 
-                      return ListTile(
-                        onTap: () => _showTicketChat(doc.id, profile),
-                        onLongPress: () => _confirmDeleteTicket(doc.id, profile),
-                        leading: CircleAvatar(
-                          backgroundColor: statusColor.withValues(alpha: 0.1),
-                          child: Icon(Icons.help_outline, color: statusColor),
+                      return Card(
+                        color: profile.cardColor,
+                        elevation: 0,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(color: profile.themeColor.withValues(alpha: 0.1)),
                         ),
-                        title: Text(data['subject'] ?? 'No Subject', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
-                        subtitle: Text(
-                          "Last update: ${lastUpdate != null ? DateFormat('dd-MM-yyyy HH:mm').format(lastUpdate.toDate()) : 'N/A'}",
-                          style: TextStyle(color: profile.secondaryTextColor, fontSize: 12),
-                        ),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: statusColor.withValues(alpha: 0.5)),
+                        child: ListTile(
+                          onTap: () => _showTicketChat(doc.id, profile),
+                          contentPadding: const EdgeInsets.all(16),
+                          title: Row(
+                            children: [
+                              Expanded(child: Text(data['subject'] ?? 'No Subject', style: const TextStyle(fontWeight: FontWeight.bold))),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                                child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
                           ),
-                          child: Text(
-                            status.toUpperCase(),
-                            style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 8),
+                              Text(data['message'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: profile.secondaryTextColor, fontSize: 13)),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Icon(Icons.access_time, size: 14, color: profile.secondaryTextColor.withValues(alpha: 0.5)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    lastUpdate != null ? DateFormat('dd MMM, hh:mm a').format(lastUpdate.toDate()) : 'Recently',
+                                    style: TextStyle(fontSize: 11, color: profile.secondaryTextColor.withValues(alpha: 0.5)),
+                                  ),
+                                  const Spacer(),
+                                  if (data['hasUnreadReply'] == true)
+                                    Container(
+                                      width: 8, height: 8,
+                                      decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+                                    ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -1017,7 +1009,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         ),
         height: MediaQuery.of(context).size.height * 0.9,
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        // Remove direct padding here, Scaffold handles it better
         child: StreamBuilder<DocumentSnapshot>(
           stream: LicenseService.getTicketStream(ticketId),
           builder: (context, snapshot) {
@@ -1028,60 +1020,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
             final isResolved = data['status'] == 'resolved';
             final subject = data['subject'] ?? 'Support Ticket';
             final initialMessage = data['message'] ?? '';
-            final createdAt = (data['createdAt'] as Timestamp).toDate();
+            final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
 
-            return Column(
-              children: [
-                // --- Premium Glassmorphism Header ---
-                Container(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                  decoration: BoxDecoration(
-                    color: profile.cardColor,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
-                  ),
-                  child: Column(
-                    children: [
-                      Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2))),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.1), shape: BoxShape.circle),
-                            child: Icon(Icons.support_agent_rounded, color: profile.themeColor, size: 24),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(subject, style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: profile.textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                Text(isResolved ? "Closed • View Only" : "Active Support", style: TextStyle(fontSize: 12, color: isResolved ? Colors.green : Colors.orange, fontWeight: FontWeight.w500)),
-                              ],
+            return Scaffold(
+              backgroundColor: Colors.transparent,
+              resizeToAvoidBottomInset: true,
+              body: Column(
+                children: [
+                  // --- Premium Header ---
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                    decoration: BoxDecoration(
+                      color: profile.cardColor,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+                    ),
+                    child: Column(
+                      children: [
+                        Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2))),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+                              child: Icon(Icons.support_agent_rounded, color: profile.themeColor, size: 24),
                             ),
-                          ),
-                          if (!isResolved)
-                            IconButton(
-                              onPressed: () => _confirmResolve(ticketId, profile),
-                              icon: const Icon(Icons.check_circle_outline, color: Colors.green),
-                              tooltip: "Mark as Resolved",
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(subject, style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: profile.textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  Text(isResolved ? "Closed • View Only" : "Active Support", style: TextStyle(fontSize: 12, color: isResolved ? Colors.green : Colors.orange, fontWeight: FontWeight.w500)),
+                                ],
+                              ),
                             ),
-                          IconButton(onPressed: () => Navigator.pop(ctx), icon: Icon(Icons.close_rounded, color: profile.secondaryTextColor)),
-                        ],
-                      ),
-                    ],
+                            if (!isResolved)
+                              IconButton(
+                                onPressed: () => _confirmResolve(ticketId, profile),
+                                icon: const Icon(Icons.check_circle_outline, color: Colors.green),
+                                tooltip: "Mark as Resolved",
+                              ),
+                            IconButton(onPressed: () => Navigator.pop(ctx), icon: Icon(Icons.close_rounded, color: profile.secondaryTextColor)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
 
-                // --- Chat Messages List ---
-                Expanded(
-                  child: Container(
-                    color: profile.scaffoldColor,
+                  // --- Chat Messages List ---
+                  Expanded(
                     child: ListView(
                       controller: scrollController,
                       padding: const EdgeInsets.all(16),
                       children: [
-                        // Initial Ticket Message (System/Intro Style)
                         Center(
                           child: Container(
                             margin: const EdgeInsets.symmetric(vertical: 20),
@@ -1094,7 +1086,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
 
-                        // The First Message Bubble
                         _buildChatBubble(
                           message: initialMessage,
                           time: DateFormat('hh:mm a').format(createdAt),
@@ -1103,7 +1094,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           profile: profile,
                         ),
 
-                        // Replies
                         ...replies.map((reply) {
                           DateTime? dt;
                           try { dt = DateTime.parse(reply['timestamp']); } catch (_) {}
@@ -1124,14 +1114,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                     ),
                   ),
-                ),
-
-                // --- Input Area or Resolved Banner ---
-                if (!isResolved)
-                  _buildChatInput(ticketId, replyController, profile, scrollController)
-                else
-                  _buildResolvedBanner(profile),
-              ],
+                ],
+              ),
+              bottomNavigationBar: Padding(
+                padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+                child: !isResolved 
+                  ? _buildChatInput(ticketId, replyController, profile, scrollController)
+                  : _buildResolvedBanner(profile),
+              ),
             );
           },
         ),

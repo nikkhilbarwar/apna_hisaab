@@ -37,6 +37,106 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
     });
     _checkAdminStatus();
     _checkAutoBackup();
+    _checkRestoreNag(); // New: Restore suggestion popup
+  }
+
+  Future<void> _checkRestoreNag() async {
+    final prefs = await SharedPreferences.getInstance();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    
+    final uid = user.uid;
+    final nagKey = 'restore_nag_shown_$uid';
+    bool alreadyShown = prefs.getBool(nagKey) ?? false;
+    
+    if (alreadyShown) return;
+
+    // Give it a small delay so screen finishes loading
+    Future.delayed(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      _showRestoreNagDialog();
+    });
+    
+    await prefs.setBool(nagKey, true);
+  }
+
+  void _showRestoreNagDialog() {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final syncProvider = Provider.of<SyncProvider>(context, listen: false);
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24),
+          decoration: BoxDecoration(
+            color: profile.cardColor,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 5)],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 120,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: profile.themeColor.withValues(alpha: 0.1),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                child: Center(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(Icons.cloud_download_rounded, size: 60, color: profile.themeColor),
+                      Positioned(
+                        bottom: 10,
+                        child: Text("Restore Recommendation", style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.bold, fontSize: 10)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Text("Restore Your Data", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor)),
+                    const SizedBox(height: 12),
+                    Text(
+                      "We recommend performing a one-time 'Full Restore' to ensure all your previous items, transactions, and settings are correctly synced to this device.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: profile.secondaryTextColor, fontSize: 13, height: 1.5),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showSyncStatus(context, Provider.of<TransactionProvider>(context, listen: false), profile);
+                        // Optionally trigger restore confirmation directly
+                        _showFullRestoreConfirm(context, syncProvider, profile);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: profile.themeColor,
+                        minimumSize: const Size(double.infinity, 54),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      child: const Text("RESTORE FROM CLOUD", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text("I'LL DO IT LATER", style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _checkAdminStatus() async {
@@ -379,23 +479,31 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
             padding: const EdgeInsets.only(left: 12.0),
             child: Center(
               child: GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen())),
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: appBarContentColor.withValues(alpha: 0.2), width: 1.5),
-                    color: Colors.black.withValues(alpha: 0.1),
-                  ),
-                  padding: const EdgeInsets.all(2),
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.transparent,
-                    backgroundImage: profile.logoPath.isNotEmpty && File(profile.logoPath).existsSync()
-                        ? FileImage(File(profile.logoPath)) 
-                        : (user?.photoURL != null ? NetworkImage(user!.photoURL!) as ImageProvider : null),
-                    child: (profile.logoPath.isEmpty || !File(profile.logoPath).existsSync()) && user?.photoURL == null
-                        ? Icon(Icons.person, color: appBarContentColor, size: 24)
-                        : null,
+                onTap: () {
+                  profile.markSupportAsRead(); // Mark as read when entering profile
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen()));
+                },
+                child: Badge(
+                  isLabelVisible: profile.hasUnreadSupportReply,
+                  backgroundColor: Colors.red,
+                  smallSize: 12,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: appBarContentColor.withValues(alpha: 0.2), width: 1.5),
+                      color: Colors.black.withValues(alpha: 0.1),
+                    ),
+                    padding: const EdgeInsets.all(2),
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.transparent,
+                      backgroundImage: profile.logoPath.isNotEmpty && File(profile.logoPath).existsSync()
+                          ? FileImage(File(profile.logoPath)) 
+                          : (user?.photoURL != null ? NetworkImage(user!.photoURL!) as ImageProvider : null),
+                      child: (profile.logoPath.isEmpty || !File(profile.logoPath).existsSync()) && user?.photoURL == null
+                          ? Icon(Icons.person, color: appBarContentColor, size: 24)
+                          : null,
+                    ),
                   ),
                 ),
               ),

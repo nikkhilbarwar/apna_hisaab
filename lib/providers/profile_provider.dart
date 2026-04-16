@@ -53,11 +53,14 @@ class ProfileProvider with ChangeNotifier {
   bool _isSysAdmin = false;
   String _adminRole = 'user';
   bool _isLoading = true;
+  bool _hasUnreadSupportReply = false;
   StreamSubscription? _authSub;
   StreamSubscription? _licenseSub;
+  StreamSubscription? _supportSub;
 
   bool get isSysAdmin => _isSysAdmin;
   String get adminRole => _adminRole;
+  bool get hasUnreadSupportReply => _hasUnreadSupportReply;
 
   String get businessName => _businessName;
   String get ownerName => _ownerName;
@@ -191,6 +194,10 @@ class ProfileProvider with ChangeNotifier {
       _isLoading = true;
       final prefs = await SharedPreferences.getInstance();
       
+      // Admin Check (पहले लोड करें)
+      _isSysAdmin = prefs.getBool('is_sys_admin') ?? false;
+      _adminRole = prefs.getString('admin_role') ?? 'user';
+
       // Check if we have local data, if not try fetching from cloud
       final hasLocalData = prefs.containsKey('business_name_$uid');
       
@@ -236,15 +243,11 @@ class ProfileProvider with ChangeNotifier {
         // Start listening to license status if key exists
         if (_licenseKey.isNotEmpty) {
           listenToLicenseRealTime();
+          _listenToSupportTickets();
         }
       }
-
-      _isLoading = false;
       
-      // Admin Check
-      _isSysAdmin = prefs.getBool('is_sys_admin') ?? false;
-      _adminRole = prefs.getString('admin_role') ?? 'user';
-
+      _isLoading = false;
       notifyListeners();
     } catch (e) {
       _isLoading = false;
@@ -399,13 +402,30 @@ class ProfileProvider with ChangeNotifier {
           _expenseBlocked = data['expenseBlocked'] ?? false;
           _isLifetime = data['isLifetime'] ?? false;
           _amountPaid = (data['price'] ?? 0.0).toDouble();
-          _planType = data['planType'] ?? (data['isLifetime'] == true ? 'Lifetime' : 'Standard');
+          _planType = data['planType'] ?? (_isLifetime ? 'Lifetime' : 'Standard');
           _licenseBusinessName = data['restaurantName'] ?? '';
           _licenseOwnerName = data['ownerName'] ?? '';
           _licensePhone = data['phone'] ?? '';
 
           if (data['validTill'] != null) {
             _expiryDate = DateTime.tryParse(data['validTill']);
+          }
+
+          // Auto-fill profile if local profile is default/empty
+          if (_businessName == 'My Business' && _licenseBusinessName.isNotEmpty) {
+            _businessName = _licenseBusinessName;
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_getUKey('business_name'), _businessName);
+          }
+          if (_ownerName.isEmpty && _licenseOwnerName.isNotEmpty) {
+            _ownerName = _licenseOwnerName;
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_getUKey('owner_name'), _ownerName);
+          }
+          if (_contact.isEmpty && _licensePhone.isNotEmpty) {
+            _contact = _licensePhone;
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_getUKey('contact'), _contact);
           }
 
           if (_isActivated != newActivated) {
@@ -419,8 +439,8 @@ class ProfileProvider with ChangeNotifier {
             
             // Sync status to cloud so it persists across reloads
             if (_isCloudSyncEnabled) _syncToFirebase();
-            notifyListeners();
           }
+          notifyListeners();
         } else {
           // Key deleted from database
           _isActivated = false;
@@ -687,9 +707,60 @@ class ProfileProvider with ChangeNotifier {
     } catch (e) { debugPrint("Error syncing profile: $e"); }
   }
 
+  void _listenToSupportTickets() {
+    if (_licenseKey.isEmpty) return;
+    _supportSub?.cancel();
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    _supportSub = FirebaseFirestore.instance
+        .collection('support_tickets')
+        .where('licenseKey', isEqualTo: _licenseKey)
+        .where('createdBy', isEqualTo: user.uid)
+        .snapshots()
+        .listen((snapshot) {
+      bool unread = false;
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        if (data['hasUnreadReply'] == true) {
+          unread = true;
+          break;
+        }
+      }
+      if (_hasUnreadSupportReply != unread) {
+        _hasUnreadSupportReply = unread;
+        notifyListeners();
+      }
+    });
+  }
+
+  Future<void> markSupportAsRead() async {
+    if (_licenseKey.isEmpty) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    final snapshot = await FirebaseFirestore.instance
+        .collection('support_tickets')
+        .where('licenseKey', isEqualTo: _licenseKey)
+        .where('createdBy', isEqualTo: user.uid)
+        .where('hasUnreadReply', isEqualTo: true)
+        .get();
+
+    for (var doc in snapshot.docs) {
+      batch.update(doc.reference, {'hasUnreadReply': false});
+    }
+    
+    await batch.commit();
+    _hasUnreadSupportReply = false;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _licenseSub?.cancel();
+    _supportSub?.cancel();
     _authSub?.cancel();
     super.dispose();
   }

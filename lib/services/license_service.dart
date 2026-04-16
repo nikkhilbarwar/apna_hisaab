@@ -211,6 +211,7 @@ class LicenseService {
       }]),
       'lastUpdate': FieldValue.serverTimestamp(),
       'status': senderRole == 'admin' ? 'answered' : 'open',
+      'hasUnreadReply': senderRole == 'admin', // Add this flag
     });
 
     try {
@@ -290,18 +291,14 @@ class LicenseService {
   }
 
   static Stream<QuerySnapshot> getTickets(String licenseKey) {
-    final trimmedKey = licenseKey.trim();
-    final user = FirebaseAuth.instance.currentUser;
-    
-    if (trimmedKey.isEmpty || user == null) {
-      return const Stream.empty();
+    if (licenseKey.trim().isEmpty) {
+      return firestore.collection('support_tickets').where('licenseKey', isEqualTo: 'NON_EXISTENT').snapshots();
     }
 
-    // सिक्योरिटी रूल्स के हिसाब से केवल वही टिकट दिखाएं जो इस यूजर ने बनाए हैं।
-    // नोट: क्लाइंट-साइड फिल्टरिंग का उपयोग करेंगे ताकि Composite Index की ज़रूरत न पड़े।
+    // Query by licenseKey to ensure history is visible across device re-installs.
+    // This works if your Security Rules allow reading by 'isSignedIn()'
     return firestore.collection('support_tickets')
-        .where('licenseKey', isEqualTo: trimmedKey)
-        .where('createdBy', isEqualTo: user.uid)
+        .where('licenseKey', isEqualTo: licenseKey.trim())
         .snapshots();
   }
 

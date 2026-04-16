@@ -72,7 +72,7 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
             children: [
               Text('Filter History', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: profile.textColor)),
               const SizedBox(height: 24),
-              
+
               Text('Payment Mode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.secondaryTextColor)),
               const SizedBox(height: 8),
               SingleChildScrollView(
@@ -95,7 +95,7 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
                   }).toList(),
                 ),
               ),
-              
+
               const SizedBox(height: 20),
               Text('Table Number', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.secondaryTextColor)),
               const SizedBox(height: 8),
@@ -112,7 +112,7 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 32),
               ElevatedButton(
                 onPressed: () {
@@ -252,7 +252,7 @@ class _HistoryList extends StatelessWidget {
   Widget build(BuildContext context) {
     final txProvider = Provider.of<TransactionProvider>(context);
     final profile = Provider.of<ProfileProvider>(context);
-    
+
     List<TransactionModel> list;
     if (type == 'trash') {
       list = txProvider.deletedTransactions;
