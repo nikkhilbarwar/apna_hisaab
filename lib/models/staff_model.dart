@@ -10,6 +10,7 @@ class StaffModel {
   String? imageUrl; // Added for cloud sync
   int isSynced;
   double advance; // Kept as a runtime-only property
+  double runtimeDeduction = 0.0; // Transient field for accurate calculation
   int isDeleted;
   DateTime? deletedAt;
 
@@ -66,17 +67,12 @@ class StaffModel {
     );
   }
 
-  double calculateCurrentPayable() {
+  double calculateCurrentPayable(double leaveDeduction) {
     if (monthlySalary <= 0) return 0.0;
     
-    // Per-day logic based on a standard 30-day month
-    double perDaySalary = monthlySalary / 30;
-    
-    // Total deductions = (leaves * daily rate) + advance
-    double deductions = (totalLeaves * perDaySalary) + advance;
-    
-    double net = monthlySalary - deductions;
-    return net < 0 ? 0.0 : net; // Net cannot be negative
+    // deductions = calculated leave deduction + advance
+    double net = monthlySalary - leaveDeduction - advance;
+    return net < 0 ? 0.0 : net;
   }
 }
 

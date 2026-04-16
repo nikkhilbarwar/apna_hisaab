@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -289,8 +290,37 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
 
     final bool globalSyncing = txProvider.isSyncing || syncProvider.isSyncing;
 
+    // Admin List (In emails ko kabhi login nahi maangega)
+    const adminEmails = [
+      "nikkhilbarwar@gmail.com",
+      "anitamishra1714@gmail.com",
+      "missadvocate06@gmail.com"
+    ];
+
+    bool isUserAdmin = profile.isSysAdmin || (user?.email != null && adminEmails.contains(user!.email!.toLowerCase()));
+
     // Common AppBar Actions
     List<Widget> appBarActions = [
+      if (isUserAdmin)
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('support_tickets').where('status', isEqualTo: 'open').snapshots(),
+          builder: (context, snapshot) {
+            int openTickets = snapshot.hasData ? snapshot.data!.docs.length : 0;
+            return IconButton(
+              icon: Badge.count(
+                count: openTickets,
+                isLabelVisible: openTickets > 0,
+                child: Icon(
+                  Icons.shield_rounded,
+                  color: appBarContentColor == Colors.black ? Colors.deepOrange : Colors.orangeAccent,
+                  size: 26,
+                ),
+              ),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen())),
+              tooltip: "Admin Panel",
+            );
+          }
+        ),
       Stack(
         alignment: Alignment.center,
         children: [
@@ -314,16 +344,6 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
             ),
         ],
       ),
-      if (_isSysAdmin)
-        IconButton(
-          icon: Icon(
-            Icons.admin_panel_settings, 
-            color: appBarContentColor == Colors.black ? Colors.deepOrange : Colors.orangeAccent,
-            size: 26,
-          ),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen())),
-          tooltip: "Admin Panel",
-        ),
     ];
 
     Widget body = TabBarView(
@@ -353,7 +373,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
           toolbarHeight: 45,
           elevation: 0,
           backgroundColor: themeColor,
-          centerTitle: !isTablet,
+          centerTitle: true,
           leadingWidth: 80,
           leading: Padding(
             padding: const EdgeInsets.only(left: 12.0),
@@ -381,7 +401,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
               ),
             ),
           ),
-          title: Text(profile.businessName.toUpperCase(), 
+          title: Text(profile.displayBusinessName.toUpperCase(),
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1, color: appBarContentColor)),
           actions: appBarActions,
           bottom: isTablet ? null : PreferredSize(
@@ -420,8 +440,6 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                   labelType: NavigationRailLabelType.all,
                   backgroundColor: profile.cardColor,
                   selectedIconTheme: IconThemeData(color: themeColor),
-                  selectedLabelTextStyle: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 12),
-                  unselectedLabelTextStyle: TextStyle(color: profile.secondaryTextColor, fontSize: 11),
                   destinations: const [
                     NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: Text('Home')),
                     NavigationRailDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2_rounded), label: Text('Stock')),

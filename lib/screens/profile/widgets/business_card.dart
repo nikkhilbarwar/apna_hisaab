@@ -57,7 +57,7 @@ class BusinessCard extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  profile.businessName.toUpperCase(),
+                                  profile.displayBusinessName.toUpperCase(),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 18,
@@ -80,9 +80,7 @@ class BusinessCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            profile.ownerName.isEmpty
-                                ? (user?.displayName ?? 'Business Owner')
-                                : profile.ownerName,
+                            profile.displayOwnerName,
                             style: TextStyle(color: Colors.white.withValues(alpha: .9), fontSize: 13, fontWeight: FontWeight.w500),
                           ),
                           if (profile.isActivated)
@@ -110,7 +108,7 @@ class BusinessCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _infoItem(Icons.phone_android_rounded, profile.contact),
+                    _infoItem(Icons.phone_android_rounded, profile.displayPhone),
                     const SizedBox(height: 12),
                     _infoItem(Icons.location_on_rounded, profile.address),
                   ],

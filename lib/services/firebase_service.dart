@@ -276,6 +276,17 @@ class FirebaseService {
     }
   }
 
+  Future<void> deleteStaffLeavesByStaffId(int staffId) async {
+    try {
+      final snapshot = await _collection('staff_leave').where('staff_id', isEqualTo: staffId).get();
+      for (var doc in snapshot.docs) {
+        await doc.reference.delete();
+      }
+    } catch (e) {
+      debugPrint("Error deleting staff leaves by staff_id from Firebase: $e");
+    }
+  }
+
   Future<void> deleteStaff(int id) async {
     try {
       // 1. Delete Firestore Document

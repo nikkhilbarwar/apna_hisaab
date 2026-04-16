@@ -25,7 +25,7 @@ class ExportService {
     if (Platform.isAndroid) {
       // Use the public Documents folder for better visibility in File Manager
       baseDir = Directory('/storage/emulated/0/Documents');
-      
+
       try {
         if (!await baseDir.exists()) {
           await baseDir.create(recursive: true);
@@ -42,11 +42,11 @@ class ExportService {
       // iOS and other platforms
       baseDir = await getApplicationDocumentsDirectory();
     }
-    
+
     // Check if the base directory is public to use a clean name
     final isPublic = baseDir.path.contains('Documents') || baseDir.path.contains('Downloads');
     final folderName = isPublic ? 'Apna Hisaab' : '.ApnaHisaab';
-    
+
     final appDir = Directory('${baseDir.path}/$folderName');
     if (!await appDir.exists()) {
       await appDir.create(recursive: true);
@@ -140,7 +140,7 @@ class ExportService {
       final dir = await _getReportDirectory();
       final fileName = "${title.replaceAll(' ', '_')}_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.xlsx";
       final path = "${dir.path}/$fileName";
-      
+
       var fileBytes = excel.save();
       if (fileBytes != null) {
         File(path)
@@ -185,7 +185,7 @@ class ExportService {
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 7, rowIndex: row)).value = TextCellValue(data['validTillFormatted'] ?? 'Lifetime');
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: row)).value = TextCellValue(data['activated'] == true ? 'Yes' : 'No');
       sheetObject.cell(CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row)).value = TextCellValue(data['activeDeviceId'] ?? '');
-      
+
       String createdAt = '';
       if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
         createdAt = DateFormat('yyyy-MM-dd HH:mm').format((data['createdAt'] as Timestamp).toDate());
@@ -197,7 +197,7 @@ class ExportService {
       final dir = await _getReportDirectory();
       final fileName = "LicenseHistory_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.xlsx";
       final path = "${dir.path}/$fileName";
-      
+
       var fileBytes = excel.save();
       if (fileBytes != null) {
         File(path)
@@ -213,13 +213,13 @@ class ExportService {
   /// Generate a professional A4 Invoice for a License Purchase
   Future<void> generateLicenseInvoice(Map<String, dynamic> data) async {
     final pdf = pw.Document();
-    
+
     // Header Branding
     final title = "CASH MEMO";
     final businessName = "THE GRILLER ZONE";
     final tagline = "Professional Digital Solutions";
     final contactInfo = "PH: +91 9992256959 | Email: dev.grillerzone@gmail.com";
-    
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
@@ -253,7 +253,7 @@ class ExportService {
               pw.SizedBox(height: 30),
               pw.Divider(thickness: 2, color: PdfColors.blue900),
               pw.SizedBox(height: 20),
-              
+
               // Billing Details
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -276,7 +276,7 @@ class ExportService {
                       children: [
                         pw.Text("LICENSE STATUS:", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: PdfColors.grey700)),
                         pw.SizedBox(height: 5),
-                        pw.Text(data['status']?.toUpperCase() ?? "ACTIVE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.green)),
+                        pw.Text("ACTIVE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: PdfColors.green)),
                         pw.Text("Plan: ${data['planType']?.toUpperCase() ?? 'N/A'}", style: const pw.TextStyle(fontSize: 11)),
                         pw.Text("Expiry: ${data['validTillFormatted'] ?? 'Lifetime'}", style: const pw.TextStyle(fontSize: 11)),
                       ],
@@ -300,12 +300,12 @@ class ExportService {
                 data: [
                   [
                     "Software Subscription License\nKey: ${data['licenseKey']}",
-                    "${data['planType'] ?? 'N/A'}",
+                    "${data['validTillFormatted'] ?? 'Lifetime'}",
                     "INR ${data['price'] ?? 0}"
                   ],
                 ],
               ),
-              
+
               pw.SizedBox(height: 20),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.end,
@@ -326,7 +326,7 @@ class ExportService {
               ),
 
               pw.Spacer(),
-              
+
               // Footer
               pw.Divider(thickness: 1, color: PdfColors.grey400),
               pw.Row(
@@ -436,13 +436,13 @@ class ExportService {
       final file = File(path);
       final pdfBytes = await pdf.save();
       await file.writeAsBytes(pdfBytes);
-      
+
       // Show print layout/preview
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdfBytes,
         name: title,
       );
-      
+
       await Share.shareXFiles([XFile(path)], text: '$title Report PDF');
     } catch (e) {
       debugPrint("PDF Export Error: $e");
@@ -515,7 +515,7 @@ class ExportService {
           pw.Text("EXPENSE TRANSACTIONS", style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
           pw.SizedBox(height: 10),
           _buildTransactionTable(expenses, PdfColors.red50),
-          
+
           pw.Spacer(),
           pw.Divider(thickness: 0.5),
           pw.Center(
@@ -568,7 +568,7 @@ class ExportService {
                 children: [
                   pw.Text(businessName.toUpperCase(),
                       style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                  pw.Text(isItem ? "Item Audit Report" : "Category Audit Report", 
+                  pw.Text(isItem ? "Item Audit Report" : "Category Audit Report",
                       style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
                   pw.SizedBox(height: 4),
                   pw.Text("Period: ${DateFormat('dd/MM/yyyy').format(range.start)} - ${DateFormat('dd/MM/yyyy').format(range.end)}",
@@ -609,7 +609,7 @@ class ExportService {
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text("TOTAL REVENUE", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                    pw.Text("Rs. ${totalRevenue.toStringAsFixed(2)}", 
+                    pw.Text("Rs. ${totalRevenue.toStringAsFixed(2)}",
                         style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
                   ],
                 ),
@@ -689,7 +689,7 @@ class ExportService {
           children: [
             pw.Text(title, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: color)),
             pw.SizedBox(height: 5),
-            pw.Text("Rs. ${amount.toStringAsFixed(2)}", 
+            pw.Text("Rs. ${amount.toStringAsFixed(2)}",
                 style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: color)),
           ],
         ),
@@ -739,7 +739,7 @@ class ExportService {
     final pdf = pw.Document();
     final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
     final prefs = await SharedPreferences.getInstance();
-    
+
     final logoPath = prefs.getString('logo_path_$uid') ?? "";
     final address = prefs.getString('address_$uid') ?? "";
     final contact = prefs.getString('contact_$uid') ?? "";
@@ -748,7 +748,7 @@ class ExportService {
     if (logoPath.isNotEmpty && File(logoPath).existsSync()) {
       logoImage = pw.MemoryImage(File(logoPath).readAsBytesSync());
     }
-    
+
     pw.MemoryImage? qrImage;
     if (qrPath.isNotEmpty && File(qrPath).existsSync()) {
       qrImage = pw.MemoryImage(File(qrPath).readAsBytesSync());
@@ -756,7 +756,9 @@ class ExportService {
 
     final snapshots = tx.itemSnapshots;
     final isPurchase = tx.type.toLowerCase() == 'purchase';
-    
+    final isSalary = tx.category.toLowerCase() == 'salary';
+    final isExpense = tx.type.toLowerCase() == 'expense' && !isSalary;
+
     double subtotal = 0;
     if (snapshots.isNotEmpty) {
       for (var s in snapshots) {
@@ -769,11 +771,11 @@ class ExportService {
     double discount = tx.discountValue;
     double totalAfterDiscount = subtotal - discount;
     double taxAmount = tx.amount - totalAfterDiscount;
-    if (taxAmount.abs() < 0.1) taxAmount = 0; 
+    if (taxAmount.abs() < 0.1) taxAmount = 0;
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80, 
+        pageFormat: PdfPageFormat.roll80,
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
@@ -789,7 +791,7 @@ class ExportService {
                   pw.Text(businessName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
                   if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
                   if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7)),
-                  if (!isPurchase && tx.token.isNotEmpty) 
+                  if (!isPurchase && tx.token.isNotEmpty)
                     pw.Align(
                       alignment: pw.Alignment.centerRight,
                       child: pw.Text("TOKEN: ${tx.token}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
@@ -798,25 +800,32 @@ class ExportService {
               ),
             ),
             pw.Divider(thickness: 0.5),
-            pw.Center(child: pw.Text(isPurchase ? "PURCHASE VOUCHER" : "CASH MEMO", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1))),
+            pw.Center(
+              child: pw.Text(
+                isSalary ? "SALARY VOUCHER" : (isPurchase ? "PURCHASE VOUCHER" : (isExpense ? "EXPENSE VOUCHER" : "CASH MEMO")),
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1)
+              )
+            ),
             pw.Divider(thickness: 0.5),
-            
+
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                pw.Text(isPurchase ? "Voucher No: ${tx.id}" : "Bill No: ${tx.id}", style: const pw.TextStyle(fontSize: 8)),
+                if (!isSalary)
+                  pw.Text((isPurchase || isExpense) ? "Voucher No: ${tx.id}" : "Bill No: ${tx.id}", style: const pw.TextStyle(fontSize: 8)),
+                if (isSalary) pw.SizedBox(), // Keeps date on the right
                 pw.Text("Date: ${DateFormat('dd-MM-yy HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 8)),
               ],
             ),
             // Table Number (Hide for purchase)
-            if (!isPurchase && snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0') 
+            if (!isPurchase && snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0')
               pw.Text("TABLE: ${snapshots.first.tableNumber}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
 
-            if (tx.customerContact.isNotEmpty) 
+            if (tx.customerContact.isNotEmpty)
               pw.Text(isPurchase ? "Supplier: ${tx.customerContact}" : "Cust Contact: ${tx.customerContact}", style: const pw.TextStyle(fontSize: 8)),
-            
+
             pw.Divider(thickness: 0.5),
-            
+
             pw.Row(
               children: [
                 pw.Expanded(flex: 4, child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
@@ -847,7 +856,10 @@ class ExportService {
                 // Sub-detail line: @ Rate | Method | Extras
                 List<String> details = [];
                 details.add("@ ${item.price.toStringAsFixed(0)}");
-                if (item.servingMethod.isNotEmpty) details.add(item.servingMethod);
+                // Premium Fix: Only show serving method if it's NOT 'N/A' and NOT a Salary voucher
+                if (item.servingMethod.isNotEmpty && item.servingMethod != 'N/A' && !isSalary) {
+                  details.add(item.servingMethod);
+                }
                 if (item.extraQty > 0) {
                   String exQty = item.extraQty % 1 == 0 ? item.extraQty.toInt().toString() : item.extraQty.toString();
                   details.add("+ Extra PC'S: $exQty @ ${item.extraPrice.toStringAsFixed(0)}");
@@ -877,20 +889,27 @@ class ExportService {
                 );
               }),
             pw.Divider(thickness: 0.5),
-            
+
             _buildPdfBreakdownRow("Subtotal", subtotal.toStringAsFixed(0)),
             if (discount > 0) _buildPdfBreakdownRow("Discount", "-${discount.toStringAsFixed(0)}"),
             if (taxAmount > 0) _buildPdfBreakdownRow("Tax", taxAmount.toStringAsFixed(0)),
-            
-            pw.SizedBox(height: 4),
+
+            pw.SizedBox(height: 8),
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
-                pw.Text("ITEM COUNT: ${snapshots.length}", style: const pw.TextStyle(fontSize: 8)),
-                pw.Text("GRAND TOTAL: ${tx.amount.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                pw.Text("ITEM COUNT: ${snapshots.length}", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text("GRAND TOTAL: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                    pw.Text(tx.amount.toStringAsFixed(0), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+                  ]
+                ),
               ],
             ),
-            
+
             if (tx.paymentMode == 'Credit') ...[
               pw.SizedBox(height: 4),
               pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
@@ -914,7 +933,7 @@ class ExportService {
 
             pw.Divider(thickness: 0.5),
 
-            if (!isPurchase && qrImage != null) 
+            if (!isPurchase && qrImage != null)
               pw.Center(
                 child: pw.Column(
                   children: [
@@ -929,7 +948,7 @@ class ExportService {
 
             pw.Center(child: pw.Text(isPurchase ? "Stock Inward Successful" : "Thank You! Visit Again", style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic))),
             pw.SizedBox(height: 4),
-            
+
             pw.Divider(thickness: 0.5),
             pw.Center(child: pw.Text("POWERED BY: The Griller Zone", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800))),
             pw.Center(child: pw.Text("Developer: Nikkhil | +91 9992256959", style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700))),
@@ -947,7 +966,7 @@ class ExportService {
       final file = File(path);
       final pdfBytes = await pdf.save();
       await file.writeAsBytes(pdfBytes);
-      
+
       // Critical Fix: Add a small delay to ensure file system sync
       await Future.delayed(const Duration(milliseconds: 300));
 
@@ -969,7 +988,7 @@ class ExportService {
     final snapshots = tx.itemSnapshots;
     final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
     final prefs = await SharedPreferences.getInstance();
-    
+
     final address = prefs.getString('address_$uid') ?? "";
     final contact = prefs.getString('contact_$uid') ?? "";
 
@@ -992,14 +1011,14 @@ class ExportService {
             pw.SizedBox(height: 5),
             pw.Divider(thickness: 0.5),
             pw.Center(child: pw.Text("KITCHEN ORDER", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
-            
+
             // Token: Large and Bold
             if (tx.token.isNotEmpty) ...[
               pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
               pw.Center(child: pw.Text("TOKEN: ${tx.token}", style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold))),
               pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
             ],
-            
+
             pw.SizedBox(height: 5),
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -1008,7 +1027,7 @@ class ExportService {
                 pw.Text("Time: ${DateFormat('HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 9)),
               ],
             ),
-            
+
             // Table Number
             if (snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0') ...[
               pw.SizedBox(height: 5),
@@ -1024,7 +1043,7 @@ class ExportService {
               } else {
                 qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString();
               }
-              
+
               // Clean name from redundant (Half)/(Full)
               String cleanName = item.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
 
@@ -1048,7 +1067,7 @@ class ExportService {
                     if (item.extraQty > 0)
                       pw.Padding(
                         padding: const pw.EdgeInsets.only(left: 15),
-                        child: pw.Text("+ EXTRA PC'S: ${item.extraQty % 1 == 0 ? item.extraQty.toInt() : item.extraQty}", 
+                        child: pw.Text("+ EXTRA PC'S: ${item.extraQty % 1 == 0 ? item.extraQty.toInt() : item.extraQty}",
                           style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                       ),
                     if (item.servingMethod.toLowerCase() == 'takeaway')
@@ -1075,7 +1094,7 @@ class ExportService {
       final file = File(path);
       final pdfBytes = await pdf.save();
       await file.writeAsBytes(pdfBytes);
-      
+
       // Critical Fix: Add a small delay to ensure file system sync
       await Future.delayed(const Duration(milliseconds: 300));
 
@@ -1108,7 +1127,7 @@ class ExportService {
   Future<String?> createAutoBackup() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
-    
+
     try {
       final data = await _generateBackupData();
       final dir = await _getBackupDirectory();
@@ -1125,7 +1144,7 @@ class ExportService {
   Future<File?> getAutoBackupFile() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
-    
+
     try {
       final dir = await _getBackupDirectory();
       final file = File("${dir.path}/AutoBackup_${user.uid}.json");
@@ -1138,7 +1157,7 @@ class ExportService {
   Future<String?> createFullBackup() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
-    
+
     try {
       final backupData = await _generateBackupData();
       String jsonString = jsonEncode(backupData);
@@ -1161,7 +1180,7 @@ class ExportService {
     final categories = await db.getAllCategories();
     final staff = await db.getAllStaff();
     final suppliers = await db.getAllSuppliers();
-    
+
     // Missing tables added
     final units = await db.getAllUnits();
     final sqlDb = await db.database;
@@ -1271,14 +1290,14 @@ class ExportService {
 
       String content = await file.readAsString();
       Map<String, dynamic> data = jsonDecode(content);
-      
+
       // If we have a UID in backup, and a current user, they should match for security
       if (data.containsKey('backup_uid') && uid != null && data['backup_uid'] != uid) {
         debugPrint("Restore Warning: Backup UID mismatch, proceeding with manual override.");
       }
 
       final db = await DatabaseHelper.instance.database;
-      
+
       await db.transaction((txn) async {
         // Clear all tables
         await txn.delete('transactions');
@@ -1301,7 +1320,7 @@ class ExportService {
               if (table == 'items' && !map.containsKey('is_synced')) map['is_synced'] = 0;
               if (table == 'transactions' && !map.containsKey('is_synced')) map['is_synced'] = 0;
               if (table == 'staff' && !map.containsKey('is_synced')) map['is_synced'] = 0;
-              
+
               await txn.insert(table, map);
             } catch (e) {
               debugPrint("Error inserting into $table: $e");
@@ -1321,7 +1340,7 @@ class ExportService {
 
         // Restore Images for Items and Staff
         final appDocDir = await getApplicationDocumentsDirectory();
-        
+
         if (data['items'] != null) {
           for (var item in data['items']) {
             if (item['icon_base64'] != null && item['icon_base64'].toString().isNotEmpty) {
@@ -1357,7 +1376,7 @@ class ExportService {
       if (data['profile_settings'] != null) {
         final prefs = await SharedPreferences.getInstance();
         final p = data['profile_settings'] as Map<String, dynamic>;
-        
+
         // Helper to safely convert dynamic to bool (v2.5 Fix for numeric booleans)
         bool toBool(dynamic val) {
           if (val == null) return false;
@@ -1373,7 +1392,7 @@ class ExportService {
         for (var key in p.keys) {
           // Skip these as we handle them explicitly below to ensure portability
           if (key == 'logo_base64' || key == 'qr_base64') continue;
-          
+
           var value = p[key];
           String prefKey = "${key}_$uid";
           if (value == null) continue;
@@ -1398,7 +1417,7 @@ class ExportService {
 
         // Image Reconstruction (v2.5+)
         final appDocDir = await getApplicationDocumentsDirectory();
-        
+
         if (p['logo_base64'] != null && p['logo_base64'].toString().isNotEmpty) {
           try {
             final bytes = base64Decode(p['logo_base64']);
@@ -1512,12 +1531,12 @@ class ExportService {
             build: (context) => [
               pw.Header(
                 level: 1,
-                child: pw.Text('HISTORY: ${staff.name.toUpperCase()}', 
+                child: pw.Text('HISTORY: ${staff.name.toUpperCase()}',
                   style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
               ),
               pw.Text('Period: ${DateFormat('dd MMM yyyy').format(dateRange.start)} to ${DateFormat('dd MMM yyyy').format(dateRange.end)}', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
               pw.SizedBox(height: 10),
-              
+
               if (filteredAdvances.isNotEmpty) ...[
                 pw.Text('ADVANCE HISTORY', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                 pw.SizedBox(height: 5),
@@ -1561,112 +1580,232 @@ class ExportService {
 
   Future<void> exportSingleStaffReport(String bizName, StaffModel staff, StaffProvider staffProvider, DateTimeRange range) async {
     final pdf = pw.Document();
-    
+
     final allAdvances = await staffProvider.getStaffAdvances(staff.id!);
     final allLeaves = await staffProvider.getStaffLeaves(staff.id!);
 
     final filteredAdvances = allAdvances.where((a) => a.date.isAfter(range.start.subtract(const Duration(seconds: 1))) && a.date.isBefore(range.end.add(const Duration(days: 1)))).toList();
     final filteredLeaves = allLeaves.where((l) => l.date.isAfter(range.start.subtract(const Duration(seconds: 1))) && l.date.isBefore(range.end.add(const Duration(days: 1)))).toList();
 
+    // Month-wise breakdown logic
+    List<Map<String, dynamic>> monthlyBreakdown = [];
+    DateTime iterateMonth = DateTime(range.start.year, range.start.month);
+    DateTime endMonthMarker = DateTime(range.end.year, range.end.month);
+
+    while (!iterateMonth.isAfter(endMonthMarker)) {
+      final monthStart = DateTime(iterateMonth.year, iterateMonth.month, 1);
+      final monthEnd = DateTime(iterateMonth.year, iterateMonth.month + 1, 0, 23, 59, 59);
+
+      final mAdvances = allAdvances.where((a) => a.date.isAfter(monthStart.subtract(const Duration(seconds: 1))) && a.date.isBefore(monthEnd)).toList();
+      final mLeaves = allLeaves.where((l) => l.date.isAfter(monthStart.subtract(const Duration(seconds: 1))) && l.date.isBefore(monthEnd)).toList();
+
+      double mAdvTotal = mAdvances.fold(0.0, (sum, a) => sum + a.amount);
+      double mLeaveDays = mLeaves.fold(0.0, (sum, l) => sum + l.type);
+      double mDeduction = 0;
+      for (var l in mLeaves) {
+        int days = DateUtils.getDaysInMonth(l.date.year, l.date.month);
+        mDeduction += l.type * (staff.monthlySalary / days);
+      }
+
+      double mNet = staff.monthlySalary - mDeduction - mAdvTotal;
+      monthlyBreakdown.add({
+        'month': DateFormat('MMM yyyy').format(iterateMonth),
+        'base': staff.monthlySalary,
+        'leaves': mLeaveDays,
+        'deduction': mDeduction,
+        'advances': mAdvTotal,
+        'net': mNet < 0 ? 0 : mNet,
+      });
+      iterateMonth = DateTime(iterateMonth.year, iterateMonth.month + 1);
+    }
+
+    double totalAdvance = monthlyBreakdown.fold(0.0, (sum, m) => sum + m['advances']);
+    double totalLeavesCount = monthlyBreakdown.fold(0.0, (sum, m) => sum + m['leaves']);
+    double totalBaseSalary = monthlyBreakdown.fold(0.0, (sum, m) => sum + m['base']);
+    double totalNetPayable = monthlyBreakdown.fold(0.0, (sum, m) => sum + m['net']);
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
+        theme: pw.ThemeData.withFont(
+          base: await PdfGoogleFonts.notoSansRegular(),
+          bold: await PdfGoogleFonts.notoSansBold(),
+        ),
         build: (context) => [
-          pw.Header(
-            level: 0,
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(bizName.toUpperCase(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('STAFF HISTORY REPORT', style: pw.TextStyle(fontSize: 12, color: PdfColors.blueGrey)),
-                  ],
-                ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text(staff.name.toUpperCase(), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                    pw.Text(staff.role.toUpperCase(), style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 10),
-          pw.Text('Report Period: ${DateFormat('dd MMM yyyy').format(range.start)} - ${DateFormat('dd MMM yyyy').format(range.end)}', 
-            style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
-          pw.Divider(height: 20),
-          
+          // Header Section
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('Summary', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(bizName.toUpperCase(), style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                  pw.Text('Staff Payroll Statement', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                   pw.SizedBox(height: 5),
-                  pw.Text('Base Salary: ${staff.monthlySalary.toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Selected Range Advances: ${filteredAdvances.fold(0.0, (sum, a) => sum + a.amount).toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Selected Range Leaves: ${filteredLeaves.fold(0.0, (sum, l) => sum + l.type).toString()}', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Period: ${DateFormat('dd MMM yyyy').format(range.start)} - ${DateFormat('dd MMM yyyy').format(range.end)}',
+                    style: pw.TextStyle(fontSize: 9, color: PdfColors.blueGrey800)),
                 ],
+              ),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue50,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(staff.name.toUpperCase(), style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                    pw.Text(staff.role.toUpperCase(), style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('ID: STF-${staff.id.toString().padLeft(3, '0')}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                  ],
+                ),
               ),
             ],
           ),
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 25),
 
-          if (filteredAdvances.isNotEmpty) ...[
-            pw.Text('ADVANCE BREAKDOWN', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blue700)),
+          // Summary Grid
+          pw.GridView(
+            crossAxisCount: 4,
+            childAspectRatio: 0.6,
+            children: [
+              _buildPdfSummaryCard(monthlyBreakdown.length > 1 ? 'Total Base Salary' : 'Monthly Salary', totalBaseSalary.toStringAsFixed(0), PdfColors.blue700),
+              _buildPdfSummaryCard(monthlyBreakdown.length > 1 ? 'Total Advance' : 'Advance Taken', totalAdvance.toStringAsFixed(0), PdfColors.red700),
+              _buildPdfSummaryCard(monthlyBreakdown.length > 1 ? 'Total Leaves' : 'Leave Days', totalLeavesCount.toString(), PdfColors.orange700),
+              _buildPdfSummaryCard(monthlyBreakdown.length > 1 ? 'Total Payable' : 'Net Payable', totalNetPayable.toStringAsFixed(0), PdfColors.green700, isMain: true),
+            ],
+          ),
+
+          pw.SizedBox(height: 25),
+
+          // Month-wise Breakdown Table
+          if (monthlyBreakdown.length > 1) ...[
+            pw.Text('MONTH-WISE PAYROLL BREAKDOWN', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
             pw.SizedBox(height: 8),
             pw.TableHelper.fromTextArray(
               headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.white),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              headers: ['Month', 'Base Salary', 'Leaves', 'Deduction', 'Advance', 'Net Payable'],
+              data: monthlyBreakdown.map((m) => [
+                m['month'],
+                m['base'].toStringAsFixed(0),
+                m['leaves'].toString(),
+                m['deduction'].toStringAsFixed(0),
+                m['advances'].toStringAsFixed(0),
+                m['net'].toStringAsFixed(0),
+              ]).toList(),
+            ),
+            pw.SizedBox(height: 25),
+          ],
+
+          // Advance Table
+          if (filteredAdvances.isNotEmpty) ...[
+            pw.Text('Advance History', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+            pw.SizedBox(height: 8),
+            pw.TableHelper.fromTextArray(
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
               cellStyle: const pw.TextStyle(fontSize: 9),
-              headers: ['Date', 'Amount Paid', 'Notes'],
+              headers: ['Date', 'Amount', 'Description'],
               data: filteredAdvances.map((a) => [
                 DateFormat('dd MMM yyyy').format(a.date),
-                a.amount.toStringAsFixed(0),
-                '-',
+                'Rs. ${a.amount.toStringAsFixed(0)}',
+                'Advance Payment',
               ]).toList(),
             ),
             pw.SizedBox(height: 20),
           ],
 
+          // Leave Table
           if (filteredLeaves.isNotEmpty) ...[
-            pw.Text('LEAVE BREAKDOWN', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.red700)),
+            pw.Text('Attendance/Leave Records', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
             pw.SizedBox(height: 8),
             pw.TableHelper.fromTextArray(
               headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.white),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.red900),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
               cellStyle: const pw.TextStyle(fontSize: 9),
-              headers: ['Date', 'Leave Type'],
+              headers: ['Date', 'Type', 'Deduction Status'],
               data: filteredLeaves.map((l) => [
                 DateFormat('dd MMM yyyy').format(l.date),
                 l.type == 1.0 ? 'Full Day' : 'Half Day',
+                'Deducted',
               ]).toList(),
             ),
           ],
 
           pw.Spacer(),
-          pw.Divider(),
+
+          // Footer / Signatures
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text('Generated via Apna Hisaab App', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
-              pw.Text('Date: ${DateFormat('dd MMM yyyy').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
+              pw.Column(
+                children: [
+                  pw.Container(
+                    width: 100,
+                    decoration: const pw.BoxDecoration(
+                      border: pw.Border(bottom: pw.BorderSide(width: 0.5, color: PdfColors.grey700)),
+                    ),
+                  ),
+                  pw.SizedBox(height: 5),
+                  pw.Text("Staff Signature", style: const pw.TextStyle(fontSize: 8)),
+                ],
+              ),
+              pw.Column(
+                children: [
+                  pw.Container(
+                    width: 100,
+                    decoration: const pw.BoxDecoration(
+                      border: pw.Border(bottom: pw.BorderSide(width: 0.5, color: PdfColors.grey700)),
+                    ),
+                  ),
+                  pw.SizedBox(height: 5),
+                  pw.Text("Manager/Owner Signature", style: const pw.TextStyle(fontSize: 8)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+          pw.Divider(color: PdfColors.grey300),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Generated on: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+              pw.Text('Statement powered by Apna Hisaab', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
             ],
           ),
         ],
       ),
     );
 
-    final dir = await _getReportDirectory();
-    final fileName = "Staff_History_${staff.name.replaceAll(' ', '_')}_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
-    final file = File("${dir.path}/$fileName");
-    await file.writeAsBytes(await pdf.save());
-    await Share.shareXFiles([XFile(file.path)], text: '${staff.name} History Report');
+    // Direct Print Implementation
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'Salary_Report_${staff.name.replaceAll(' ', '_')}',
+    );
+  }
+
+  pw.Widget _buildPdfSummaryCard(String title, String value, PdfColor color, {bool isMain = false}) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.symmetric(horizontal: 4),
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        color: isMain ? color : PdfColors.white,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+        border: pw.Border.all(color: color, width: 0.5),
+      ),
+      child: pw.Column(
+        mainAxisAlignment: pw.MainAxisAlignment.center,
+        children: [
+          pw.Text(title.toUpperCase(), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: isMain ? PdfColors.white : PdfColors.grey700)),
+          pw.SizedBox(height: 4),
+          pw.Text(value, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: isMain ? PdfColors.white : color)),
+        ],
+      ),
+    );
   }
 
   Future<void> exportAuditToPdf(
@@ -1841,7 +1980,7 @@ class ExportService {
       final dir = await _getReportDirectory();
       final fileName = "CEO_Audit_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.xlsx";
       final path = "${dir.path}/$fileName";
-      
+
       var fileBytes = excel.save();
       if (fileBytes != null) {
         File(path)

@@ -85,7 +85,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 24),
             Text(
-              profile.businessName.toUpperCase(),
+              profile.displayBusinessName.toUpperCase(),
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.5),
             ),
             const Text('Professional Management', style: TextStyle(fontSize: 16, color: Colors.white70)),

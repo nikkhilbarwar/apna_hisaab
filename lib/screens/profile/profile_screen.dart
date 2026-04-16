@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/profile_provider.dart';
@@ -48,10 +50,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _checkAdminStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
-    bool isAdminEmail = user?.email == "nikkhilbarwar@gmail.com" || 
+    bool isAdminEmail = user?.email == "nikkhilbarwar@gmail.com" ||
                         user?.email == "anitamishra1714@gmail.com" ||
                         user?.email == "missadvocate06@gmail.com";
-    
+
     setState(() {
       _isSysAdmin = (prefs.getBool('is_sys_admin') ?? false) || isAdminEmail;
     });
@@ -60,7 +62,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _pickAndCropImage(ProfileProvider profile, {bool isLogo = true}) async {
     try {
       final String? croppedPath = await ImageHelper.pickAndCropItemIcon(
-        context: context, 
+        context: context,
         themeColor: profile.themeColor,
         isCircle: false, // QR aur Logo ke liye Square crop chahiye
       );
@@ -123,7 +125,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Text('Backup Success', style: TextStyle(fontWeight: FontWeight.bold)),
               ],
             ),
-            content: Text('Full backup created successfully!\n\nLocation: $path\n\nThis file will stay in your Documents folder even if you uninstall the app.', 
+            content: Text('Full backup created successfully!\n\nLocation: $path\n\nThis file will stay in your Documents folder even if you uninstall the app.',
               style: TextStyle(color: profile.secondaryTextColor, fontSize: 13)),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
@@ -145,7 +147,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
-        
+
         if (mounted) {
           bool confirm = await showDialog(
             context: context,
@@ -157,7 +159,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               actions: [
                 TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
                 TextButton(
-                  onPressed: () => Navigator.pop(ctx, true), 
+                  onPressed: () => Navigator.pop(ctx, true),
                   child: const Text('PROCEED', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
                 ),
               ],
@@ -167,7 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (confirm && mounted) {
             setState(() => _isBackingUp = true);
             bool success = await _exportService.restoreFromBackup(file);
-            
+
             if (success) {
               await profile.loadProfile();
               if (mounted) {
@@ -188,7 +190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 remProvider.fetchReminders();
               }
             }
-            
+
             setState(() => _isBackingUp = false);
 
             if (mounted) {
@@ -204,6 +206,178 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
+  }
+
+  void _confirmDeleteAccount(ProfileProvider profile) {
+    final TextEditingController confirmController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text("Delete Account?"),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Warning: This action is permanent and cannot be undone.",
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "Your items, transactions, licenses, and all cloud data will be deleted forever.",
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              "Type 'DELETE' below to confirm:",
+              style: TextStyle(color: profile.secondaryTextColor, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: confirmController,
+              decoration: const InputDecoration(
+                hintText: "DELETE",
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text("CANCEL", style: TextStyle(color: profile.textColor)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (confirmController.text.trim().toUpperCase() == "DELETE") {
+                Navigator.pop(ctx);
+                _showDeletingOverlay(profile);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Type DELETE to confirm")),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("DELETE EVERYTHING", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeletingOverlay(ProfileProvider profile) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: profile.cardColor,
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Colors.red),
+              SizedBox(height: 24),
+              Text("Deleting your data...", style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text("Please wait, this may take a moment", style: TextStyle(fontSize: 12), textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    _performFinalDeletion();
+  }
+
+  Future<void> _performFinalDeletion() async {
+    try {
+      await AuthService().deleteAccount();
+      
+      if (mounted) {
+        // 1. Close the "Deleting..." overlay (using rootNavigator to ensure we close the dialog)
+        Navigator.of(context, rootNavigator: true).pop();
+        
+        // 2. Force navigate to Login Screen
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        // Close overlay on error
+        Navigator.of(context, rootNavigator: true).pop();
+        _showDeletionErrorDialog(e.toString());
+      }
+    }
+  }
+
+  void _showDeletionErrorDialog(String error) {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Row(
+          children: [
+            Icon(Icons.lock_clock_rounded, color: Colors.orange),
+            SizedBox(width: 12),
+            Text("Re-authentication\nRequired"),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "For security reasons, you must have logged in recently to delete your entire profile and data.",
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+              ),
+              child: const Text(
+                "Please Logout and Login again, then try deleting your profile.",
+                style: TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Center(
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: profile.themeColor,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                minimumSize: const Size(120, 45),
+              ),
+              child: const Text("OK, I UNDERSTAND", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
   }
 
   void _confirmLogout() {
@@ -235,9 +409,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _showEditBottomSheet(BuildContext context, ProfileProvider profile) {
     final formKey = GlobalKey<FormState>();
-    final n = TextEditingController(text: profile.businessName);
-    final o = TextEditingController(text: profile.ownerName);
-    final c = TextEditingController(text: profile.contact);
+    final n = TextEditingController(text: profile.displayBusinessName);
+    final o = TextEditingController(text: profile.displayOwnerName);
+    final c = TextEditingController(text: profile.displayPhone);
     final a = TextEditingController(text: profile.address);
     final t = TextEditingController(text: profile.taxPercentage.toString());
     final tbl = TextEditingController(text: profile.totalTables.toString());
@@ -251,15 +425,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           color: profile.cardColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         ),
-        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+        padding: EdgeInsets.fromLTRB(24, 12, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
         child: SingleChildScrollView(
           child: Form(
             key: formKey,
             child: Column(
-              mainAxisSize:
-                  (profile.isPinEnabled ? {'pin': true} : {}).isNotEmpty
-                      ? MainAxisSize.min
-                      : MainAxisSize.max,
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(
@@ -269,20 +440,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
                   ),
                 ),
-                Text(AppStrings.editBusiness, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: profile.textColor)),
+                Text("Edit Business Details", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: profile.textColor)),
                 const SizedBox(height: 24),
-                _buildField(n, AppStrings.businessName, Icons.business, profile),
-                _buildField(o, AppStrings.ownerName, Icons.person_outline, profile),
-                _buildField(c, AppStrings.contactNumber, Icons.phone_outlined, profile, keyboard: TextInputType.phone),
+                _buildField(n, "Business Name", Icons.business_rounded, profile),
+                _buildField(o, "Owner Name", Icons.person_outline_rounded, profile),
+                _buildField(c, "Contact Number", Icons.phone_android_rounded, profile, keyboard: TextInputType.phone),
                 Row(
                   children: [
-                    Expanded(child: _buildField(t, AppStrings.taxPercentage, Icons.percent, profile, keyboard: TextInputType.number, suffix: '%')),
-                    const SizedBox(width: 12),
-                    Expanded(child: _buildField(tbl, 'Total Tables', Icons.table_restaurant, profile, keyboard: TextInputType.number)),
+                    Expanded(child: _buildField(t, "Tax Percentage (%)", Icons.percent_rounded, profile, keyboard: TextInputType.number, suffix: "%")),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildField(tbl, "Total Tables", Icons.table_bar_rounded, profile, keyboard: TextInputType.number)),
                   ],
                 ),
-                _buildField(a, AppStrings.address, Icons.location_on_outlined, profile, maxLines: 2),
-                const SizedBox(height: 24),
+                _buildField(a, "Address", Icons.location_on_outlined, profile, maxLines: 2),
+                const SizedBox(height: 12),
                 ElevatedButton(
                   onPressed: () {
                     if (formKey.currentState!.validate()) {
@@ -302,8 +473,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     foregroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 56),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
                   ),
-                  child: const Text(AppStrings.saveChanges, style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  child: const Text("SAVE CHANGES", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1)),
                 ),
               ],
             ),
@@ -354,7 +526,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   }
                 },
               ),
-              
+
               if (profile.isPinEnabled)
                 ListTile(
                   leading: Icon(Icons.edit_outlined, color: profile.themeColor),
@@ -497,14 +669,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 24),
             Expanded(
               child: SingleChildScrollView(
-                child: Text(
-                  "We are committed to safeguarding user information through robust technical and organizational measures. All data processed within the application is handled in accordance with industry-standard security protocols and applicable data protection regulations.\n\n"
-                  "User-generated and transactional data is primarily stored in a secure local environment and, where applicable, may be synchronized with cloud-based services utilizing encrypted transmission channels (e.g., HTTPS/TLS). Sensitive information is neither exposed nor transmitted without appropriate safeguards and authentication layers.\n\n"
-                  "We implement access control mechanisms, data minimization principles, and structured storage methodologies to ensure that only necessary information is retained for operational purposes. No personally identifiable information is shared with third parties except where explicitly required for service functionality, legal compliance, or authorized integrations.\n\n"
-                  "The application does not engage in unauthorized data harvesting, background tracking, or intrusive analytics beyond the scope of essential service delivery. Any optional features involving external services are governed by their respective privacy frameworks.\n\n"
-                  "While commercially reasonable efforts are made to ensure data integrity, availability, and confidentiality, users acknowledge that no digital system can guarantee absolute security. By using the application, users consent to data handling practices as outlined in this policy.",
-                  style: TextStyle(color: profile.secondaryTextColor, fontSize: 14, height: 1.6, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.justify,
+                child: Column(
+                  children: [
+                    Text(
+                      "We are committed to safeguarding user information through robust technical and organizational measures. All data processed within the application is handled in accordance with industry-standard security protocols and applicable data protection regulations.\n\n"
+                      "User-generated and transactional data is primarily stored in a secure local environment and, where applicable, may be synchronized with cloud-based services utilizing encrypted transmission channels (e.g., HTTPS/TLS). Sensitive information is neither exposed nor transmitted without appropriate safeguards and authentication layers.\n\n"
+                      "We implement access control mechanisms, data minimization principles, and structured storage methodologies to ensure that only necessary information is retained for operational purposes. No personally identifiable information is shared with third parties except where explicitly required for service functionality, legal compliance, or authorized integrations.\n\n"
+                      "The application does not engage in unauthorized data harvesting, background tracking, or intrusive analytics beyond the scope of essential service delivery. Any optional features involving external services are governed by their respective privacy frameworks.\n\n"
+                      "While commercially reasonable efforts are made to ensure data integrity, availability, and confidentiality, users acknowledge that no digital system can guarantee absolute security. By using the application, users consent to data handling practices as outlined in this policy.",
+                      style: TextStyle(color: profile.secondaryTextColor, fontSize: 14, height: 1.6, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.justify,
+                    ),
+                    if (!_isSysAdmin) ...[
+                      const SizedBox(height: 40),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _confirmDeleteAccount(profile);
+                          },
+                          child: Text(
+                            "Account Termination & Permanent Data Wipeout",
+                            style: TextStyle(
+                              color: Colors.red.withValues(alpha: 0.2), // Very faded
+                              fontSize: 10,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
@@ -520,7 +716,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showSupportTickets(ProfileProvider profile) {
+  void _showSupportTickets(ProfileProvider profile) async {
+    // लॉगिन होने तक इंतज़ार करें, ताकि Firestore को पता चले कि आप कौन हैं
+    await LicenseService.ensureAuth();
+
+    if (!mounted) return;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -557,6 +758,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: StreamBuilder<QuerySnapshot>(
                 stream: LicenseService.getTickets(profile.licenseKey),
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Text("Error loading tickets: ${snapshot.error}", textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                    ));
+                  }
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
@@ -568,22 +775,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Icon(Icons.confirmation_number_outlined, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.5)),
                           const SizedBox(height: 16),
                           Text("No tickets found", style: TextStyle(color: profile.secondaryTextColor)),
+                          if (profile.licenseKey.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
+                              child: Text("Warning: Your profile does not have a license key associated. Tickets might not be visible.",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold)),
+                            ),
                           TextButton(
                             onPressed: () => _showCreateTicketDialog(profile),
-                            child: const Text("Create your first ticket"),
+                            child: const Text("Create a Support Ticket"),
                           ),
                         ],
                       ),
                     );
                   }
 
+                  final allDocs = snapshot.data!.docs;
+                  final docs = allDocs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return data['status'] != 'deleted';
+                  }).toList();
+
+                  if (docs.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.confirmation_number_outlined, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.5)),
+                          const SizedBox(height: 16),
+                          Text("No tickets found", style: TextStyle(color: profile.secondaryTextColor)),
+                          TextButton(
+                            onPressed: () => _showCreateTicketDialog(profile),
+                            child: const Text("Create a Support Ticket"),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  // Client-side sorting since server-side orderBy was disabled
+                  docs.sort((a, b) {
+                    final aData = a.data() as Map<String, dynamic>;
+                    final bData = b.data() as Map<String, dynamic>;
+
+                    final aTime = aData['lastUpdate'] as Timestamp?;
+                    final bTime = bData['lastUpdate'] as Timestamp?;
+
+                    // Put newest (including null/just created) at the top
+                    if (aTime == null && bTime == null) return 0;
+                    if (aTime == null) return -1;
+                    if (bTime == null) return 1;
+                    return bTime.compareTo(aTime);
+                  });
+
                   return ListView.builder(
-                    itemCount: snapshot.data!.docs.length,
+                    itemCount: docs.length,
                     itemBuilder: (context, index) {
-                      final doc = snapshot.data!.docs[index];
+                      final doc = docs[index];
                       final data = doc.data() as Map<String, dynamic>;
                       final status = data['status'] ?? 'open';
-                      
+                      final lastUpdate = data['lastUpdate'] as Timestamp?;
+
                       Color statusColor;
                       switch(status) {
                         case 'answered': statusColor = Colors.orange; break;
@@ -594,13 +847,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       return ListTile(
                         onTap: () => _showTicketChat(doc.id, profile),
+                        onLongPress: () => _confirmDeleteTicket(doc.id, profile),
                         leading: CircleAvatar(
                           backgroundColor: statusColor.withValues(alpha: 0.1),
                           child: Icon(Icons.help_outline, color: statusColor),
                         ),
                         title: Text(data['subject'] ?? 'No Subject', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
                         subtitle: Text(
-                          "Last update: ${data['lastUpdate'] != null ? (data['lastUpdate'] as Timestamp).toDate().toString().split('.')[0] : 'N/A'}",
+                          "Last update: ${lastUpdate != null ? DateFormat('dd-MM-yyyy HH:mm').format(lastUpdate.toDate()) : 'N/A'}",
                           style: TextStyle(color: profile.secondaryTextColor, fontSize: 12),
                         ),
                         trailing: Container(
@@ -663,17 +917,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ElevatedButton(
             onPressed: () async {
               if (formKey.currentState!.validate()) {
+                final lKey = profile.licenseKey.trim();
+                if (lKey.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error: Your license key is missing. Please contact support."), backgroundColor: Colors.red));
+                  return;
+                }
+
                 await LicenseService.createTicket(
-                  licenseKey: profile.licenseKey,
-                  restaurantName: profile.businessName,
-                  phone: profile.contact,
+                  licenseKey: lKey,
+                  restaurantName: profile.displayBusinessName,
+                  phone: profile.displayPhone,
                   subject: subjectController.text,
                   message: messageController.text,
                 );
                 if (ctx.mounted) {
                   Navigator.pop(ctx);
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ticket created successfully!")));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ticket created successfully!"), backgroundColor: Colors.green));
                   }
                 }
               }
@@ -685,8 +945,376 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _confirmDeleteTicket(String ticketId, ProfileProvider profile) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("Delete Ticket?", style: TextStyle(color: profile.textColor)),
+        content: Text("This will permanently delete the entire support ticket and its history.", style: TextStyle(color: profile.secondaryTextColor)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await LicenseService.deleteTicket(ticketId);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Ticket deleted successfully"), duration: Duration(seconds: 2)),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text("DELETE", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteReply(String ticketId, String replyId, ProfileProvider profile) {
+    if (replyId.isEmpty) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("Delete Message?", style: TextStyle(color: profile.textColor)),
+        content: Text("This will permanently delete this message for everyone.", style: TextStyle(color: profile.secondaryTextColor)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await LicenseService.deleteTicketReply(ticketId, replyId);
+            },
+            child: const Text("DELETE", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showTicketChat(String ticketId, ProfileProvider profile) {
     final replyController = TextEditingController();
+    final scrollController = ScrollController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: profile.scaffoldColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        height: MediaQuery.of(context).size.height * 0.9,
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: StreamBuilder<DocumentSnapshot>(
+          stream: LicenseService.getTicketStream(ticketId),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+            
+            final data = snapshot.data!.data() as Map<String, dynamic>;
+            final replies = (data['replies'] as List? ?? []);
+            final isResolved = data['status'] == 'resolved';
+            final subject = data['subject'] ?? 'Support Ticket';
+            final initialMessage = data['message'] ?? '';
+            final createdAt = (data['createdAt'] as Timestamp).toDate();
+
+            return Column(
+              children: [
+                // --- Premium Glassmorphism Header ---
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                  decoration: BoxDecoration(
+                    color: profile.cardColor,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+                  ),
+                  child: Column(
+                    children: [
+                      Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2))),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+                            child: Icon(Icons.support_agent_rounded, color: profile.themeColor, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(subject, style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: profile.textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                Text(isResolved ? "Closed • View Only" : "Active Support", style: TextStyle(fontSize: 12, color: isResolved ? Colors.green : Colors.orange, fontWeight: FontWeight.w500)),
+                              ],
+                            ),
+                          ),
+                          if (!isResolved)
+                            IconButton(
+                              onPressed: () => _confirmResolve(ticketId, profile),
+                              icon: const Icon(Icons.check_circle_outline, color: Colors.green),
+                              tooltip: "Mark as Resolved",
+                            ),
+                          IconButton(onPressed: () => Navigator.pop(ctx), icon: Icon(Icons.close_rounded, color: profile.secondaryTextColor)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // --- Chat Messages List ---
+                Expanded(
+                  child: Container(
+                    color: profile.scaffoldColor,
+                    child: ListView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        // Initial Ticket Message (System/Intro Style)
+                        Center(
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 20),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(color: profile.cardColor.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(12), border: Border.all(color: profile.themeColor.withValues(alpha: 0.1))),
+                            child: Text(
+                              "Ticket Created on ${DateFormat('dd MMM, hh:mm a').format(createdAt)}",
+                              style: TextStyle(fontSize: 11, color: profile.secondaryTextColor, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+
+                        // The First Message Bubble
+                        _buildChatBubble(
+                          message: initialMessage,
+                          time: DateFormat('hh:mm a').format(createdAt),
+                          isAdmin: false,
+                          senderName: profile.displayBusinessName,
+                          profile: profile,
+                        ),
+
+                        // Replies
+                        ...replies.map((reply) {
+                          DateTime? dt;
+                          try { dt = DateTime.parse(reply['timestamp']); } catch (_) {}
+                          final replyId = reply['id']?.toString() ?? '';
+
+                          return GestureDetector(
+                            onLongPress: isResolved ? null : () => _confirmDeleteReply(ticketId, replyId, profile),
+                            child: _buildChatBubble(
+                              message: reply['message'],
+                              time: dt != null ? DateFormat('hh:mm a').format(dt) : '',
+                              isAdmin: reply['senderRole'] == 'admin',
+                              senderName: reply['senderRole'] == 'admin' ? (reply['senderName'] ?? 'Support Team') : profile.displayBusinessName,
+                              profile: profile,
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // --- Input Area or Resolved Banner ---
+                if (!isResolved)
+                  _buildChatInput(ticketId, replyController, profile, scrollController)
+                else
+                  _buildResolvedBanner(profile),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatBubble({required String message, required String time, required bool isAdmin, required String senderName, required ProfileProvider profile}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        mainAxisAlignment: isAdmin ? MainAxisAlignment.start : MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (isAdmin) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: profile.themeColor,
+                child: const Icon(Icons.headset_mic_rounded, size: 16, color: Colors.white),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Column(
+              crossAxisAlignment: isAdmin ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isAdmin ? profile.cardColor : profile.themeColor,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(20),
+                      topRight: const Radius.circular(20),
+                      bottomLeft: Radius.circular(isAdmin ? 4 : 20),
+                      bottomRight: Radius.circular(isAdmin ? 20 : 4),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      )
+                    ],
+                  ),
+                  child: Text(
+                    message,
+                    style: TextStyle(
+                      color: isAdmin ? profile.textColor : Colors.white,
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    "$senderName • $time",
+                    style: TextStyle(fontSize: 10, color: profile.secondaryTextColor.withValues(alpha: 0.8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!isAdmin) const SizedBox(width: 40),
+          if (isAdmin) const SizedBox(width: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatInput(String ticketId, TextEditingController controller, ProfileProvider profile, ScrollController sc) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: profile.cardColor,
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -2))],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  color: profile.scaffoldColor,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: profile.secondaryTextColor.withValues(alpha: 0.1)),
+                ),
+                child: TextField(
+                  controller: controller,
+                  style: TextStyle(color: profile.textColor),
+                  maxLines: 4,
+                  minLines: 1,
+                  decoration: InputDecoration(
+                    hintText: "Type a reply...",
+                    hintStyle: TextStyle(color: profile.secondaryTextColor.withValues(alpha: 0.5), fontSize: 14),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: () async {
+                if (controller.text.trim().isNotEmpty) {
+                  final msg = controller.text.trim();
+                  controller.clear();
+                await LicenseService.addTicketReply(
+                    ticketId: ticketId,
+                    message: msg,
+                    senderRole: 'user',
+                    senderName: profile.displayBusinessName,
+                  );
+                  // Auto scroll to bottom
+                  Future.delayed(const Duration(milliseconds: 300), () {
+                    if (sc.hasClients) sc.animateTo(sc.position.maxScrollExtent, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+                  });
+                }
+              },
+              child: Container(
+                height: 48, width: 48,
+                decoration: BoxDecoration(
+                  color: profile.themeColor,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: profile.themeColor.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))],
+                ),
+                child: const Icon(Icons.send_rounded, color: Colors.white, size: 22),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResolvedBanner(ProfileProvider profile) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      color: Colors.green.withValues(alpha: 0.05),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.verified_user_rounded, color: Colors.green, size: 32),
+            const SizedBox(height: 8),
+            const Text("Conversation Resolved", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+            Text("This ticket is closed. Please create a new one if you need further help.", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmResolve(String ticketId, ProfileProvider profile) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Resolve Ticket?"),
+        content: const Text("Marking this as resolved will close the conversation."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
+          TextButton(
+            onPressed: () {
+              LicenseService.resolveTicket(ticketId);
+              Navigator.pop(ctx);
+            },
+            child: const Text("YES, RESOLVE", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  void _showLicenseDetails(ProfileProvider profile) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -696,118 +1324,144 @@ class _ProfileScreenState extends State<ProfileScreen> {
           color: profile.cardColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         ),
-        height: MediaQuery.of(context).size.height * 0.9,
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        padding: const EdgeInsets.all(24),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 12),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 8),
-            StreamBuilder<DocumentSnapshot>(
-              stream: LicenseService.getTicketStream(ticketId),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const LinearProgressIndicator();
-                final data = snapshot.data!.data() as Map<String, dynamic>;
-                final replies = (data['replies'] as List? ?? []);
-
-                return Expanded(
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(child: Text(data['subject'] ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-                                if (data['status'] != 'resolved')
-                                  TextButton(
-                                    onPressed: () => LicenseService.resolveTicket(ticketId),
-                                    child: const Text("Mark Resolved", style: TextStyle(color: Colors.green)),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(data['message'] ?? '', style: TextStyle(color: profile.secondaryTextColor)),
-                            const Divider(),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: replies.length,
-                          itemBuilder: (context, index) {
-                            final reply = replies[index];
-                            final isAdmin = reply['senderRole'] == 'admin';
-                            return Align(
-                              alignment: isAdmin ? Alignment.centerLeft : Alignment.centerRight,
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(vertical: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: isAdmin ? profile.themeColor.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: isAdmin ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-                                  children: [
-                                    Text(reply['message'], style: TextStyle(color: profile.textColor)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      "${reply['senderName']} • ${reply['timestamp']?.toString().split('T')[0] ?? ''}",
-                                      style: TextStyle(fontSize: 10, color: profile.secondaryTextColor),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
+              ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: replyController,
-                      decoration: InputDecoration(
-                        hintText: "Type a reply...",
-                        fillColor: profile.scaffoldColor,
-                        filled: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
-                      ),
+            Row(
+              children: [
+                const Icon(Icons.verified_user_outlined, color: Colors.green, size: 28),
+                const SizedBox(width: 12),
+                Text("License Information", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: profile.textColor)),
+              ],
+            ),
+            const SizedBox(height: 24),
+            _buildDetailRow("License Key", profile.licenseKey, profile),
+            _buildDetailRow("Status", "ACTIVE", profile, valueColor: Colors.green),
+            _buildDetailRow("Type", profile.isLifetime ? "LIFETIME" : "SUBSCRIPTION", profile),
+            _buildDetailRow("Amount Paid", "${profile.currencySymbol}${profile.amountPaid.toStringAsFixed(2)}", profile),
+            if (profile.expiryDate != null)
+              _buildDetailRow("Expiry Date", DateFormat('dd-MM-yyyy').format(profile.expiryDate!), profile),
+            
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showDigitalReceipt(profile),
+                    icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                    label: const Text("VIEW RECEIPT", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: BorderSide(color: profile.themeColor),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  FloatingActionButton.small(
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
                     onPressed: () async {
-                      if (replyController.text.isNotEmpty) {
-                        await LicenseService.addTicketReply(
-                          ticketId: ticketId,
-                          message: replyController.text.trim(),
-                          senderRole: 'user',
-                          senderName: profile.businessName,
-                        );
-                        replyController.clear();
+                      final bName = profile.displayBusinessName;
+                      final phone = profile.displayPhone;
+                      final msg = Uri.encodeComponent("Hello, I want to renew my license for $bName.\nMobile: $phone\nLicense Key: ${profile.licenseKey}");
+                      final uri = Uri.parse("https://wa.me/919992256959?text=$msg");
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri);
                       }
                     },
-                    backgroundColor: profile.themeColor,
-                    child: const Icon(Icons.send, color: Colors.white),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text("RENEW", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
                   ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              "Your license is linked to this device. For any issues regarding license transfer, please contact support.",
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: profile.themeColor,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(120, 40),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+                child: const Text("CLOSE", style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showDigitalReceipt(ProfileProvider profile) {
+    // Replaced UI receipt with professional PDF generation
+    ExportService().generateLicenseInvoice({
+      'licenseKey': profile.licenseKey,
+      'restaurantName': profile.displayBusinessName,
+      'ownerName': profile.displayOwnerName,
+      'phone': profile.displayPhone,
+      'price': profile.amountPaid,
+      'planType': profile.planType,
+      'validTillFormatted': profile.expiryDate != null ? DateFormat('dd-MM-yyyy').format(profile.expiryDate!) : (profile.isLifetime ? 'Lifetime' : 'N/A'),
+      'isLifetime': profile.isLifetime,
+    });
+  }
+
+  Widget _receiptRow(String label, String value, ProfileProvider profile, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value, 
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                color: profile.textColor, 
+                fontWeight: isBold ? FontWeight.w900 : FontWeight.bold,
+                fontSize: isBold ? 16 : 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, ProfileProvider profile, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.w500)),
+          Text(value, style: TextStyle(color: valueColor ?? profile.textColor, fontWeight: FontWeight.bold)),
+        ],
       ),
     );
   }
@@ -956,7 +1610,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   title: Opacity(
                     opacity: t > 0.7 ? 1.0 : 0.0,
                     child: Text(
-                      profile.businessName,
+                      profile.displayBusinessName,
                       style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -1012,11 +1666,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                profile.businessName,
+                                profile.displayBusinessName,
                                 style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                               ),
                               Text(
-                                profile.ownerName.isEmpty ? (user?.displayName ?? "") : profile.ownerName,
+                                profile.displayOwnerName,
                                 style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14),
                               ),
                             ],
@@ -1405,6 +2059,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: () {
                       if (!profile.isActivated) {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const ActivationScreen()));
+                      } else {
+                        _showLicenseDetails(profile);
                       }
                     },
                     profile: profile,
@@ -1438,19 +2094,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     profile: profile,
                   ),
                   if (profile.isActivated)
-                    ProfileActionCard(
-                      title: "Support Tickets",
-                      subtitle: "Raise a ticket for help",
-                      icon: Icons.help_outline_rounded,
-                      onTap: () => _showSupportTickets(profile),
-                      profile: profile,
+                    StreamBuilder<QuerySnapshot>(
+                      stream: LicenseService.getTickets(profile.licenseKey),
+                      builder: (context, snapshot) {
+                        bool hasUpdate = false;
+                        if (snapshot.hasData) {
+                          hasUpdate = snapshot.data!.docs.any((doc) => (doc.data() as Map<String, dynamic>)['status'] == 'answered');
+                        }
+                        return ProfileActionCard(
+                          title: "Support Tickets",
+                          subtitle: "Raise a ticket for help",
+                          icon: Icons.help_outline_rounded,
+                          trailing: hasUpdate ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(10)),
+                            child: const Text("NEW REPLY", style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                          ) : null,
+                          onTap: () => _showSupportTickets(profile),
+                          profile: profile,
+                        );
+                      }
                     ),
                   const SizedBox(height: 24),
                   Center(
-                    child: TextButton.icon(
-                      onPressed: _confirmLogout,
-                      icon: const Icon(Icons.logout, color: Colors.red),
-                      label: const Text(AppStrings.logout, style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                    child: Column(
+                      children: [
+                        TextButton.icon(
+                          onPressed: _confirmLogout,
+                          icon: const Icon(Icons.logout, color: Colors.red),
+                          label: const Text(AppStrings.logout, style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 40),

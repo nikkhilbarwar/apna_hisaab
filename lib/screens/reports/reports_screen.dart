@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -676,7 +675,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ).where((tx) => matches(tx.category) && (_selectedPaymentMode == 'All' || tx.paymentMode == _selectedPaymentMode)).toList();
 
                 await exportService.generateFullReport(
-                  profile.businessName,
+                  profile.displayBusinessName,
                   sales,
                   expenses,
                   _selectedRange,
@@ -748,20 +747,42 @@ class _ReportsScreenState extends State<ReportsScreen> {
       child: Consumer<StaffProvider>(
         builder: (context, staffProvider, child) {
           final staffList = staffProvider.staffList;
-          if (staffList.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: Text('No staff found'),
-              ),
-            );
-          }
           return Column(
-            children: staffList.map((staff) => _StaffPayrollCard(
-              staff: staff,
-              profile: profile,
-              staffProvider: staffProvider,
-            )).toList(),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: profile.themeColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Total Net Payable', style: TextStyle(fontSize: 13, color: profile.secondaryTextColor)),
+                    Text('${profile.currencySymbol}${pending.toStringAsFixed(0)}', 
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: profile.themeColor)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: staffList.isEmpty
+                  ? const Center(child: Text('No staff added yet'))
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: staffList.length,
+                      itemBuilder: (context, index) {
+                        return _StaffPayrollCard(
+                          staff: staffList[index],
+                          profile: profile,
+                          staffProvider: staffProvider,
+                        );
+                      },
+                    ),
+              ),
+            ],
           );
         },
       ),
@@ -1578,7 +1599,7 @@ class _ReportList extends StatelessWidget {
         onPressed: () async {
           final exportService = ExportService();
           await exportService.exportAuditReport(
-            businessName: profile.businessName,
+            businessName: profile.displayBusinessName,
             title: title,
             totalRevenue: total,
             history: history,
@@ -1598,190 +1619,191 @@ class _ReportList extends StatelessWidget {
           ),
         ),
       ),
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.8,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-              Text(
-                title.toUpperCase(),
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 28,
-                  color: profile.textColor,
-                ),
-              ),
-              Text(
-                isExpense ? 'Total Outflow: ${profile.currencySymbol}${total.toStringAsFixed(0)}' : 'Total Revenue: ${profile.currencySymbol}${total.toStringAsFixed(0)}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isExpense ? Colors.red : profile.themeColor,
-                  fontSize: 16,
-                ),
-              ),
-              const Divider(height: 40),
-              // ALWAYS SHOW STATS IF HISTORY EXISTS
-              Row(
-                children: [
-                  if (isExpense)
-                     _insightStat(
-                      'Total Quantity',
-                      totalQty.toStringAsFixed(totalQty % 1 == 0 ? 0 : 2),
-                      Colors.orange
-                    )
-                  else ...[
-                    _insightStat(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 22,
+              color: profile.textColor,
+            ),
+          ),
+          Text(
+            isExpense
+                ? 'Total Outflow: ${profile.currencySymbol}${total.toStringAsFixed(0)}'
+                : 'Total Revenue: ${profile.currencySymbol}${total.toStringAsFixed(0)}',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isExpense ? Colors.red : profile.themeColor,
+              fontSize: 14,
+            ),
+          ),
+          const Divider(height: 24),
+          // ALWAYS SHOW STATS IF HISTORY EXISTS
+          Row(
+            children: [
+              if (isExpense)
+                _insightStat(
+                    'Total Quantity',
+                    totalQty.toStringAsFixed(totalQty % 1 == 0 ? 0 : 2),
+                    Colors.orange)
+              else ...[
+                _insightStat(
                     halfQty > 0 ? 'Full Portions' : 'Total Portions',
                     fullQty.toStringAsFixed(fullQty % 1 == 0 ? 0 : 1),
-                    profile.themeColor
-                  ),
-                  if (halfQty > 0) ...[
-                    const SizedBox(width: 12),
-                    _insightStat('Half Portions', halfQty.toStringAsFixed(halfQty % 1 == 0 ? 0 : 1), Colors.orange),
-                  ],
+                    profile.themeColor),
+                if (halfQty > 0) ...[
+                  const SizedBox(width: 12),
+                  _insightStat(
+                      'Half Portions',
+                      halfQty.toStringAsFixed(halfQty % 1 == 0 ? 0 : 1),
+                      Colors.orange),
                 ],
               ],
+            ],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            isExpense ? 'PURCHASE & PAYMENT LOG' : 'DETAILED SALES HISTORY',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 11,
+              color: profile.secondaryTextColor,
+              letterSpacing: 1,
             ),
-            const SizedBox(height: 32),
-            Text(
-              isExpense ? 'PURCHASE & PAYMENT LOG' : 'DETAILED SALES HISTORY',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 11,
-                color: profile.secondaryTextColor,
-                letterSpacing: 1,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: history.length,
-                itemBuilder: (context, i) {
-                  final sale = history[i];
-                  String qLabel = sale['qty'] == 0.5
-                      ? "Half"
-                      : (sale['qty'] == 1.0
-                          ? "Full"
-                          : sale['qty'].toStringAsFixed(1));
-                  bool hasExtras =
-                      sale['extraQty'] > 0 || sale['extraPrice'] > 0;
+          ),
+          const SizedBox(height: 12),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: history.length,
+            itemBuilder: (context, i) {
+              final sale = history[i];
+              String qLabel = sale['qty'] == 0.5
+                  ? "Half"
+                  : (sale['qty'] == 1.0
+                      ? "Full"
+                      : sale['qty'].toStringAsFixed(1));
+              bool hasExtras = sale['extraQty'] > 0 || sale['extraPrice'] > 0;
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: profile.scaffoldColor.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: profile.isDarkMode
-                            ? Colors.white10
-                            : Colors.grey.shade100,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: profile.scaffoldColor.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: profile.isDarkMode
+                        ? Colors.white10
+                        : Colors.grey.shade100,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  sale['name'],
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    color: profile.textColor,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                Text(
-                                  '${sale['date']} at ${sale['time']}',
-                                  style: TextStyle(
-                                    color: profile.secondaryTextColor,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
                             Text(
-                              '${profile.currencySymbol}${sale['total'].toStringAsFixed(0)}',
+                              sale['name'],
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
-                                color: profile.themeColor,
-                                fontSize: 16,
+                                color: profile.textColor,
+                                fontSize: 14,
                               ),
                             ),
-                          ],
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Divider(height: 1, thickness: 0.5),
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
                             Text(
-                              '$qLabel x ${profile.currencySymbol}${sale['price'].toStringAsFixed(0)} • ${sale['mode']}',
+                              '${sale['date']} at ${sale['time']}',
                               style: TextStyle(
-                                fontSize: 11,
                                 color: profile.secondaryTextColor,
+                                fontSize: 10,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: profile.themeColor.withValues(
-                                  alpha: 0.1,
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                sale['serving'].toString().toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w900,
-                                  color: profile.themeColor,
-                                ),
+                          ],
+                        ),
+                        Text(
+                          '${profile.currencySymbol}${sale['total'].toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: profile.themeColor,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(height: 1, thickness: 0.5),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '$qLabel x ${profile.currencySymbol}${sale['price'].toStringAsFixed(0)} • ${sale['mode']}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: profile.secondaryTextColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: profile.themeColor.withValues(
+                              alpha: 0.1,
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            sale['serving'].toString().toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w900,
+                              color: profile.themeColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (hasExtras)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.add_circle_outline_rounded,
+                              size: 12,
+                              color: profile.themeColor,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Extra: ${sale['extraQty'].toInt()} x ${profile.currencySymbol}${sale['extraPrice'].toInt()}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: profile.textColor,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
                         ),
-                        if (hasExtras)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.add_circle_outline_rounded,
-                                  size: 12,
-                                  color: profile.themeColor,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Extra: ${sale['extraQty'].toInt()} x ${profile.currencySymbol}${sale['extraPrice'].toInt()}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: profile.textColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
       ),
     );
   }
@@ -1789,7 +1811,7 @@ class _ReportList extends StatelessWidget {
   Widget _insightStat(String label, String val, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(16),
@@ -1800,7 +1822,7 @@ class _ReportList extends StatelessWidget {
             Text(
               val,
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.w900,
                 color: color,
               ),
@@ -1818,6 +1840,7 @@ class _ReportList extends StatelessWidget {
       ),
     );
   }
+
 
   Widget _sectionHeader(String title, ProfileProvider profile) {
     return Text(
@@ -2015,7 +2038,7 @@ class _ReportList extends StatelessWidget {
                       final exportService = ExportService();
                       await exportService.saveBillAsPdf(
                         tx,
-                        profile.businessName,
+                        profile.displayBusinessName,
                       );
                       if (context.mounted) Navigator.pop(context);
                     },
@@ -2233,7 +2256,7 @@ class _ReportList extends StatelessWidget {
                             icon: const Icon(Icons.message_rounded, size: 18, color: Color(0xFF25D366)),
                             onPressed: () {
                               double due = tx.amount - tx.paidAmount;
-                              String msg = "Reminder from ${profile.businessName}: Pending balance of ${profile.currencySymbol}${due.toStringAsFixed(0)}. Please clear it. Thank you!";
+                              String msg = "Reminder from ${profile.displayBusinessName}: Pending balance of ${profile.currencySymbol}${due.toStringAsFixed(0)}. Please clear it. Thank you!";
                               _launchURL('https://wa.me/${tx.customerContact.replaceAll(RegExp(r'[^0-9]'), '')}?text=${Uri.encodeComponent(msg)}');
                             },
                           ),
@@ -2355,20 +2378,42 @@ class _ReportList extends StatelessWidget {
       child: Consumer<StaffProvider>(
         builder: (context, staffProvider, child) {
           final staffList = staffProvider.staffList;
-          if (staffList.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: Text('No staff found'),
-              ),
-            );
-          }
           return Column(
-            children: staffList.map((staff) => _StaffPayrollCard(
-              staff: staff,
-              profile: profile,
-              staffProvider: staffProvider,
-            )).toList(),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: profile.themeColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Total Net Payable', style: TextStyle(fontSize: 13, color: profile.secondaryTextColor)),
+                    Text('${profile.currencySymbol}${pending.toStringAsFixed(0)}', 
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: profile.themeColor)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: staffList.isEmpty
+                  ? const Center(child: Text('No staff added yet'))
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: staffList.length,
+                      itemBuilder: (context, index) {
+                        return _StaffPayrollCard(
+                          staff: staffList[index],
+                          profile: profile,
+                          staffProvider: staffProvider,
+                        );
+                      },
+                    ),
+              ),
+            ],
           );
         },
       ),
@@ -3391,20 +3436,42 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
       child: Consumer<StaffProvider>(
         builder: (context, staffProvider, child) {
           final staffList = staffProvider.staffList;
-          if (staffList.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: Text('No staff found'),
-              ),
-            );
-          }
           return Column(
-            children: staffList.map((staff) => _StaffPayrollCard(
-              staff: staff,
-              profile: profile,
-              staffProvider: staffProvider,
-            )).toList(),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: profile.themeColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Total Net Payable', style: TextStyle(fontSize: 13, color: profile.secondaryTextColor)),
+                    Text('${profile.currencySymbol}${pending.toStringAsFixed(0)}', 
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: profile.themeColor)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: staffList.isEmpty
+                  ? const Center(child: Text('No staff added yet'))
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: staffList.length,
+                      itemBuilder: (context, index) {
+                        return _StaffPayrollCard(
+                          staff: staffList[index],
+                          profile: profile,
+                          staffProvider: staffProvider,
+                        );
+                      },
+                    ),
+              ),
+            ],
           );
         },
       ),
@@ -3449,7 +3516,7 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
 
   @override
   Widget build(BuildContext context) {
-    final payable = widget.staff.calculateCurrentPayable();
+    final payable = widget.staffProvider.calculatePayable(widget.staff);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -3466,7 +3533,12 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
             },
             leading: CircleAvatar(
               backgroundColor: widget.profile.themeColor.withValues(alpha: 0.1),
-              child: Text(widget.staff.name[0].toUpperCase(), style: TextStyle(color: widget.profile.themeColor, fontWeight: FontWeight.bold)),
+              backgroundImage: widget.staff.imagePath != null && widget.staff.imagePath!.isNotEmpty
+                  ? FileImage(File(widget.staff.imagePath!))
+                  : null,
+              child: widget.staff.imagePath == null || widget.staff.imagePath!.isEmpty
+                  ? Text(widget.staff.name[0].toUpperCase(), style: TextStyle(color: widget.profile.themeColor, fontWeight: FontWeight.bold))
+                  : null,
             ),
             title: Text(widget.staff.name, style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text(widget.staff.role, style: TextStyle(fontSize: 12, color: widget.profile.secondaryTextColor)),
@@ -3508,14 +3580,7 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () {
-                            ExportService().exportSingleStaffReport(
-                              widget.profile.businessName,
-                              widget.staff,
-                              widget.staffProvider,
-                              DateTimeRange(start: widget.staff.joinDate, end: DateTime.now()),
-                            );
-                          },
+                          onPressed: () => _showReportOptions(context),
                           icon: const Icon(Icons.download_rounded, size: 18),
                           label: const Text('REPORT'),
                           style: OutlinedButton.styleFrom(
@@ -3551,6 +3616,53 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
     );
   }
 
+  void _showReportOptions(BuildContext context) {
+    final now = DateTime.now();
+    final firstOfCurrent = DateTime(now.year, now.month, 1);
+    final lastOfPrevious = firstOfCurrent.subtract(const Duration(days: 1));
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Download Staff Report', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text('Select a time period for ${widget.staff.name}\'s payroll report', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+            const SizedBox(height: 24),
+            _reportOption(context, 'This Month (Ongoing)', firstOfCurrent, now),
+            _reportOption(context, 'Last 3 Months (Completed)', DateTime(now.year, now.month - 3, 1), lastOfPrevious),
+            _reportOption(context, 'Last 6 Months (Completed)', DateTime(now.year, now.month - 6, 1), lastOfPrevious),
+            _reportOption(context, 'Last 12 Months (Completed)', DateTime(now.year, now.month - 12, 1), lastOfPrevious),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _reportOption(BuildContext context, String title, DateTime start, DateTime end) {
+    return ListTile(
+      leading: Icon(Icons.picture_as_pdf_outlined, color: widget.profile.themeColor),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text('${DateFormat('dd MMM yyyy').format(start)} - ${DateFormat('dd MMM yyyy').format(end)}', style: const TextStyle(fontSize: 11)),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () {
+        Navigator.pop(context);
+        ExportService().exportSingleStaffReport(
+          widget.profile.displayBusinessName,
+          widget.staff,
+          widget.staffProvider,
+          DateTimeRange(start: start, end: end),
+        );
+      },
+    );
+  }
+
   Widget _infoRow(String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3581,7 +3693,7 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
   }
 
   void _showPaySalaryDialog(BuildContext context) {
-    final payable = widget.staff.calculateCurrentPayable();
+    final payable = widget.staffProvider.calculatePayable(widget.staff);
     AppBottomSheet.showAction(
       context: context,
       profile: widget.profile,
@@ -3600,15 +3712,73 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
     // 1. Add to Expenses
     final txProvider = Provider.of<TransactionProvider>(context, listen: false);
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+
+    // Create itemized snapshots for salary breakdown
+    final List<TransactionItemSnapshot> salarySnapshots = [];
     
+    // Calculate deductions
+    final double mSalary = widget.staff.monthlySalary;
+    final double leaveDeduction = widget.staffProvider.calculateLeaveDeduction(widget.staff);
+    final double advanceDeduction = widget.staffProvider.calculateAdvanceTotal(widget.staff);
+    
+    // Estimate leave days from deduction if monthly salary is available
+    final int estLeaveDays = mSalary > 0 ? (leaveDeduction / (mSalary / 30)).round() : 0;
+
+    salarySnapshots.add(TransactionItemSnapshot(
+      id: -1,
+      name: 'Base Salary (${DateFormat('MMMM').format(DateTime.now())})',
+      category: 'Salary',
+      qty: 1,
+      unit: 'month',
+      variant: 'Full',
+      price: mSalary,
+      extraQty: 0,
+      extraPrice: 0,
+      servingMethod: 'N/A',
+      tableNumber: '',
+    ));
+
+    if (leaveDeduction > 0) {
+      salarySnapshots.add(TransactionItemSnapshot(
+        id: -2,
+        name: 'Leave Deductions ($estLeaveDays Days)',
+        category: 'Salary',
+        qty: 1,
+        unit: 'days',
+        variant: 'Deduction',
+        price: -leaveDeduction,
+        extraQty: 0,
+        extraPrice: 0,
+        servingMethod: 'N/A',
+        tableNumber: '',
+      ));
+    }
+
+    if (advanceDeduction > 0) {
+      salarySnapshots.add(TransactionItemSnapshot(
+        id: -3,
+        name: 'Advance Adjusted',
+        category: 'Salary',
+        qty: 1,
+        unit: 'amt',
+        variant: 'Deduction',
+        price: -advanceDeduction,
+        extraQty: 0,
+        extraPrice: 0,
+        servingMethod: 'N/A',
+        tableNumber: '',
+      ));
+    }
+
     final expenseTx = TransactionModel(
       amount: amount,
       type: 'expense',
       category: 'Salary',
-      description: 'Salary paid to ${widget.staff.name}',
+      description: 'Salary paid to ${widget.staff.name} ${jsonEncode(salarySnapshots.map((s) => s.toMap()).toList())}',
       date: DateTime.now(),
       paymentMode: 'Cash',
       isSynced: 0,
+      itemSnapshots: salarySnapshots, // Save breakdown
     );
     await txProvider.addTransaction(expenseTx, itemProvider);
 

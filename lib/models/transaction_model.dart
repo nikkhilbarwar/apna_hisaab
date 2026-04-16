@@ -107,6 +107,28 @@ class TransactionItemSnapshot {
     return base + totalExtra;
   }
 
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'category': category,
+      'qty': qty,
+      'unit': unit,
+      'variant': variant,
+      'price': price,
+      'purchase_price': purchasePrice,
+      'transport_cost': transportCost,
+      'full_price': fullPrice,
+      'half_price': halfPrice,
+      'extra_qty': extraQty,
+      'extra_price': extraPrice,
+      'serving_method': servingMethod,
+      'table_number': tableNumber,
+      'checked': checked,
+      'item_type': itemType,
+    };
+  }
+
   factory TransactionItemSnapshot.fromMap(Map<dynamic, dynamic> map) {
     bool toBool(dynamic value, {bool defaultValue = false}) {
       if (value == null) return defaultValue;
@@ -182,7 +204,10 @@ class TransactionModel {
     this.deletedAt,
     this.customerContact = '',
     this.status = 'completed',
-  });
+    List<TransactionItemSnapshot>? itemSnapshots,
+  }) : _manualSnapshots = itemSnapshots;
+
+  final List<TransactionItemSnapshot>? _manualSnapshots;
 
   String get token {
     final match = RegExp(r'Token:\s*(\d+)').firstMatch(description);
@@ -192,6 +217,7 @@ class TransactionModel {
   double get remainingCredit => paymentMode == 'Credit' ? amount - paidAmount : 0.0;
 
   List<TransactionItemSnapshot> get itemSnapshots {
+    if (_manualSnapshots != null && _manualSnapshots!.isNotEmpty) return _manualSnapshots!;
     List<TransactionItemSnapshot> snapshots = [];
     try {
       if (description.isEmpty) return [];
@@ -246,14 +272,16 @@ class TransactionModel {
   }
 
   double get subtotalValue {
-     if (description.contains(' | Subtotal: ₹')) {
+    if (category == 'Salary') return amount;
+    if (description.contains(' | Subtotal: ₹')) {
       return double.tryParse(description.split(' | Subtotal: ₹').last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
     }
     return amount;
   }
 
   double get taxValue {
-     if (description.contains('| Tax: ₹')) {
+    if (category == 'Salary') return 0.0;
+    if (description.contains('| Tax: ₹')) {
       return double.tryParse(description.split('| Tax: ₹').last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
     }
     return 0.0;

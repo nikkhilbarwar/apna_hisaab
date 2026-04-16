@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -80,8 +81,52 @@ class AuthService {
     try {
       User? user = _auth.currentUser;
       if (user != null) {
-        // Sign out from Google first if applicable
+        final uid = user.uid;
+        final firestore = FirebaseFirestore.instance;
+
+        // Get user profile first to find license key
+        final userDoc = await firestore.collection('users').doc(uid).get();
+        final userData = userDoc.data();
+        final licenseKey = userData?['license_key'] ?? userData?['licenseKey'];
+
+        // 1. Reset License if exists
+        if (licenseKey != null && licenseKey.toString().isNotEmpty) {
+          await firestore.collection('licenses').doc(licenseKey).update({
+            'activated': false,
+            'activeDeviceId': null,
+            'activatedAt': null,
+          }).catchError((e) => debugPrint("License Reset Skip: $e"));
+        }
+
+        // 2. Delete all user data from various collections
+        final collections = [
+          'items', 'categories', 'transactions', 'staff', 
+          'suppliers', 'units', 'reminders', 'support_tickets'
+        ];
+
+        for (var collection in collections) {
+          try {
+            final snapshots = await firestore.collection(collection)
+                .where('createdBy', isEqualTo: uid).get();
+            
+            // Delete in batches to avoid permission/timeout issues
+            final batch = firestore.batch();
+            for (var doc in snapshots.docs) {
+              batch.delete(doc.reference);
+            }
+            await batch.commit();
+          } catch (e) {
+            debugPrint("Error cleaning $collection: $e");
+          }
+        }
+
+        // 3. Delete the main user doc
+        await firestore.collection('users').doc(uid).delete().catchError((e) => debugPrint("User Doc Delete Skip: $e"));
+
+        // 4. Sign out from Google first if applicable
         await _googleSignIn.signOut();
+        
+        // 5. Delete the Auth User (This requires recent login)
         await user.delete();
       }
     } catch (e) {

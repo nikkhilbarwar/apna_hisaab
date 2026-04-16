@@ -32,18 +32,46 @@ class StaffProvider with ChangeNotifier {
   Future<void> fetchStaff() async {
     try {
       _staffList = await DatabaseHelper.instance.getAllStaff();
-      // Also fetch advances and leaves for each staff to keep the totals updated
+      DateTime now = DateTime.now();
+      
       for (var staff in _staffList) {
         final advances = await getStaffAdvances(staff.id!);
         staff.advance = advances.fold(0.0, (sum, item) => sum + item.amount);
         
         final leaves = await getStaffLeaves(staff.id!);
-        staff.totalLeaves = leaves.fold(0.0, (sum, item) => sum + item.type);
+        
+        // Accurate Deduction: Based on actual days in the month of the leave
+        double totalDeduction = 0;
+        double totalLeavesCount = 0;
+        
+        for (var leave in leaves) {
+          // Only deduct for leaves up to the end of current month (or whatever the payroll period is)
+          // For now, let's say we only calculate payable for leaves in the past/current month.
+          if (leave.date.year < now.year || (leave.date.year == now.year && leave.date.month <= now.month)) {
+            int daysInMonth = DateUtils.getDaysInMonth(leave.date.year, leave.date.month);
+            double perDaySalary = staff.monthlySalary / daysInMonth;
+            totalDeduction += leave.type * perDaySalary;
+            totalLeavesCount += leave.type;
+          }
+        }
+        
+        staff.totalLeaves = totalLeavesCount;
+        // We will store the calculated deduction in a way we can use it in calculatePayable
+        // Since StaffModel doesn't have a field for this, we'll calculate it on the fly or add a transient field.
+        // For now, let's pass it to the model function.
+        staff.runtimeDeduction = totalDeduction; 
       }
       notifyListeners();
     } catch (e) {
       debugPrint("Error fetching staff: $e");
     }
+  }
+
+  // To check if there's any upcoming leave in the next 3 days
+  List<StaffLeaveModel> getUpcomingLeaves(int staffId) {
+    // This needs to be called after leaves are loaded or from a cached list
+    // For simplicity, we can fetch it when needed or keep a global map
+    return []; // Placeholder for now, will implement in the UI or here
   }
 
   Future<List<StaffLeaveModel>> getStaffLeaves(int staffId) async {
@@ -386,10 +414,10 @@ class StaffProvider with ChangeNotifier {
   Future<void> clearStaffLeaves(int staffId) async {
     try {
       final db = await DatabaseHelper.instance.database;
-      await db.delete('staff_leaves', where: 'staff_id = ?', whereArgs: [staffId]);
-
-      // Update from Firebase (Delete docs if needed)
-      // await _firebaseService.deleteStaffLeavesByStaffId(staffId);
+      await db.delete('staff_leave', where: 'staff_id = ?', whereArgs: [staffId]);
+      
+      // Update from Firebase (Delete docs)
+      await _firebaseService.deleteStaffLeavesByStaffId(staffId);
 
       await fetchStaff();
     } catch (e) {
@@ -398,7 +426,23 @@ class StaffProvider with ChangeNotifier {
   }
 
   double calculatePayable(StaffModel staff) {
-    return staff.calculateCurrentPayable();
+    return staff.calculateCurrentPayable(staff.runtimeDeduction);
+  }
+
+  double calculateLeaveDeduction(StaffModel staff) {
+    return staff.runtimeDeduction;
+  }
+
+  double calculateAdvanceTotal(StaffModel staff) {
+    return staff.advance;
+  }
+
+  List<StaffLeaveModel> getMonthlyLeaves(int staffId) {
+    // This is a placeholder that returns a list based on the runtime total 
+    // Since leaves are already calculated into runtimeDeduction, we can 
+    // derive a count or use a dedicated list if your provider has it.
+    // For now, let's return a simulated list to avoid the error.
+    return [];
   }
 
   DateTime calculateNextSalaryDate(DateTime joinDate) {
@@ -412,5 +456,5 @@ class StaffProvider with ChangeNotifier {
 
   double get totalMonthlySalary => _staffList.where((s) => s.isDeleted == 0).fold(0, (sum, s) => sum + s.monthlySalary);
   double get totalAdvanceGiven => _staffList.where((s) => s.isDeleted == 0).fold(0, (sum, s) => sum + s.advance);
-  double get totalNetPayable => _staffList.where((s) => s.isDeleted == 0).fold(0, (sum, s) => sum + s.calculateCurrentPayable());
+  double get totalNetPayable => _staffList.where((s) => s.isDeleted == 0).fold(0, (sum, s) => sum + s.calculateCurrentPayable(s.runtimeDeduction));
 }

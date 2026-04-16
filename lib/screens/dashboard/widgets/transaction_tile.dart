@@ -20,6 +20,15 @@ class TransactionTile extends StatelessWidget {
   });
 
   String _getSmartItemTitle(TransactionModel tx) {
+    if (tx.category == 'Salary') {
+      String name = tx.description.replaceAll('Salary paid to ', '');
+      // If there's JSON in description, the replaceAll might leave junk. 
+      // Let's clean it properly.
+      if (name.contains('[')) {
+        name = name.split('[').first.trim();
+      }
+      return "Salary: $name";
+    }
     final snapshots = tx.itemSnapshots;
     if (snapshots.isEmpty) return tx.category;
     if (snapshots.length == 1) {

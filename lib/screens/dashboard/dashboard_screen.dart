@@ -192,6 +192,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String _getSmartItemTitle(TransactionModel tx) {
+    if (tx.category == 'Salary') {
+      String name = tx.description;
+      if (name.contains('Salary paid to ')) {
+        name = name.replaceAll('Salary paid to ', '');
+      }
+      if (name.contains('[')) {
+        name = name.split('[').first.trim();
+      }
+      return "Salary: $name";
+    }
     final items = tx.parsedItems;
     if (items.isEmpty) return tx.category;
     if (items.length == 1) {
@@ -275,15 +285,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isSelectionMode = _selectedIds.isNotEmpty;
 
     final todayCompletedCount = txProvider.transactions.where((tx) => (tx.type == 'sale' || tx.type == 'income') && _isToday(tx.date)).length;
-    final todayPurchaseCount = txProvider.transactions.where((tx) => (tx.type == 'purchase' || tx.type == 'expense') && _isToday(tx.date)).length;
+    final todayPurchaseCount = txProvider.transactions.where((tx) => (tx.type == 'purchase' || tx.type == 'expense') && tx.category != 'Salary' && _isToday(tx.date)).length;
+    final todaySalaryCount = txProvider.transactions.where((tx) => tx.category == 'Salary' && _isToday(tx.date)).length;
 
     List<TransactionModel> filteredTransactions;
     if (_activeFilter == 'Pending') {
       filteredTransactions = txProvider.pendingTransactions.take(50).toList();
     } else {
-      String targetType = _activeFilter == 'Completed' ? 'sale' : 'purchase';
       filteredTransactions = txProvider.transactions.where((tx) {
-        bool matchType = (targetType == 'sale') ? (tx.type == 'sale' || tx.type == 'income') : (tx.type == 'purchase' || tx.type == 'expense');
+        bool matchType = false;
+        if (_activeFilter == 'Completed') {
+          matchType = (tx.type == 'sale' || tx.type == 'income');
+        } else if (_activeFilter == 'Purchase') {
+          matchType = (tx.type == 'purchase' || tx.type == 'expense') && tx.category != 'Salary';
+        } else if (_activeFilter == 'Salary') {
+          matchType = tx.category == 'Salary';
+        }
+        
         if (!matchType) return false;
 
         if (_selectedDateRange != null) {
@@ -367,6 +385,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               children: [
                                 _filterChip('Completed', _selectedDateRange != null && _activeFilter == 'Completed' ? filteredTransactions.length : todayCompletedCount),
                                 const SizedBox(width: 8),
+                                if (todaySalaryCount > 0 || _activeFilter == 'Salary' || (_selectedDateRange != null && todaySalaryCount > 0)) ...[
+                                  _filterChip('Salary', _selectedDateRange != null && _activeFilter == 'Salary' ? filteredTransactions.length : todaySalaryCount),
+                                  const SizedBox(width: 8),
+                                ],
                                 if (todayPurchaseCount > 0 || _activeFilter == 'Purchase' || _selectedDateRange != null) ...[
                                   _filterChip('Purchase', _selectedDateRange != null && _activeFilter == 'Purchase' ? filteredTransactions.length : todayPurchaseCount),
                                   const SizedBox(width: 8),
@@ -750,6 +772,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildModernTransactionTile(BuildContext context, TransactionModel tx, ProfileProvider profile, bool isSelected) {
     final isSale = tx.type == 'sale' || tx.type == 'income';
+    final isSalary = tx.category == 'Salary';
     final isCredit = tx.paymentMode == 'Credit';
     final hasBalance = isCredit && (tx.amount - tx.paidAmount) > 0;
     
@@ -776,12 +799,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         leading: isSelected ? const Icon(Icons.check_circle, color: Colors.red) : Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: (isReadymade ? Colors.blue : (isSale ? Colors.green : Colors.red)).withValues(alpha: 0.1),
+            color: (isReadymade ? Colors.blue : (isSalary ? Colors.purple : (isSale ? Colors.green : Colors.red))).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12)
           ),
           child: Icon(
-            isReadymade ? Icons.swap_horiz_rounded : (isSale ? Icons.south_west_rounded : Icons.north_east_rounded),
-            color: isReadymade ? Colors.blue : (isSale ? Colors.green : Colors.red),
+            isReadymade ? Icons.swap_horiz_rounded : (isSalary ? Icons.badge_rounded : (isSale ? Icons.south_west_rounded : Icons.north_east_rounded)),
+            color: isReadymade ? Colors.blue : (isSalary ? Colors.purple : (isSale ? Colors.green : Colors.red)),
             size: 18
           ),
         ),
@@ -854,7 +877,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => TransactionDetailSheet(tx: tx, profile: profile),
+      builder: (context) => TransactionDetailSheet(tx: tx),
     );
   }
 
@@ -866,6 +889,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       color = Colors.orange;
     } else if (label == 'Purchase') {
       color = Colors.orangeAccent.shade700;
+    } else if (label == 'Salary') {
+      color = Colors.purple;
     } else {
       color = profile.themeColor;
     }

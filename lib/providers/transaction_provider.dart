@@ -257,6 +257,9 @@ class TransactionProvider with ChangeNotifier {
   }
 
   Future<void> _ensureToken(TransactionModel tx, {TransactionModel? oldTx}) async {
+    // 0. DO NOT assign tokens to Salary or Expenses
+    if (tx.category == 'Salary' || tx.type == 'expense') return;
+
     // 1. If oldTx has token, preserve it
     if (oldTx != null) {
       String oldToken = _extractToken(oldTx.description);

@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -40,19 +42,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
   int _secretTapCount = 0;
 
   String _adminRole = 'staff';
-  String _selectedPlan = '1 Year';
+  String _selectedPlan = '1 Year (365 Days)';
   String _statusFilter = 'All';
   String? _generatedKey;
   
   final String _driveLink = "https://drive.google.com/drive/folders/1560Q2Lju7iBDBwKAYC0UOwkSV7NAvMM6?usp=sharing";
 
   final List<Map<String, dynamic>> _validityOptions = [
-    {'label': '7 Days Trial', 'days': 7, 'planType': 'trial'},
-    {'label': '30 Days', 'days': 30, 'planType': 'monthly'},
-    {'label': '3 Months', 'days': 90, 'planType': 'quarterly'},
-    {'label': '6 Months', 'days': 180, 'planType': 'half_yearly'},
-    {'label': '1 Year', 'days': 365, 'planType': 'yearly'},
-    {'label': 'Lifetime', 'days': null, 'planType': 'lifetime'},
+    {'label': '1 Month (28 Days)', 'days': 28, 'planType': 'monthly'},
+    {'label': '3 Months (84 Days)', 'days': 84, 'planType': 'quarterly'},
+    {'label': '6 Months (168 Days)', 'days': 168, 'planType': 'half_yearly'},
+    {'label': '1 Year (365 Days)', 'days': 365, 'planType': 'yearly'},
+    {'label': 'Lifetime (10 Years)', 'days': 3650, 'planType': 'lifetime'},
   ];
 
   @override
@@ -65,26 +66,38 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
   Future<void> _initLicenseSystem() async {
     try {
       await LicenseService.init();
-      final prefs = await SharedPreferences.getInstance();
-      final adminId = prefs.getString('admin_id') ?? '';
+      final user = FirebaseAuth.instance.currentUser;
+      final userEmail = user?.email?.toLowerCase() ?? '';
+      final uid = user?.uid;
       
+      const adminEmails = [
+        "nikkhilbarwar@gmail.com",
+        "anitamishra1714@gmail.com",
+        "missadvocate06@gmail.com"
+      ];
+
       if (mounted) {
         setState(() {
-          _adminRole = prefs.getString('admin_role') ?? 'staff';
+          _adminRole = 'staff'; 
           
-          // Permanent Super Admin for your email
-          if (adminId.toLowerCase() == 'nikkhilbarwar@gmail.com') {
+          if (adminEmails.contains(userEmail)) {
             _adminRole = 'super_admin';
+            
+            if (uid != null) {
+              LicenseService.firestore.collection('admins').doc(uid).set({
+                'email': userEmail,
+                'role': 'super_admin',
+                'status': 'active',
+                'lastLogin': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true)).catchError((_) {});
+            }
           }
-
+          
           _isInitializing = false;
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Init Error: $e")));
-        setState(() => _isInitializing = false);
-      }
+      if (mounted) setState(() => _isInitializing = false);
     }
   }
 
@@ -99,7 +112,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
     } catch (_) {}
   }
 
-  // Auto-save to Firebase when typing
   Timer? _debounce;
   void _onAnnouncementChanged(String value) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
@@ -134,7 +146,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
       final key = _generateLicenseKey(_restaurantController.text, _ownerController.text, _phoneController.text);
       final plan = _validityOptions.firstWhere((e) => e['label'] == _selectedPlan);
       final now = DateTime.now();
-      final expiry = plan['days'] == null ? null : now.add(Duration(days: plan['days']));
+      final days = plan['days'] as int;
+      final expiry = now.add(Duration(days: days));
 
       await LicenseService.firestore.collection('licenses').doc(key).set({
         'licenseKey': key,
@@ -144,10 +157,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
         'status': 'active',
         'planType': plan['planType'],
         'price': int.tryParse(_priceController.text) ?? 0,
-        'isLifetime': plan['days'] == null,
+        'isLifetime': plan['days'] == 3650,
         'createdAt': FieldValue.serverTimestamp(),
-        'validTill': expiry?.toIso8601String(),
-        'validTillFormatted': expiry == null ? 'Lifetime' : DateFormat('dd/MM/yyyy').format(expiry),
+        'validTill': expiry.toIso8601String(),
+        'validTillFormatted': DateFormat('dd/MM/yyyy').format(expiry),
         'activated': false,
         'activeDeviceId': null,
         'isReminderEnabled': true,
@@ -360,13 +373,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildDropdown(String label, String value, List<String> items, Function(String) onChanged, ProfileProvider profile) {
+  Widget _buildDropdown(String label, String value, List<String> items, Function(String?) onChanged, ProfileProvider profile) {
     return DropdownButtonFormField<String>(
       value: value,
       dropdownColor: profile.cardColor,
       style: TextStyle(color: profile.textColor, fontWeight: FontWeight.w500),
       items: items.map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase(), style: const TextStyle(fontSize: 13)))).toList(),
-      onChanged: (v) => onChanged(v!),
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: profile.secondaryTextColor, fontSize: 12),
@@ -439,28 +452,71 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                 ],
               ),
               const SizedBox(height: 12),
+              _detailRow("Business Name", data['restaurantName'] ?? "N/A", Icons.storefront_rounded, profile),
+              Row(
+                children: [
+                  Expanded(child: _detailRow("Owner Name", data['ownerName'] ?? "N/A", Icons.person_outline_rounded, profile)),
+                  Expanded(child: _detailRow("Phone", data['phone'] ?? "N/A", Icons.phone_android_rounded, profile)),
+                ],
+              ),
+              const Divider(height: 16),
               _detailRow("License Key", data['licenseKey'] ?? "N/A", Icons.vpn_key, profile, isSelectable: true),
               Row(
                 children: [
                   Expanded(child: _detailRow("Validity", data['validTillFormatted'] ?? "N/A", Icons.calendar_today, profile)),
-                  Expanded(child: _detailRow("Amount Collected", "₹${data['price'] ?? 0}", Icons.payments_outlined, profile, valueColor: Colors.green)),
+                  Expanded(child: _detailRow("Plan Type", (data['planType'] ?? "N/A").toString().toUpperCase(), Icons.card_membership_rounded, profile)),
                 ],
               ),
+              _detailRow("Amount Collected", "₹${data['price'] ?? 0}", Icons.payments_outlined, profile, valueColor: Colors.green),
+              
+              if (data['upgradeRequest'] != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.upgrade_rounded, color: Colors.orange),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          "UPGRADE REQUESTED: ${data['upgradeRequest']}",
+                          style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              
+              const Divider(height: 24),
               Text("QUICK EXTEND", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: profile.secondaryTextColor, letterSpacing: 1)),
               const SizedBox(height: 10),
               Row(
                 children: [
                   _quickExtendBtn(data, 7, "7D", profile),
                   const SizedBox(width: 8),
-                  _quickExtendBtn(data, 30, "30D", profile),
+                  _quickExtendBtn(data, 28, "28D", profile),
                   const SizedBox(width: 8),
-                  _quickExtendBtn(data, 90, "3M", profile),
+                  _quickExtendBtn(data, 84, "3M", profile),
                   const SizedBox(width: 8),
                   _quickExtendBtn(data, 365, "1Y", profile),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               _detailRow("App Version", appVersion, Icons.phonelink_setup_rounded, profile),
+              _detailRow("Device ID", data['activeDeviceId'] ?? "NOT LINKED", Icons.phone_android_rounded, profile, 
+                valueColor: data['activeDeviceId'] == null ? Colors.orange : null,
+                trailing: data['activeDeviceId'] != null ? TextButton(
+                  onPressed: () => _resetDevice(data['licenseKey'], data['restaurantName'] ?? "User", profile),
+                  child: const Text("RESET", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
+                ) : null
+              ),
               _detailRow("Last Active", lastUsed, Icons.access_time_rounded, profile),
               const Divider(height: 32),
               Text("USER PERMISSIONS & CONTROLS", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: profile.secondaryTextColor, letterSpacing: 1)),
@@ -594,7 +650,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -635,6 +691,33 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
         }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    }
+  }
+
+  Future<void> _deleteTicket(String ticketId, String restaurantName, ProfileProvider profile, {bool shouldPop = false}) async {
+    final confirm = await AppBottomSheet.showAction(
+      context: context,
+      profile: profile,
+      title: "Delete Ticket?",
+      message: "Are you sure you want to permanently delete the support ticket from '$restaurantName'?",
+      confirmLabel: "DELETE",
+      isDestructive: true,
+    );
+
+    if (confirm == true) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final adminId = prefs.getString('admin_id') ?? "Admin";
+        await LicenseService.firestore.collection('support_tickets').doc(ticketId).delete();
+        await LicenseService.logAdminAction(adminId, "DELETE_TICKET", "Deleted ticket for $restaurantName ($ticketId)");
+        
+        if (mounted) {
+          if (shouldPop) Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ticket Deleted"), backgroundColor: Colors.red));
+        }
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
       }
     }
   }
@@ -717,6 +800,29 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
     }
   }
 
+
+  Widget _buildTopIcon(IconData icon, String tooltip, VoidCallback onTap, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            child: Icon(icon, color: color ?? Colors.white, size: 18),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = Provider.of<ProfileProvider>(context);
@@ -738,24 +844,65 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                 ));
               }
             },
-            child: const Text("Admin", style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1))),
+            child: const Text("Admin Console", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: -0.5))),
           backgroundColor: profile.themeColor,
           foregroundColor: appBarColor,
           elevation: 0,
           actions: [
-            if (_adminRole == 'super_admin') ...[
-              IconButton(
-                icon: const Icon(Icons.people_alt_rounded),
-                onPressed: () => _showStaffManagement(profile),
-                tooltip: "Staff Management",
-              ),
-            ],
-            _buildAnnouncementIcon(profile),
-            IconButton(
-              icon: const Icon(Icons.history_rounded), 
-              onPressed: () => _showLogsModal(profile),
-              tooltip: "Admin Logs",
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('support_tickets').where('status', isEqualTo: 'open').snapshots(),
+              builder: (context, snapshot) {
+                int openTickets = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                return _buildTopIcon(
+                  openTickets > 0 ? Icons.notification_important_rounded : Icons.support_agent_rounded, 
+                  "Support Center", 
+                  () => _showSupportCenter(profile),
+                  color: openTickets > 0 ? Colors.orangeAccent : null
+                );
+              }
             ),
+            _buildAnnouncementIcon(profile),
+            Theme(
+              data: Theme.of(context).copyWith(
+                dividerTheme: const DividerThemeData(thickness: 0.5),
+              ),
+              child: PopupMenuButton<String>(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.more_vert_rounded, color: appBarColor, size: 18),
+                ),
+                position: PopupMenuPosition.under,
+                offset: const Offset(0, 8),
+                color: profile.cardColor,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                onSelected: (value) {
+                  if (value == 'staff') _showStaffManagement(profile);
+                  if (value == 'cleanup') _performDataCleanup(profile);
+                  if (value == 'logs') _showLogsModal(profile);
+                },
+                itemBuilder: (context) => [
+                  if (_adminRole == 'super_admin')
+                    PopupMenuItem(
+                      value: 'staff',
+                      child: _buildPopupItem(Icons.people_alt_rounded, "Staff Control", profile),
+                    ),
+                  if (_adminRole == 'super_admin')
+                    PopupMenuItem(
+                      value: 'cleanup',
+                      child: _buildPopupItem(Icons.auto_fix_high_rounded, "System Cleanup", profile, iconColor: Colors.amber),
+                    ),
+                  PopupMenuItem(
+                    value: 'logs',
+                    child: _buildPopupItem(Icons.history_rounded, "Activity Logs", profile),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
           ],
         ),
         body: _isInitializing 
@@ -765,7 +912,59 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                 StreamBuilder<QuerySnapshot>(
                   stream: LicenseService.firestore.collection('licenses').snapshots(),
                   builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.error_outline_rounded, color: Colors.red, size: 48),
+                              const SizedBox(height: 16),
+                              Text(
+                                "Permission Denied or Connection Error",
+                                style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                snapshot.error.toString(),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: profile.secondaryTextColor, fontSize: 12),
+                              ),
+                              const SizedBox(height: 24),
+                              ElevatedButton(
+                                onPressed: () => setState(() {}),
+                                child: const Text("RETRY"),
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
                     final allDocs = snapshot.data?.docs ?? [];
+                    
+                    final filteredDocs = allDocs.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final search = _searchController.text.toLowerCase();
+                      final phone = (data['phone'] ?? '').toString().toLowerCase();
+                      final name = (data['restaurantName'] ?? '').toString().toLowerCase();
+                      final status = data['status'] ?? 'active';
+
+                      bool matchesSearch = phone.contains(search) || name.contains(search);
+                      bool matchesFilter = true;
+                      
+                      if (_statusFilter == 'Active') matchesFilter = status == 'active';
+                      if (_statusFilter == 'Blocked') matchesFilter = status == 'blocked';
+                      if (_statusFilter == 'Expiring') {
+                        if (data['validTill'] == null) return false;
+                        final expiry = DateTime.tryParse(data['validTill']);
+                        matchesFilter = expiry != null && expiry.difference(DateTime.now()).inDays <= 7;
+                      }
+
+                      return matchesSearch && matchesFilter;
+                    }).toList();
+
                     return SingleChildScrollView(
                       padding: const EdgeInsets.all(20),
                       child: Column(
@@ -782,9 +981,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text("LICENSE HISTORY", style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                              Text("LICENSE HISTORY (${filteredDocs.length})", 
+                                style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold, fontSize: 12)),
                               if (_isSelectionMode)
-                                TextButton(onPressed: () => setState(() => _isSelectionMode = false), child: const Text("CANCEL", style: TextStyle(color: Colors.red)))
+                                TextButton(onPressed: () => setState(() => _isSelectionMode = false), 
+                                  child: const Text("CANCEL", style: TextStyle(color: Colors.red)))
                               else
                                 TextButton.icon(
                                   onPressed: () => setState(() => _isSelectionMode = true),
@@ -797,7 +998,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                           const SizedBox(height: 12),
                           _buildFilterChips(profile),
                           const SizedBox(height: 12),
-                          _buildHistoryList(allDocs, profile),
+                          _buildHistoryList(filteredDocs, profile),
                           const SizedBox(height: 30),
                           _buildChatSectionHeader(profile),
                           _buildRecentChatsList(profile),
@@ -815,17 +1016,25 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
 
   Widget _buildAnnouncementIcon(ProfileProvider profile) {
     return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: InkWell(
-        onTap: () => setState(() => _isAnnouncementExpanded = !_isAnnouncementExpanded),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.2),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Tooltip(
+        message: "Announcements",
+        child: InkWell(
+          onTap: () => setState(() => _isAnnouncementExpanded = !_isAnnouncementExpanded),
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _isAnnouncementExpanded ? Colors.orange : Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            child: Icon(
+              _isAnnouncementExpanded ? Icons.close_rounded : Icons.campaign_rounded, 
+              color: Colors.white, 
+              size: 18
+            ),
           ),
-          child: const Icon(Icons.campaign_rounded, color: Colors.white, size: 20),
         ),
       ),
     );
@@ -833,63 +1042,99 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
 
   Widget _buildAnnouncementOverlay(ProfileProvider profile) {
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      top: _isAnnouncementExpanded ? 0 : -300,
-      right: 16,
-      left: 16,
-      child: GestureDetector(
-        onTap: () {}, // Prevent collapse when clicking inside
-        child: Material(
-          elevation: 10,
-          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
-          color: profile.cardColor,
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.campaign_outlined, color: Colors.orange),
-                    const SizedBox(width: 8),
-                    const Text("Post Global Announcement", style: TextStyle(fontWeight: FontWeight.bold)),
-                    const Spacer(),
-                    if (_selectedPhones.isNotEmpty)
-                      Chip(label: Text("${_selectedPhones.length} Users Selected", style: const TextStyle(fontSize: 10)), backgroundColor: Colors.orange.withValues(alpha: 0.1)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _announcementController,
-                  maxLines: 4,
-                  onChanged: _onAnnouncementChanged,
-                  style: TextStyle(color: profile.textColor),
-                  decoration: InputDecoration(
-                    hintText: "Enter message for all users...",
-                    fillColor: profile.scaffoldColor,
-                    filled: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutBack,
+      top: _isAnnouncementExpanded ? 10 : -450,
+      right: 12,
+      left: 12,
+      child: Container(
+        decoration: BoxDecoration(
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 5)],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: profile.cardColor.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3), width: 1.5),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                        child: const Icon(Icons.campaign_rounded, color: Colors.orange, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Global Broadcast", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                          Text("Send alert to all users", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        ],
+                      ),
+                      const Spacer(),
+                      if (_selectedPhones.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
+                          child: Text("${_selectedPhones.length} Targeted", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: profile.themeColor)),
+                        ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Checkbox(value: _sendPushNotification, onChanged: (v) => setState(() => _sendPushNotification = v!)),
-                    const Text("Send Push Notification", style: TextStyle(fontSize: 12)),
-                    const Spacer(),
-                    ElevatedButton(
-                      onPressed: _isPostingAnnouncement ? null : _postAnnouncement,
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      child: _isPostingAnnouncement ? const CircularProgressIndicator(color: Colors.white) : const Text("PUBLISH"),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _announcementController,
+                    maxLines: 3,
+                    onChanged: _onAnnouncementChanged,
+                    style: TextStyle(color: profile.textColor, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: "Type message for users...",
+                      hintStyle: TextStyle(color: profile.secondaryTextColor.withValues(alpha: 0.5), fontSize: 13),
+                      fillColor: profile.scaffoldColor.withValues(alpha: 0.5),
+                      filled: true,
+                      contentPadding: const EdgeInsets.all(16),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text("Push Notify", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 4),
+                      Transform.scale(
+                        scale: 0.7,
+                        child: Switch(
+                          value: _sendPushNotification, 
+                          activeColor: Colors.orange,
+                          onChanged: (v) => setState(() => _sendPushNotification = v)
+                        ),
+                      ),
+                      const Spacer(),
+                      ElevatedButton(
+                        onPressed: _isPostingAnnouncement ? null : _postAnnouncement,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: _isPostingAnnouncement 
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                          : const Text("PUBLISH", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -912,34 +1157,53 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
 
   Widget _buildRecentChatsList(ProfileProvider profile) {
     return StreamBuilder<QuerySnapshot>(
-      stream: LicenseService.firestore.collection('support_tickets').orderBy('lastUpdate', descending: true).limit(5).snapshots(),
+      stream: LicenseService.firestore.collection('support_tickets').snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
-        final tickets = snapshot.data!.docs;
-        if (tickets.isEmpty) return Center(child: Text("No messages yet", style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)));
+        
+        final allDocs = snapshot.data!.docs;
+        final tickets = allDocs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return data['status'] != 'deleted';
+        }).toList();
+
+        // Sort manually by lastUpdate descending
+        tickets.sort((a, b) {
+          final aTime = (a.data() as Map<String, dynamic>)['lastUpdate'] as Timestamp?;
+          final bTime = (b.data() as Map<String, dynamic>)['lastUpdate'] as Timestamp?;
+          if (aTime == null || bTime == null) return 0;
+          return bTime.compareTo(aTime);
+        });
+
+        // Limit to top 5
+        final limitedTickets = tickets.take(5).toList();
+
+        if (limitedTickets.isEmpty) return Center(child: Text("No messages yet", style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)));
 
         return ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          itemCount: tickets.length,
+          itemCount: limitedTickets.length,
           itemBuilder: (context, i) {
-            final ticket = tickets[i].data() as Map<String, dynamic>;
-            final id = tickets[i].id;
+            final ticket = limitedTickets[i].data() as Map<String, dynamic>;
+            final id = limitedTickets[i].id;
             return Card(
               color: profile.cardColor,
               margin: const EdgeInsets.only(bottom: 8),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: ListTile(
                 onTap: () => _showTicketChat(id, ticket, profile),
-                leading: CircleAvatar(child: Text(ticket['restaurantName']?[0] ?? "U")),
-                title: Text(ticket['restaurantName'] ?? "Unknown", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Text(ticket['message'] ?? "", maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                  onPressed: () async {
-                    await LicenseService.firestore.collection('support_tickets').doc(id).delete();
-                  },
+                leading: CircleAvatar(
+                  backgroundColor: profile.themeColor.withValues(alpha: 0.1),
+                  child: Text(ticket['restaurantName']?[0] ?? "U", style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.bold))),
+                title: Row(
+                  children: [
+                    Expanded(child: Text(ticket['restaurantName'] ?? "Unknown", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    _buildSmallStatusBadge(ticket['status'] ?? 'open'),
+                  ],
                 ),
+                subtitle: Text(ticket['message'] ?? "", maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
+                trailing: const Icon(Icons.chevron_right_rounded, size: 20),
               ),
             );
           },
@@ -1006,7 +1270,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
             DropdownButtonFormField<String>(
               value: _selectedPlan,
               dropdownColor: profile.cardColor,
-              decoration: InputDecoration(fillColor: profile.scaffoldColor, filled: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none)),
+              style: TextStyle(color: profile.textColor),
+              decoration: InputDecoration(
+                labelText: "Select Plan",
+                labelStyle: TextStyle(color: profile.secondaryTextColor),
+                fillColor: profile.scaffoldColor, 
+                filled: true, 
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none)
+              ),
               items: _validityOptions.map((e) => DropdownMenuItem(value: e['label'] as String, child: Text(e['label']))).toList(),
               onChanged: (v) => setState(() => _selectedPlan = v!),
             ),
@@ -1030,10 +1301,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildHistoryList(List<QueryDocumentSnapshot> docs, ProfileProvider profile) {
-    var filtered = docs;
-    if (_searchController.text.isNotEmpty) {
-      filtered = docs.where((doc) => doc['phone'].contains(_searchController.text) || doc['restaurantName'].toLowerCase().contains(_searchController.text.toLowerCase())).toList();
+  Widget _buildHistoryList(List<QueryDocumentSnapshot> filtered, ProfileProvider profile) {
+    if (filtered.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: Column(
+            children: [
+              Icon(Icons.search_off_rounded, size: 48, color: profile.secondaryTextColor.withValues(alpha: 0.5)),
+              const SizedBox(height: 16),
+              Text("No licenses found", style: TextStyle(color: profile.secondaryTextColor)),
+            ],
+          ),
+        ),
+      );
     }
 
     return ListView.builder(
@@ -1051,7 +1332,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: isSelected ? Colors.orange : Colors.transparent)),
           child: ListTile(
             onTap: _isSelectionMode ? () => setState(() => isSelected ? _selectedPhones.remove(phone) : _selectedPhones.add(phone)) : () => _showLicenseDetails(data, profile),
-            leading: _isSelectionMode ? Checkbox(value: isSelected, onChanged: (v) => setState(() => v! ? _selectedPhones.add(phone) : _selectedPhones.remove(phone))) : CircleAvatar(backgroundColor: data['status'] == 'active' ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1), child: Icon(data['status'] == 'active' ? Icons.check : Icons.block, color: data['status'] == 'active' ? Colors.green : Colors.red, size: 16)),
+            leading: _isSelectionMode 
+              ? Checkbox(value: isSelected, onChanged: (v) => setState(() => v! ? _selectedPhones.add(phone) : _selectedPhones.remove(phone))) 
+              : CircleAvatar(backgroundColor: data['status'] == 'active' ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1), child: Icon(data['status'] == 'active' ? Icons.check : Icons.block, color: data['status'] == 'active' ? Colors.green : Colors.red, size: 16)),
             title: Text(data['restaurantName'] ?? "N/A", style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text("${data['phone']} • ${data['validTillFormatted']}", style: const TextStyle(fontSize: 11)),
             trailing: _adminRole == 'super_admin' && !_isSelectionMode ? IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteLicense(data['licenseKey'], data['restaurantName'], profile, isFromList: true)) : const Icon(Icons.chevron_right),
@@ -1089,7 +1372,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
     AppBottomSheet.show(
       context: context,
       profile: profile,
-      title: "ADMIN LOGS",
+      title: "ADMIN",
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.7,
         child: StreamBuilder<QuerySnapshot>(
@@ -1130,7 +1413,19 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                     padding: const EdgeInsets.all(16),
                     children: [
                       _buildChatBubble(message: data['message'], sender: "User", time: "Start", isMe: false, profile: profile),
-                      ...replies.map((r) => _buildChatBubble(message: r['message'], sender: r['senderName'], time: "Now", isMe: r['senderRole'] == 'admin', profile: profile))
+                      ...replies.map((r) {
+                        final replyId = r['id']?.toString() ?? '';
+                        return GestureDetector(
+                          onLongPress: () => _confirmDeleteReply(ticketId, replyId, profile),
+                          child: _buildChatBubble(
+                            message: r['message'],
+                            sender: r['senderName'],
+                            time: "Now",
+                            isMe: r['senderRole'] == 'admin',
+                            profile: profile,
+                          ),
+                        );
+                      })
                     ],
                   );
                 },
@@ -1144,6 +1439,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                   Expanded(
                     child: TextField(
                       controller: replyController,
+                      style: TextStyle(color: profile.textColor),
                       decoration: InputDecoration(
                         hintText: "Type reply...",
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
@@ -1159,7 +1455,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                       icon: const Icon(Icons.send, color: Colors.white),
                       onPressed: () async {
                         if (replyController.text.trim().isEmpty) return;
-                        await LicenseService.addTicketReply(ticketId: ticketId, message: replyController.text.trim(), senderRole: 'admin', senderName: "Admin");
+                        await LicenseService.addTicketReply(
+                          ticketId: ticketId,
+                          message: replyController.text.trim(),
+                          senderRole: 'admin',
+                          senderName: "Support Team",
+                        );
                         replyController.clear();
                       },
                     ),
@@ -1173,16 +1474,447 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildChatBubble({required String message, required String sender, required String time, required bool isMe, required ProfileProvider profile}) {
-    return Align(alignment: isMe ? Alignment.centerRight : Alignment.centerLeft, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), margin: const EdgeInsets.only(bottom: 8), constraints: const BoxConstraints(maxWidth: 250), decoration: BoxDecoration(color: isMe ? profile.themeColor : profile.cardColor, borderRadius: BorderRadius.circular(16)), child: Text(message, style: TextStyle(color: isMe ? Colors.white : profile.textColor, fontSize: 13))));
+  void _confirmDeleteReply(String ticketId, String replyId, ProfileProvider profile) {
+    if (replyId.isEmpty) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("Delete Message?", style: TextStyle(color: profile.textColor)),
+        content: Text("This will permanently delete this message for everyone.", style: TextStyle(color: profile.secondaryTextColor)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await LicenseService.deleteTicketReply(ticketId, replyId);
+            },
+            child: const Text("DELETE", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
-  Widget _detailRow(String l, String v, IconData i, ProfileProvider p, {bool isSelectable = false, Color? valueColor}) {
-    return Padding(padding: const EdgeInsets.only(bottom: 16), child: Row(children: [Icon(i, size: 20, color: p.themeColor), const SizedBox(width: 16), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(l, style: TextStyle(color: p.secondaryTextColor, fontSize: 10)), Text(v, style: TextStyle(color: valueColor ?? p.textColor, fontWeight: FontWeight.bold, fontSize: 14))])]));
+  void _showSupportCenter(ProfileProvider profile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: profile.cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        padding: const EdgeInsets.only(top: 12),
+        height: MediaQuery.of(context).size.height * 0.9,
+        child: Column(
+          children: [
+            Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.support_agent_rounded, color: profile.themeColor, size: 28),
+                  const SizedBox(width: 12),
+                  Text("Support Center", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: profile.textColor)),
+                ],
+              ),
+            ),
+            const Divider(),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('support_tickets').orderBy('lastUpdate', descending: true).snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                  
+                  // Filter out deleted tickets
+                  final docs = (snapshot.data?.docs ?? []).where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return data['status'] != 'deleted';
+                  }).toList();
+
+                  if (docs.isEmpty) {
+                    return Center(child: Text("No support tickets found", style: TextStyle(color: profile.secondaryTextColor)));
+                  }
+
+                  return ListView.separated(
+                    itemCount: docs.length,
+                    padding: const EdgeInsets.all(16),
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final data = docs[index].data() as Map<String, dynamic>;
+                      final status = data['status'] ?? 'open';
+                      final lastUpdate = data['lastUpdate'] as Timestamp?;
+                      
+                      Color statusColor;
+                      if (status == 'deleted') {
+                        statusColor = Colors.grey;
+                      } else if (status == 'open') {
+                        statusColor = Colors.red;
+                      } else if (status == 'answered') {
+                        statusColor = Colors.orange;
+                      } else {
+                        statusColor = Colors.green;
+                      }
+
+                      return Card(
+                        elevation: 0,
+                        color: profile.scaffoldColor,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: statusColor.withValues(alpha: 0.3))),
+                        child: ListTile(
+                          onTap: () => _showAdminChat(docs[index].id, profile),
+                          leading: CircleAvatar(
+                            backgroundColor: statusColor.withValues(alpha: 0.1),
+                            child: Icon(Icons.help_center_outlined, color: statusColor),
+                          ),
+                          title: Text(data['restaurantName'] ?? 'Unknown Business', style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text("${data['ownerName'] ?? 'No Name'} • ${data['phone'] ?? 'No Phone'}", 
+                                style: TextStyle(color: profile.themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 2),
+                              Text(data['subject'] ?? 'No Subject', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
+                              Text("Updated: ${lastUpdate != null ? DateFormat('dd-MMM HH:mm').format(lastUpdate.toDate()) : 'N/A'}", style: const TextStyle(fontSize: 9)),
+                            ],
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                                child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                                onPressed: () => _deleteTicket(docs[index].id, data['restaurantName'] ?? 'Unknown', profile),
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(4),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _performDataCleanup(ProfileProvider profile) async {
+    final confirm = await AppBottomSheet.showAction(
+      context: context,
+      profile: profile,
+      title: "Permanent Data Cleanup?",
+      message: "This will permanently purge all tickets marked as 'deleted' more than 30 days ago. This action cannot be undone.",
+      confirmLabel: "CLEANUP NOW",
+    );
+
+    if (confirm == true) {
+      try {
+        final cutoff = DateTime.now().subtract(const Duration(days: 30));
+        final snapshot = await FirebaseFirestore.instance
+            .collection('support_tickets')
+            .where('status', isEqualTo: 'deleted')
+            .get();
+
+        int deletedCount = 0;
+        final batch = FirebaseFirestore.instance.batch();
+
+        for (var doc in snapshot.docs) {
+          final lastUpdate = (doc.data()['lastUpdate'] as Timestamp?)?.toDate();
+          if (lastUpdate != null && lastUpdate.isBefore(cutoff)) {
+            batch.delete(doc.reference);
+            deletedCount++;
+          }
+        }
+
+        if (deletedCount > 0) {
+          await batch.commit();
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Successfully purged $deletedCount old tickets.")));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No old data found to cleanup.")));
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Cleanup Error: $e")));
+      }
+    }
+  }
+
+  void _showAdminChat(String ticketId, ProfileProvider profile) {
+    final TextEditingController replyController = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: profile.cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        height: MediaQuery.of(context).size.height * 0.9,
+        child: StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('support_tickets').doc(ticketId).snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+            final data = snapshot.data!.data() as Map<String, dynamic>;
+            final List replies = data['replies'] ?? [];
+            final status = data['status'] ?? 'open';
+            final bool isDeleted = status == 'deleted';
+
+            return Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(width: 40, height: 4, decoration: BoxDecoration(color: profile.secondaryTextColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2))),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(data['restaurantName'] ?? 'Support Chat', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                            Text("${data['ownerName']} (${data['phone']})", style: TextStyle(color: profile.themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text("Subject: ${data['subject']}", style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      if (status != 'resolved' && !isDeleted)
+                        TextButton.icon(
+                          onPressed: () => LicenseService.resolveTicket(ticketId),
+                          icon: const Icon(Icons.check_circle_outline, size: 18),
+                          label: const Text("Resolve"),
+                        ),
+                      IconButton(
+                        onPressed: () => _deleteTicket(ticketId, data['restaurantName'] ?? 'Support Chat', profile, shouldPop: true),
+                        icon: const Icon(Icons.delete_forever_rounded, color: Colors.red),
+                        tooltip: "Delete Ticket",
+                      ),
+                    ],
+                  ),
+                ),
+                if (isDeleted)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    color: Colors.red.withValues(alpha: 0.1),
+                    child: const Text(
+                      "USER HAS DELETED THIS ACCOUNT/DATA",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10),
+                    ),
+                  ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
+                    reverse: true,
+                    children: [
+                      // Replies
+                      ...replies.reversed.map((reply) {
+                        bool isAdmin = reply['senderRole'] == 'admin';
+                        final replyId = reply['id']?.toString() ?? '';
+                        return GestureDetector(
+                          onLongPress: () => _confirmDeleteReply(ticketId, replyId, profile),
+                          child: _buildChatBubble(
+                            message: reply['message'],
+                            sender: reply['senderName'],
+                            time: reply['timestamp'] ?? '',
+                            isMe: isAdmin,
+                            profile: profile,
+                          ),
+                        );
+                      }),
+                      // Original Message
+                      _buildChatBubble(
+                        message: data['message'] ?? '',
+                        sender: data['restaurantName'] ?? "User",
+                        time: data['createdAt'] != null ? (data['createdAt'] as Timestamp).toDate().toIso8601String() : '',
+                        isMe: false,
+                        profile: profile,
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isDeleted)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: replyController,
+                            decoration: InputDecoration(
+                              hintText: "Type a reply...",
+                              filled: true,
+                              fillColor: profile.scaffoldColor,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          onPressed: () async {
+                            if (replyController.text.trim().isNotEmpty) {
+                              await LicenseService.addTicketReply(
+                                ticketId: ticketId,
+                                message: replyController.text.trim(),
+                                senderRole: 'admin',
+                                senderName: 'Support Team',
+                              );
+                              replyController.clear();
+                            }
+                          },
+                          icon: const Icon(Icons.send),
+                          style: IconButton.styleFrom(backgroundColor: profile.themeColor),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      "This ticket is deleted. Replies are disabled.",
+                      style: TextStyle(color: profile.secondaryTextColor, fontStyle: FontStyle.italic),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatBubble({required String message, required String sender, required String time, required bool isMe, required ProfileProvider profile}) {
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Column(
+        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            child: Text(sender, style: TextStyle(fontSize: 9, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            margin: const EdgeInsets.only(bottom: 8),
+            constraints: const BoxConstraints(maxWidth: 250),
+            decoration: BoxDecoration(
+              color: isMe ? profile.themeColor : profile.cardColor,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: Radius.circular(isMe ? 16 : 0),
+                bottomRight: Radius.circular(isMe ? 0 : 16),
+              ),
+            ),
+            child: Text(message, style: TextStyle(color: isMe ? Colors.white : profile.textColor, fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmallStatusBadge(String status) {
+    Color color = Colors.red;
+    if (status == 'answered') color = Colors.orange;
+    if (status == 'resolved') color = Colors.green;
+    if (status == 'deleted') color = Colors.grey;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(color: color, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+      ),
+    );
+  }
+
+  Widget _buildPopupItem(IconData icon, String title, ProfileProvider profile, {Color? iconColor}) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: iconColor ?? profile.textColor.withValues(alpha: 0.7)),
+        const SizedBox(width: 12),
+        Text(title, style: TextStyle(color: profile.textColor, fontSize: 13, fontWeight: FontWeight.w500)),
+      ],
+    );
+  }
+
+  Widget _detailRow(String l, String v, IconData i, ProfileProvider p, {bool isSelectable = false, Color? valueColor, Widget? trailing}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16), 
+      child: Row(
+        children: [
+          Icon(i, size: 20, color: p.themeColor), 
+          const SizedBox(width: 16), 
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, 
+              children: [
+                Text(l, style: TextStyle(color: p.secondaryTextColor, fontSize: 10)), 
+                if (isSelectable)
+                  SelectableText(v, style: TextStyle(color: valueColor ?? p.textColor, fontWeight: FontWeight.bold, fontSize: 14))
+                else
+                  Text(v, style: TextStyle(color: valueColor ?? p.textColor, fontWeight: FontWeight.bold, fontSize: 14)),
+              ]
+            )
+          ),
+          if (trailing != null) trailing,
+        ]
+      )
+    );
+  }
+
+  Future<void> _resetDevice(String key, String restaurant, ProfileProvider profile) async {
+    final confirm = await AppBottomSheet.showAction(
+      context: context,
+      profile: profile,
+      title: "Reset Device Binding?",
+      message: "This will allow the license to be activated on a new phone. Current device link for '$restaurant' will be removed.",
+      confirmLabel: "RESET NOW",
+    );
+
+    if (confirm == true) {
+      try {
+        await LicenseService.firestore.collection('licenses').doc(key).update({
+          'activated': false,
+          'activeDeviceId': null,
+          'lastActivatedAt': null,
+        });
+        if (mounted) {
+          Navigator.pop(context); 
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Device Reset Successful! User can now login on any phone."), backgroundColor: Colors.blue));
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    }
   }
 
   Widget _toggleTile(String t, String s, bool v, IconData i, ProfileProvider p, Function(bool) c) {
-    return SwitchListTile(value: v, onChanged: c, secondary: Icon(i), title: Text(t, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), subtitle: Text(s, style: const TextStyle(fontSize: 10)));
+    return SwitchListTile(value: v, onChanged: c, secondary: Icon(i, color: p.themeColor), title: Text(t, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), subtitle: Text(s, style: const TextStyle(fontSize: 10)));
   }
 
   Widget _quickExtendBtn(Map<String, dynamic> data, int d, String l, ProfileProvider p) {

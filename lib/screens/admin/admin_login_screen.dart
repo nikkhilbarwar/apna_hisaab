@@ -56,6 +56,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     setState(() => _isLoading = false);
 
     if (result['success']) {
+      // Refresh ProfileProvider so the Shield icon shows up immediately
+      if (mounted) {
+        await Provider.of<ProfileProvider>(context, listen: false).loadProfile();
+      }
+
       // Save credentials if remember me is checked
       final prefs = await SharedPreferences.getInstance();
       if (_rememberMe) {

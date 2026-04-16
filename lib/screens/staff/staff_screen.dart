@@ -252,6 +252,27 @@ class _StaffScreenState extends State<StaffScreen> {
                                                 const SizedBox(width: 8),
                                                 const Text('(DELETED)', style: TextStyle(color: Colors.red, fontSize: 8, fontWeight: FontWeight.bold)),
                                               ],
+                                              // Upcoming Leave Alert Logic
+                                              Builder(builder: (context) {
+                                                final now = DateTime.now();
+                                                return FutureBuilder<List<StaffLeaveModel>>(
+                                                  future: staffProvider.getStaffLeaves(staff.id!),
+                                                  builder: (context, snapshot) {
+                                                    final leaves = snapshot.data ?? [];
+                                                    final upcoming = leaves.where((l) => 
+                                                      l.date.isAfter(now) && 
+                                                      l.date.isBefore(now.add(const Duration(days: 3)))
+                                                    );
+                                                    if (upcoming.isNotEmpty) {
+                                                      return Padding(
+                                                        padding: const EdgeInsets.only(left: 8.0),
+                                                        child: Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange.shade700),
+                                                      );
+                                                    }
+                                                    return const SizedBox.shrink();
+                                                  }
+                                                );
+                                              }),
                                             ],
                                           ),
                                         ],
@@ -878,8 +899,8 @@ class _LeaveCalendarWidgetState extends State<_LeaveCalendarWidget> {
       mainAxisSize: MainAxisSize.min,
       children: [
         TableCalendar(
-          firstDay: widget.staff.joinDate,
-          lastDay: DateTime.now().add(const Duration(days: 365)),
+          firstDay: DateTime(DateTime.now().year, DateTime.now().month, 1), // Current month ki 1st date
+          lastDay: DateTime(DateTime.now().year, DateTime.now().month + 2, 0), // Agle mahine ki aakhri date
           focusedDay: _focusedDay,
           calendarFormat: CalendarFormat.month,
           headerStyle: HeaderStyle(

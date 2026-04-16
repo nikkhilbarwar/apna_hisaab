@@ -42,13 +42,22 @@ class ProfileProvider with ChangeNotifier {
   DateTime? _expiryDate;
   String _licenseKey = '';
   bool _isLifetime = false;
+  double _amountPaid = 0.0;
+  String _planType = 'N/A';
+  String _licenseBusinessName = '';
+  String _licenseOwnerName = '';
+  String _licensePhone = '';
   bool _isReminderEnabled = true;
   bool _saleBlocked = false;
   bool _expenseBlocked = false;
+  bool _isSysAdmin = false;
+  String _adminRole = 'user';
   bool _isLoading = true;
-  
-  StreamSubscription? _licenseSub;
   StreamSubscription? _authSub;
+  StreamSubscription? _licenseSub;
+
+  bool get isSysAdmin => _isSysAdmin;
+  String get adminRole => _adminRole;
 
   String get businessName => _businessName;
   String get ownerName => _ownerName;
@@ -76,6 +85,40 @@ class ProfileProvider with ChangeNotifier {
   DateTime? get expiryDate => _expiryDate;
   String get licenseKey => _licenseKey;
   bool get isLifetime => _isLifetime;
+  double get amountPaid => _amountPaid;
+  String get planType => _planType;
+  String get licenseBusinessName => _licenseBusinessName;
+  String get licenseOwnerName => _licenseOwnerName;
+  String get licensePhone => _licensePhone;
+
+  String get displayBusinessName {
+    // 1. अगर यूजर ने खुद नाम सेट किया है, तो वही दिखाओ
+    if (_businessName.isNotEmpty && _businessName != 'My Business') {
+      return _businessName;
+    }
+    // 2. वरना अगर लाइसेंस में कोई नाम है, तो वो दिखाओ
+    if (_licenseBusinessName.isNotEmpty) {
+      return _licenseBusinessName;
+    }
+    // 3. अगर आप एडमिन हैं और कुछ भी सेट नहीं है, तब "Support Team" दिखाओ
+    if (_isSysAdmin) return "Support Team";
+    
+    return _businessName; // डिफ़ॉल्ट 'My Business'
+  }
+
+  String get displayOwnerName {
+    if (_ownerName.isNotEmpty && _ownerName != 'Owner') return _ownerName;
+    if (_licenseOwnerName.isNotEmpty) return _licenseOwnerName;
+    if (_isSysAdmin) return "System Admin";
+    return "Owner";
+  }
+
+  String get displayPhone {
+    if (_contact.isNotEmpty) return _contact;
+    if (_licensePhone.isNotEmpty) return _licensePhone;
+    return "";
+  }
+
   bool get isDarkMode => _isDarkMode;
   bool get isReminderEnabled => _isReminderEnabled;
   bool get saleBlocked => _saleBlocked;
@@ -189,14 +232,20 @@ class ProfileProvider with ChangeNotifier {
         if (expiryStr != null && expiryStr.isNotEmpty) {
           _expiryDate = DateTime.tryParse(expiryStr);
         }
+
+        // Start listening to license status if key exists
+        if (_licenseKey.isNotEmpty) {
+          listenToLicenseRealTime();
+        }
       }
 
       _isLoading = false;
-      notifyListeners();
       
-      if (_licenseKey.isNotEmpty) {
-        listenToLicenseRealTime();
-      }
+      // Admin Check
+      _isSysAdmin = prefs.getBool('is_sys_admin') ?? false;
+      _adminRole = prefs.getString('admin_role') ?? 'user';
+
+      notifyListeners();
     } catch (e) {
       _isLoading = false;
       debugPrint("Profile Load Error: $e");
@@ -326,25 +375,58 @@ class ProfileProvider with ChangeNotifier {
     
     try {
       await LicenseService.init();
+      final deviceId = await LicenseService.getDeviceId();
+
       _licenseSub = LicenseService.firestore.collection('licenses').doc(_licenseKey).snapshots().listen((doc) async {
         if (doc.exists) {
           final data = doc.data()!;
           bool newActivated = data['status'] == 'active';
+          
+          // Device Lock Check
+          if (data['activated'] == true && data['activeDeviceId'] != null && data['activeDeviceId'] != deviceId) {
+            newActivated = false;
+          }
+
           if (newActivated && data['isLifetime'] != true && data['validTill'] != null) {
             final expiry = DateTime.tryParse(data['validTill']);
             if (expiry != null && expiry.isBefore(DateTime.now())) {
               newActivated = false;
             }
           }
+          
           _isReminderEnabled = data['isReminderEnabled'] ?? true;
           _saleBlocked = data['saleBlocked'] ?? false;
           _expenseBlocked = data['expenseBlocked'] ?? false;
+          _isLifetime = data['isLifetime'] ?? false;
+          _amountPaid = (data['price'] ?? 0.0).toDouble();
+          _planType = data['planType'] ?? (data['isLifetime'] == true ? 'Lifetime' : 'Standard');
+          _licenseBusinessName = data['restaurantName'] ?? '';
+          _licenseOwnerName = data['ownerName'] ?? '';
+          _licensePhone = data['phone'] ?? '';
+
+          if (data['validTill'] != null) {
+            _expiryDate = DateTime.tryParse(data['validTill']);
+          }
+
           if (_isActivated != newActivated) {
             _isActivated = newActivated;
             final prefs = await SharedPreferences.getInstance();
             await prefs.setBool(_getUKey('is_app_activated'), _isActivated);
+            if (_expiryDate != null) {
+              await prefs.setString(_getUKey('expiry_date'), _expiryDate!.toIso8601String());
+            }
+            await prefs.setBool(_getUKey('is_lifetime'), _isLifetime);
+            
+            // Sync status to cloud so it persists across reloads
+            if (_isCloudSyncEnabled) _syncToFirebase();
             notifyListeners();
           }
+        } else {
+          // Key deleted from database
+          _isActivated = false;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool(_getUKey('is_app_activated'), false);
+          notifyListeners();
         }
       });
     } catch (e) {
@@ -353,11 +435,20 @@ class ProfileProvider with ChangeNotifier {
   }
 
   Future<bool> activateLicense(String key) async {
-    _licenseKey = key;
+    _licenseKey = key.trim();
+    _isActivated = true; // Set locally first to allow navigation
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_getUKey('license_key'), key);
+    await prefs.setString(_getUKey('license_key'), _licenseKey);
+    await prefs.setBool(_getUKey('is_app_activated'), true);
+    
     listenToLicenseRealTime();
-    return _isActivated;
+    
+    if (_isCloudSyncEnabled) {
+      await _syncToFirebase();
+    }
+    
+    notifyListeners();
+    return true;
   }
 
   Future<void> toggleAmountVisibility(BuildContext context) async {
@@ -502,6 +593,7 @@ class ProfileProvider with ChangeNotifier {
       'license_key': _licenseKey,
       'is_app_activated': _isActivated,
       'is_lifetime': _isLifetime,
+      'amount_paid': _amountPaid,
       'expiry_date': _expiryDate?.toIso8601String(),
     };
   }
@@ -557,9 +649,13 @@ class ProfileProvider with ChangeNotifier {
     if (map['custom_pin'] != null) { _customPin = map['custom_pin']; await prefs.setString('custom_pin_$uid', _customPin); }
     if (map['is_pin_enabled'] != null) { _isPinEnabled = _toBool(map['is_pin_enabled']); await prefs.setBool('is_pin_enabled_$uid', _isPinEnabled); }
     if (map['is_biometric_enabled'] != null) { _isBiometricEnabled = _toBool(map['is_biometric_enabled']); await prefs.setBool('is_biometric_enabled_$uid', _isBiometricEnabled); }
-    if (map['license_key'] != null) { _licenseKey = map['license_key']; await prefs.setString('license_key_$uid', _licenseKey); }
+    if (map['license_key'] != null) { 
+      _licenseKey = map['license_key'].toString().trim(); 
+      await prefs.setString('license_key_$uid', _licenseKey); 
+    }
     if (map['is_app_activated'] != null) { _isActivated = _toBool(map['is_app_activated']); await prefs.setBool('is_app_activated_$uid', _isActivated); }
     if (map['is_lifetime'] != null) { _isLifetime = _toBool(map['is_lifetime']); await prefs.setBool('is_lifetime_$uid', _isLifetime); }
+    if (map['amount_paid'] != null) { _amountPaid = (map['amount_paid'] as num).toDouble(); }
     if (map['expiry_date'] != null) { _expiryDate = DateTime.tryParse(map['expiry_date'].toString()); await prefs.setString('expiry_date_$uid', map['expiry_date'].toString()); }
 
     notifyListeners();

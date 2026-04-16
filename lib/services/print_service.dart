@@ -33,14 +33,14 @@ class PrintService {
     bool shouldPrintBill = isManualReprint || (profile.isAutoPrintEnabled && !isPendingStatus);
     if (shouldPrintBill && printerProv.billPrinter.isEnabled) {
       if (printerProv.billPrinter.type == AppPrinterType.pdf) {
-        tasks.add(ExportService().saveBillAsPdf(tx, profile.businessName, masterItems: items, qrPath: profile.qrPath, qrLabel: profile.qrLabel));
+        tasks.add(ExportService().saveBillAsPdf(tx, profile.displayBusinessName, masterItems: items, qrPath: profile.qrPath, qrLabel: profile.qrLabel));
       } else {
         tasks.add(_printToDevice(
           tx: tx,
           config: printerProv.billPrinter,
-          businessName: profile.businessName,
+          businessName: profile.displayBusinessName,
           address: profile.address,
-          contact: profile.contact,
+          contact: profile.displayPhone,
           masterItems: items,
           qrPath: profile.qrPath,
           qrLabel: profile.qrLabel,
@@ -53,14 +53,14 @@ class PrintService {
     // 2. KOT Task
     if (!isPurchase && profile.isAutoPrintEnabled && profile.isKotEnabled && printerProv.kotPrinter.isEnabled && !isManualReprint) {
       if (printerProv.kotPrinter.type == AppPrinterType.pdf) {
-        tasks.add(ExportService().saveKotAsPdf(tx, profile.businessName));
+        tasks.add(ExportService().saveKotAsPdf(tx, profile.displayBusinessName));
       } else {
         tasks.add(_printToDevice(
           tx: tx,
           config: printerProv.kotPrinter,
-          businessName: profile.businessName,
+          businessName: profile.displayBusinessName,
           address: profile.address,
-          contact: profile.contact,
+          contact: profile.displayPhone,
           masterItems: items,
           isKot: true,
         ));
