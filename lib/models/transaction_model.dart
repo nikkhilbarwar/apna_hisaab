@@ -11,8 +11,8 @@ class TransactionItemSnapshot {
   final double price; // Portions price when saved
   final double purchasePrice; // Cost price for Ready Made items
   final double transportCost; // Transport/Rent per unit
-  final double fullPrice; 
-  final double halfPrice; 
+  final double fullPrice;
+  final double halfPrice;
   final double extraQty;
   final double extraPrice;
   final String servingMethod;
@@ -149,8 +149,10 @@ class TransactionItemSnapshot {
       unit: map['unit']?.toString() ?? '',
       variant: map['variant']?.toString() ?? 'Full',
       price: double.tryParse(map['price']?.toString() ?? '0') ?? 0.0,
-      purchasePrice: double.tryParse(map['purchase_price']?.toString() ?? '0') ?? 0.0,
-      transportCost: double.tryParse(map['transport_cost']?.toString() ?? '0') ?? 0.0,
+      purchasePrice:
+          double.tryParse(map['purchase_price']?.toString() ?? '0') ?? 0.0,
+      transportCost:
+          double.tryParse(map['transport_cost']?.toString() ?? '0') ?? 0.0,
       fullPrice: double.tryParse(map['full_price']?.toString() ?? '0') ?? 0.0,
       halfPrice: double.tryParse(map['half_price']?.toString() ?? '0') ?? 0.0,
       extraQty: double.tryParse(map['extra_qty']?.toString() ?? '0') ?? 0.0,
@@ -168,21 +170,21 @@ class TransactionModel {
   int? itemId;
   String type;
   String category;
-  String description; 
+  String description;
   double amount;
   double paidAmount;
   double quantity;
   String unit;
   double rate;
-  String paymentMode; 
+  String paymentMode;
   DateTime date;
   int isSynced;
   double cashAmount;
   double upiAmount;
-  int isDeleted; 
+  int isDeleted;
   DateTime? deletedAt;
   String customerContact;
-  String status; 
+  String status;
 
   TransactionModel({
     this.id,
@@ -214,10 +216,12 @@ class TransactionModel {
     return match?.group(1) ?? "";
   }
 
-  double get remainingCredit => paymentMode == 'Credit' ? amount - paidAmount : 0.0;
+  double get remainingCredit =>
+      paymentMode == 'Credit' ? amount - paidAmount : 0.0;
 
   List<TransactionItemSnapshot> get itemSnapshots {
-    if (_manualSnapshots != null && _manualSnapshots!.isNotEmpty) return _manualSnapshots!;
+    if (_manualSnapshots != null && _manualSnapshots.isNotEmpty)
+      return _manualSnapshots;
     List<TransactionItemSnapshot> snapshots = [];
     try {
       if (description.isEmpty) return [];
@@ -229,7 +233,8 @@ class TransactionModel {
         final dynamic decoded = jsonDecode(cleanJson);
         if (decoded is List) {
           for (var item in decoded) {
-            if (item is Map) snapshots.add(TransactionItemSnapshot.fromMap(item));
+            if (item is Map)
+              snapshots.add(TransactionItemSnapshot.fromMap(item));
           }
         }
       }
@@ -266,7 +271,8 @@ class TransactionModel {
         'checked': s.checked.toString(),
         'unit': s.unit,
         'line_total': s.lineTotal.toStringAsFixed(0),
-        'display': '$qtyDisplay x ${s.name} ${s.variant != 'Full' ? '(${s.variant})' : ''}'
+        'display':
+            '$qtyDisplay x ${s.name} ${s.variant != 'Full' ? '(${s.variant})' : ''}',
       };
     }).toList();
   }
@@ -274,7 +280,15 @@ class TransactionModel {
   double get subtotalValue {
     if (category == 'Salary') return amount;
     if (description.contains(' | Subtotal: ₹')) {
-      return double.tryParse(description.split(' | Subtotal: ₹').last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+      return double.tryParse(
+            description
+                .split(' | Subtotal: ₹')
+                .last
+                .split(' | ')
+                .first
+                .replaceAll(RegExp(r'[^0-9.]'), ''),
+          ) ??
+          0.0;
     }
     return amount;
   }
@@ -282,7 +296,15 @@ class TransactionModel {
   double get taxValue {
     if (category == 'Salary') return 0.0;
     if (description.contains('| Tax: ₹')) {
-      return double.tryParse(description.split('| Tax: ₹').last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+      return double.tryParse(
+            description
+                .split('| Tax: ₹')
+                .last
+                .split(' | ')
+                .first
+                .replaceAll(RegExp(r'[^0-9.]'), ''),
+          ) ??
+          0.0;
     }
     return 0.0;
   }
@@ -291,7 +313,10 @@ class TransactionModel {
     if (description.contains('| Discount: ₹')) {
       final parts = description.split('| Discount: ₹');
       if (parts.length > 1) {
-        return double.tryParse(parts.last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+        return double.tryParse(
+              parts.last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), ''),
+            ) ??
+            0.0;
       }
     }
     return 0.0;
@@ -324,7 +349,9 @@ class TransactionModel {
   factory TransactionModel.fromMap(Map<String, dynamic> map) {
     DateTime parsedDate;
     try {
-      parsedDate = map['date'] != null ? DateTime.parse(map['date'].toString()) : DateTime.now();
+      parsedDate = map['date'] != null
+          ? DateTime.parse(map['date'].toString())
+          : DateTime.now();
     } catch (e) {
       parsedDate = DateTime.now();
       debugPrint("TransactionModel: Date parsing error, using now()");
@@ -347,7 +374,9 @@ class TransactionModel {
       cashAmount: (map['cash_amount'] as num? ?? 0).toDouble(),
       upiAmount: (map['upi_amount'] as num? ?? 0).toDouble(),
       isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
-      deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
+      deletedAt: map['deleted_at'] != null
+          ? DateTime.tryParse(map['deleted_at'].toString())
+          : null,
       customerContact: map['customer_contact']?.toString() ?? '',
       status: map['status']?.toString() ?? 'completed',
     );

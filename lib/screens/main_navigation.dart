@@ -24,9 +24,9 @@ class MainNavigation extends StatefulWidget {
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
-class _MainNavigationState extends State<MainNavigation> with SingleTickerProviderStateMixin {
+class _MainNavigationState extends State<MainNavigation>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  bool _isSysAdmin = false;
 
   @override
   void initState() {
@@ -44,11 +44,11 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    
+
     final uid = user.uid;
     final nagKey = 'restore_nag_shown_$uid';
     bool alreadyShown = prefs.getBool(nagKey) ?? false;
-    
+
     if (alreadyShown) return;
 
     // Give it a small delay so screen finishes loading
@@ -56,14 +56,14 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
       if (!mounted) return;
       _showRestoreNagDialog();
     });
-    
+
     await prefs.setBool(nagKey, true);
   }
 
   void _showRestoreNagDialog() {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final syncProvider = Provider.of<SyncProvider>(context, listen: false);
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -73,7 +73,13 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
           decoration: BoxDecoration(
             color: profile.cardColor,
             borderRadius: BorderRadius.circular(28),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 5)],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                spreadRadius: 5,
+              ),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -83,16 +89,29 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                 width: double.infinity,
                 decoration: BoxDecoration(
                   color: profile.themeColor.withValues(alpha: 0.1),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(28),
+                  ),
                 ),
                 child: Center(
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      Icon(Icons.cloud_download_rounded, size: 60, color: profile.themeColor),
+                      Icon(
+                        Icons.cloud_download_rounded,
+                        size: 60,
+                        color: profile.themeColor,
+                      ),
                       Positioned(
                         bottom: 10,
-                        child: Text("Restore Recommendation", style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.bold, fontSize: 10)),
+                        child: Text(
+                          "Restore Recommendation",
+                          style: TextStyle(
+                            color: profile.themeColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -102,32 +121,64 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    Text("Restore Your Data", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor)),
+                    Text(
+                      "Restore Your Data",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        color: profile.textColor,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       "We recommend performing a one-time 'Full Restore' to ensure all your previous items, transactions, and settings are correctly synced to this device.",
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: profile.secondaryTextColor, fontSize: 13, height: 1.5),
+                      style: TextStyle(
+                        color: profile.secondaryTextColor,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        _showSyncStatus(context, Provider.of<TransactionProvider>(context, listen: false), profile);
+                        _showSyncStatus(
+                          context,
+                          Provider.of<TransactionProvider>(
+                            context,
+                            listen: false,
+                          ),
+                          profile,
+                        );
                         // Optionally trigger restore confirmation directly
                         _showFullRestoreConfirm(context, syncProvider, profile);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: profile.themeColor,
                         minimumSize: const Size(double.infinity, 54),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
-                      child: const Text("RESTORE FROM CLOUD", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                      child: const Text(
+                        "RESTORE FROM CLOUD",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextButton(
                       onPressed: () => Navigator.pop(ctx),
-                      child: Text("I'LL DO IT LATER", style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        "I'LL DO IT LATER",
+                        style: TextStyle(
+                          color: profile.secondaryTextColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -140,15 +191,7 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
   }
 
   Future<void> _checkAdminStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    final user = FirebaseAuth.instance.currentUser;
-    bool isAdminEmail = user?.email == "nikkhilbarwar@gmail.com" || 
-                        user?.email == "anitamishra1714@gmail.com" ||
-                        user?.email == "missadvocate06@gmail.com";
-    
-    setState(() {
-      _isSysAdmin = (prefs.getBool('is_sys_admin') ?? false) || isAdminEmail;
-    });
+    // Admin status check can be implemented via provider logic
   }
 
   Future<void> _checkAutoBackup() async {
@@ -158,14 +201,16 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
 
     final exportService = ExportService();
     final backupFile = await exportService.getAutoBackupFile();
-    
+
     if (backupFile != null && mounted) {
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
           title: const Text('Backup Found!'),
-          content: const Text('An automatic backup was found on this device. Would you like to restore your data?'),
+          content: const Text(
+            'An automatic backup was found on this device. Would you like to restore your data?',
+          ),
           actions: [
             TextButton(
               onPressed: () async {
@@ -176,13 +221,19 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
             ),
             ElevatedButton(
               onPressed: () async {
-                bool success = await exportService.restoreFromBackup(backupFile);
+                bool success = await exportService.restoreFromBackup(
+                  backupFile,
+                );
                 await prefs.setBool('auto_backup_checked', true);
                 if (mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(success ? 'Data Restored Successfully!' : 'Restore Failed!'),
+                      content: Text(
+                        success
+                            ? 'Data Restored Successfully!'
+                            : 'Restore Failed!',
+                      ),
                       backgroundColor: success ? Colors.green : Colors.red,
                     ),
                   );
@@ -201,7 +252,11 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
     }
   }
 
-  void _showSyncStatus(BuildContext context, TransactionProvider txProvider, ProfileProvider profile) {
+  void _showSyncStatus(
+    BuildContext context,
+    TransactionProvider txProvider,
+    ProfileProvider profile,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -216,12 +271,31 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               Row(
                 children: [
-                  Icon(Icons.cloud_sync_rounded, color: profile.themeColor, size: 28),
+                  Icon(
+                    Icons.cloud_sync_rounded,
+                    color: profile.themeColor,
+                    size: 28,
+                  ),
                   const SizedBox(width: 16),
-                  Text('CLOUD BACKUP & RESTORE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: profile.textColor)),
+                  Text(
+                    'CLOUD BACKUP & RESTORE',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                      color: profile.textColor,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -231,11 +305,23 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                 decoration: BoxDecoration(
                   color: profile.scaffoldColor,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+                  border: Border.all(
+                    color: profile.isDarkMode
+                        ? Colors.white10
+                        : Colors.grey.shade200,
+                  ),
                 ),
                 child: SwitchListTile(
-                  title: const Text('Auto Cloud Sync', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  subtitle: Text(profile.isCloudSyncEnabled ? 'Enabled (Every 5 mins)' : 'Disabled', style: const TextStyle(fontSize: 11)),
+                  title: const Text(
+                    'Auto Cloud Sync',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    profile.isCloudSyncEnabled
+                        ? 'Enabled (Every 5 mins)'
+                        : 'Disabled',
+                    style: const TextStyle(fontSize: 11),
+                  ),
                   value: profile.isCloudSyncEnabled,
                   activeColor: profile.themeColor,
                   onChanged: (val) => profile.toggleCloudSync(val),
@@ -249,25 +335,42 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                   decoration: BoxDecoration(
                     color: profile.themeColor.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: profile.themeColor.withValues(alpha: 0.1)),
+                    border: Border.all(
+                      color: profile.themeColor.withValues(alpha: 0.1),
+                    ),
                   ),
                   child: Column(
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(syncProvider.syncStatus, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor, fontSize: 13)),
-                          Text('${(syncProvider.syncProgress * 100).toInt()}%', style: TextStyle(fontWeight: FontWeight.w900, color: profile.themeColor)),
+                          Text(
+                            syncProvider.syncStatus,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: profile.textColor,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            '${(syncProvider.syncProgress * 100).toInt()}%',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: profile.themeColor,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
                         child: LinearProgressIndicator(
-                          value: syncProvider.syncProgress, 
+                          value: syncProvider.syncProgress,
                           minHeight: 10,
-                          color: profile.themeColor, 
-                          backgroundColor: profile.themeColor.withValues(alpha: 0.1),
+                          color: profile.themeColor,
+                          backgroundColor: profile.themeColor.withValues(
+                            alpha: 0.1,
+                          ),
                         ),
                       ),
                     ],
@@ -275,9 +378,21 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                 ),
                 const SizedBox(height: 24),
               ] else ...[
-                _syncInfoRow('Data Protection', 'Securely synced with cloud', profile, icon: Icons.security_rounded, color: Colors.blue),
+                _syncInfoRow(
+                  'Data Protection',
+                  'Securely synced with cloud',
+                  profile,
+                  icon: Icons.security_rounded,
+                  color: Colors.blue,
+                ),
                 const Divider(height: 32),
-                _syncInfoRow('Storage', 'Backup includes all transactions', profile, icon: Icons.storage_rounded, color: Colors.green),
+                _syncInfoRow(
+                  'Storage',
+                  'Backup includes all transactions',
+                  profile,
+                  icon: Icons.storage_rounded,
+                  color: Colors.green,
+                ),
                 const SizedBox(height: 32),
               ],
 
@@ -285,19 +400,34 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: syncProvider.isSyncing ? null : () async {
-                        bool success = await syncProvider.manualSyncToCloud(context);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(success ? 'Sync Successful!' : 'Sync Failed!'),
-                              backgroundColor: success ? Colors.green : Colors.red,
-                            ),
-                          );
-                        }
-                      },
+                      onPressed: syncProvider.isSyncing
+                          ? null
+                          : () async {
+                              bool success = await syncProvider
+                                  .manualSyncToCloud(context);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      success
+                                          ? 'Sync Successful!'
+                                          : 'Sync Failed!',
+                                    ),
+                                    backgroundColor: success
+                                        ? Colors.green
+                                        : Colors.red,
+                                  ),
+                                );
+                              }
+                            },
                       icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-                      label: const Text('SYNC NOW', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                      label: const Text(
+                        'SYNC NOW',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: profile.themeColor,
                         minimumSize: const Size(0, 56),
@@ -307,13 +437,27 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                   const SizedBox(width: 12),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: syncProvider.isSyncing ? null : () => _showFullRestoreConfirm(context, syncProvider, profile),
+                      onPressed: syncProvider.isSyncing
+                          ? null
+                          : () => _showFullRestoreConfirm(
+                              context,
+                              syncProvider,
+                              profile,
+                            ),
                       icon: const Icon(Icons.cloud_download_outlined, size: 18),
-                      label: const Text('RESTORE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                      label: const Text(
+                        'RESTORE',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                        ),
+                      ),
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size(0, 56),
                         side: BorderSide(color: Colors.red.shade300),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
                     ),
                   ),
@@ -327,43 +471,79 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
     );
   }
 
-  void _showFullRestoreConfirm(BuildContext context, SyncProvider syncProvider, ProfileProvider profile) {
+  void _showFullRestoreConfirm(
+    BuildContext context,
+    SyncProvider syncProvider,
+    ProfileProvider profile,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: profile.cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Full Restore Data?'),
-        content: const Text('This will replace ALL local data with Cloud data. Current unsynced changes might be lost.'),
+        content: const Text(
+          'This will replace ALL local data with Cloud data. Current unsynced changes might be lost.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCEL'),
+          ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(ctx); 
+              Navigator.pop(ctx);
               bool success = await syncProvider.fullRestoreFromServer(context);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(success ? 'Restore Successful!' : 'Restore Failed!'),
+                    content: Text(
+                      success ? 'Restore Successful!' : 'Restore Failed!',
+                    ),
                     backgroundColor: success ? Colors.green : Colors.red,
                   ),
                 );
               }
             },
-            child: const Text('RESTORE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'RESTORE',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _syncInfoRow(String label, String value, ProfileProvider profile, {IconData? icon, Color? color}) {
+  Widget _syncInfoRow(
+    String label,
+    String value,
+    ProfileProvider profile, {
+    IconData? icon,
+    Color? color,
+  }) {
     return Row(
       children: [
-        if (icon != null) ...[Icon(icon, size: 18, color: color), const SizedBox(width: 12)],
-        Text(label, style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.w600)),
+        if (icon != null) ...[
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 12),
+        ],
+        Text(
+          label,
+          style: TextStyle(
+            color: profile.secondaryTextColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         const Spacer(),
-        Text(value, style: TextStyle(color: profile.textColor, fontWeight: FontWeight.w900, fontSize: 13)),
+        Text(
+          value,
+          style: TextStyle(
+            color: profile.textColor,
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
+          ),
+        ),
       ],
     );
   }
@@ -384,8 +564,9 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth >= 600;
 
-    final Color appBarContentColor = ThemeData.estimateBrightnessForColor(themeColor) == Brightness.dark 
-        ? Colors.white 
+    final Color appBarContentColor =
+        ThemeData.estimateBrightnessForColor(themeColor) == Brightness.dark
+        ? Colors.white
         : Colors.black;
 
     final bool globalSyncing = txProvider.isSyncing || syncProvider.isSyncing;
@@ -394,16 +575,22 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
     const adminEmails = [
       "nikkhilbarwar@gmail.com",
       "anitamishra1714@gmail.com",
-      "missadvocate06@gmail.com"
+      "missadvocate06@gmail.com",
     ];
 
-    bool isUserAdmin = profile.isSysAdmin || (user?.email != null && adminEmails.contains(user!.email!.toLowerCase()));
+    bool isUserAdmin =
+        profile.isSysAdmin ||
+        (user?.email != null &&
+            adminEmails.contains(user!.email!.toLowerCase()));
 
     // Common AppBar Actions
     List<Widget> appBarActions = [
       if (isUserAdmin)
         StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('support_tickets').where('status', isEqualTo: 'open').snapshots(),
+          stream: FirebaseFirestore.instance
+              .collection('support_tickets')
+              .where('status', isEqualTo: 'open')
+              .snapshots(),
           builder: (context, snapshot) {
             int openTickets = snapshot.hasData ? snapshot.data!.docs.length : 0;
             return IconButton(
@@ -412,22 +599,33 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                 isLabelVisible: openTickets > 0,
                 child: Icon(
                   Icons.shield_rounded,
-                  color: appBarContentColor == Colors.black ? Colors.deepOrange : Colors.orangeAccent,
+                  color: appBarContentColor == Colors.black
+                      ? Colors.deepOrange
+                      : Colors.orangeAccent,
                   size: 26,
                 ),
               ),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen())),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AdminPanelScreen(),
+                ),
+              ),
               tooltip: "Admin Panel",
             );
-          }
+          },
         ),
       Stack(
         alignment: Alignment.center,
         children: [
           IconButton(
             icon: Icon(
-              globalSyncing ? Icons.cloud_sync_rounded : Icons.cloud_done_rounded, 
-              color: globalSyncing ? appBarContentColor.withValues(alpha: 0.5) : Colors.greenAccent,
+              globalSyncing
+                  ? Icons.cloud_sync_rounded
+                  : Icons.cloud_done_rounded,
+              color: globalSyncing
+                  ? appBarContentColor.withValues(alpha: 0.5)
+                  : Colors.greenAccent,
               size: 26,
             ),
             onPressed: () => _showSyncStatus(context, txProvider, profile),
@@ -435,12 +633,13 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
           ),
           if (globalSyncing)
             SizedBox(
-              width: 32, height: 32, 
+              width: 32,
+              height: 32,
               child: CircularProgressIndicator(
-                strokeWidth: 2, 
+                strokeWidth: 2,
                 color: appBarContentColor.withValues(alpha: 0.8),
                 backgroundColor: appBarContentColor.withValues(alpha: 0.1),
-              )
+              ),
             ),
         ],
       ),
@@ -480,8 +679,14 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
             child: Center(
               child: GestureDetector(
                 onTap: () {
-                  profile.markSupportAsRead(); // Mark as read when entering profile
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen()));
+                  profile
+                      .markSupportAsRead(); // Mark as read when entering profile
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProfileScreen(),
+                    ),
+                  );
                 },
                 child: Badge(
                   isLabelVisible: profile.hasUnreadSupportReply,
@@ -490,18 +695,32 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: appBarContentColor.withValues(alpha: 0.2), width: 1.5),
+                      border: Border.all(
+                        color: appBarContentColor.withValues(alpha: 0.2),
+                        width: 1.5,
+                      ),
                       color: Colors.black.withValues(alpha: 0.1),
                     ),
                     padding: const EdgeInsets.all(2),
                     child: CircleAvatar(
                       radius: 20,
                       backgroundColor: Colors.transparent,
-                      backgroundImage: profile.logoPath.isNotEmpty && File(profile.logoPath).existsSync()
-                          ? FileImage(File(profile.logoPath)) 
-                          : (user?.photoURL != null ? NetworkImage(user!.photoURL!) as ImageProvider : null),
-                      child: (profile.logoPath.isEmpty || !File(profile.logoPath).existsSync()) && user?.photoURL == null
-                          ? Icon(Icons.person, color: appBarContentColor, size: 24)
+                      backgroundImage:
+                          profile.logoPath.isNotEmpty &&
+                              File(profile.logoPath).existsSync()
+                          ? FileImage(File(profile.logoPath))
+                          : (user?.photoURL != null
+                                ? NetworkImage(user!.photoURL!) as ImageProvider
+                                : null),
+                      child:
+                          (profile.logoPath.isEmpty ||
+                                  !File(profile.logoPath).existsSync()) &&
+                              user?.photoURL == null
+                          ? Icon(
+                              Icons.person,
+                              color: appBarContentColor,
+                              size: 24,
+                            )
                           : null,
                     ),
                   ),
@@ -509,57 +728,109 @@ class _MainNavigationState extends State<MainNavigation> with SingleTickerProvid
               ),
             ),
           ),
-          title: Text(profile.displayBusinessName.toUpperCase(),
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1, color: appBarContentColor)),
+          title: Text(
+            profile.displayBusinessName.toUpperCase(),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1,
+              color: appBarContentColor,
+            ),
+          ),
           actions: appBarActions,
-          bottom: isTablet ? null : PreferredSize(
-            preferredSize: const Size.fromHeight(65),
-            child: Column(
-              children: [
-                Container(height: 1, width: double.infinity, color: appBarContentColor.withValues(alpha: 0.1)),
-                Container(height: 55,
-                  color: themeColor,
-                  child: TabBar(
-                    controller: _tabController,
-                    indicatorColor: appBarContentColor,
-                    indicatorWeight: 4,
-                    labelColor: appBarContentColor,
-                    unselectedLabelColor: appBarContentColor.withValues(alpha: 0.6),
-                    labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                    tabs: const [
-                      Tab(text: 'HOME', icon: Icon(Icons.dashboard_rounded, size: 20)),
-                      Tab(text: 'STOCK', icon: Icon(Icons.inventory_2_rounded, size: 20)),
-                      Tab(text: 'REPORTS', icon: Icon(Icons.analytics_rounded, size: 20)),
-                      Tab(text: 'STAFF', icon: Icon(Icons.people_alt_rounded, size: 20)),
+          bottom: isTablet
+              ? null
+              : PreferredSize(
+                  preferredSize: const Size.fromHeight(65),
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 1,
+                        width: double.infinity,
+                        color: appBarContentColor.withValues(alpha: 0.1),
+                      ),
+                      Container(
+                        height: 55,
+                        color: themeColor,
+                        child: TabBar(
+                          controller: _tabController,
+                          indicatorColor: appBarContentColor,
+                          indicatorWeight: 4,
+                          labelColor: appBarContentColor,
+                          unselectedLabelColor: appBarContentColor.withValues(
+                            alpha: 0.6,
+                          ),
+                          labelStyle: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                          tabs: const [
+                            Tab(
+                              text: 'HOME',
+                              icon: Icon(Icons.dashboard_rounded, size: 20),
+                            ),
+                            Tab(
+                              text: 'STOCK',
+                              icon: Icon(Icons.inventory_2_rounded, size: 20),
+                            ),
+                            Tab(
+                              text: 'REPORTS',
+                              icon: Icon(Icons.analytics_rounded, size: 20),
+                            ),
+                            Tab(
+                              text: 'STAFF',
+                              icon: Icon(Icons.people_alt_rounded, size: 20),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        height: 1,
+                        width: double.infinity,
+                        color: appBarContentColor.withValues(alpha: 0.1),
+                      ),
                     ],
                   ),
                 ),
-                Container(height: 1, width: double.infinity, color: appBarContentColor.withValues(alpha: 0.1)),
-              ],
-            ),
-          ),
         ),
-        body: isTablet 
-          ? Row(
-              children: [
-                NavigationRail(
-                  selectedIndex: _tabController.index,
-                  onDestinationSelected: (index) => _tabController.animateTo(index),
-                  labelType: NavigationRailLabelType.all,
-                  backgroundColor: profile.cardColor,
-                  selectedIconTheme: IconThemeData(color: themeColor),
-                  destinations: const [
-                    NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: Text('Home')),
-                    NavigationRailDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2_rounded), label: Text('Stock')),
-                    NavigationRailDestination(icon: Icon(Icons.analytics_outlined), selectedIcon: Icon(Icons.analytics_rounded), label: Text('Reports')),
-                    NavigationRailDestination(icon: Icon(Icons.people_alt_outlined), selectedIcon: Icon(Icons.people_alt_rounded), label: Text('Staff')),
-                  ],
-                ),
-                const VerticalDivider(thickness: 1, width: 1),
-                Expanded(child: body),
-              ],
-            )
-          : body,
+        body: isTablet
+            ? Row(
+                children: [
+                  NavigationRail(
+                    selectedIndex: _tabController.index,
+                    onDestinationSelected: (index) =>
+                        _tabController.animateTo(index),
+                    labelType: NavigationRailLabelType.all,
+                    backgroundColor: profile.cardColor,
+                    selectedIconTheme: IconThemeData(color: themeColor),
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.dashboard_outlined),
+                        selectedIcon: Icon(Icons.dashboard_rounded),
+                        label: Text('Home'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.inventory_2_outlined),
+                        selectedIcon: Icon(Icons.inventory_2_rounded),
+                        label: Text('Stock'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.analytics_outlined),
+                        selectedIcon: Icon(Icons.analytics_rounded),
+                        label: Text('Reports'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.people_alt_outlined),
+                        selectedIcon: Icon(Icons.people_alt_rounded),
+                        label: Text('Staff'),
+                      ),
+                    ],
+                  ),
+                  const VerticalDivider(thickness: 1, width: 1),
+                  Expanded(child: body),
+                ],
+              )
+            : body,
       ),
     );
   }

@@ -46,7 +46,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     // Helper to calculate accurate filtered amount for a transaction
     double getFilteredAmount(TransactionModel tx) {
-      if (_selectedCategories.contains('All') && _selectedItems.contains('All')) {
+      if (_selectedCategories.contains('All') &&
+          _selectedItems.contains('All')) {
         return tx.amount;
       }
 
@@ -55,8 +56,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
       if (tx.itemSnapshots.isEmpty) {
         String cat = tx.category;
         if (cat.isEmpty || cat.toLowerCase() == 'sale') cat = 'General';
-        bool catMatch = _selectedCategories.contains('All') || _selectedCategories.contains(cat);
-        bool itemMatch = _selectedItems.contains('All') || (tx.type == 'sale' ? _selectedItems.contains('Quick Sale') : _selectedItems.contains(tx.category));
+        bool catMatch =
+            _selectedCategories.contains('All') ||
+            _selectedCategories.contains(cat);
+        bool itemMatch =
+            _selectedItems.contains('All') ||
+            (tx.type == 'sale'
+                ? _selectedItems.contains('Quick Sale')
+                : _selectedItems.contains(tx.category));
         return (catMatch && itemMatch) ? tx.amount : 0;
       }
 
@@ -67,7 +74,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         // Robust Lookup from Stock
         try {
           final master = itemProvider.items.firstWhere(
-            (i) => i.name.trim().toLowerCase() == name.trim().toLowerCase()
+            (i) => i.name.trim().toLowerCase() == name.trim().toLowerCase(),
           );
           if (master.category.isNotEmpty) {
             String newCat = master.category;
@@ -75,20 +82,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
               cat = newCat;
               Future.microtask(() {
                 final updatedSnapshot = s.copyWith(category: newCat);
-                final updatedSnapshots = tx.itemSnapshots.map((item) => item.id == s.id ? updatedSnapshot : item).toList();
-                Provider.of<TransactionProvider>(context, listen: false)
-                    .updateTransactionSnapshots(tx.id, updatedSnapshots);
+                final updatedSnapshots = tx.itemSnapshots
+                    .map((item) => item.id == s.id ? updatedSnapshot : item)
+                    .toList();
+                Provider.of<TransactionProvider>(
+                  context,
+                  listen: false,
+                ).updateTransactionSnapshots(tx.id, updatedSnapshots);
               });
             }
           }
         } catch (_) {}
 
-        if (cat.isEmpty || cat.toLowerCase() == 'sale' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'general') {
+        if (cat.isEmpty ||
+            cat.toLowerCase() == 'sale' ||
+            cat.toLowerCase() == 'uncategorized' ||
+            cat.toLowerCase() == 'general') {
           cat = 'General';
         }
 
-        bool catMatch = _selectedCategories.contains('All') || _selectedCategories.contains(cat);
-        bool itemMatch = _selectedItems.contains('All') || _selectedItems.contains(name);
+        bool catMatch =
+            _selectedCategories.contains('All') ||
+            _selectedCategories.contains(cat);
+        bool itemMatch =
+            _selectedItems.contains('All') || _selectedItems.contains(name);
 
         if (catMatch && itemMatch) {
           total += s.lineTotal;
@@ -98,17 +115,41 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
 
     final salesList = txProvider
-        .getFilteredTransactions(type: 'sale', range: _selectedRange, category: null, status: 'completed')
-        .where((tx) => _selectedPaymentMode == 'All' || tx.paymentMode == _selectedPaymentMode)
+        .getFilteredTransactions(
+          type: 'sale',
+          range: _selectedRange,
+          category: null,
+          status: 'completed',
+        )
+        .where(
+          (tx) =>
+              _selectedPaymentMode == 'All' ||
+              tx.paymentMode == _selectedPaymentMode,
+        )
         .toList();
 
     final purchaseList = txProvider
-        .getFilteredTransactions(type: 'purchase', range: _selectedRange, category: null, status: 'completed')
-        .where((tx) => _selectedPaymentMode == 'All' || tx.paymentMode == _selectedPaymentMode)
+        .getFilteredTransactions(
+          type: 'purchase',
+          range: _selectedRange,
+          category: null,
+          status: 'completed',
+        )
+        .where(
+          (tx) =>
+              _selectedPaymentMode == 'All' ||
+              tx.paymentMode == _selectedPaymentMode,
+        )
         .toList();
 
-    double totalRevenue = salesList.fold(0.0, (sum, tx) => sum + getFilteredAmount(tx));
-    double paidExpenses = purchaseList.fold(0.0, (sum, tx) => sum + getFilteredAmount(tx));
+    double totalRevenue = salesList.fold(
+      0.0,
+      (sum, tx) => sum + getFilteredAmount(tx),
+    );
+    double paidExpenses = purchaseList.fold(
+      0.0,
+      (sum, tx) => sum + getFilteredAmount(tx),
+    );
     double netProfit = totalRevenue - paidExpenses;
 
     return Scaffold(
@@ -131,9 +172,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 _currentIndex == 2
                     ? Colors.red.shade400
                     : themeColor.withValues(alpha: 0.8),
-                _currentIndex == 2
-                    ? Colors.red.shade700
-                    : themeColor,
+                _currentIndex == 2 ? Colors.red.shade700 : themeColor,
               ],
             ),
           ),
@@ -160,13 +199,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   _buildFilters(context, profile),
                   if (_currentIndex < 2)
                     Consumer<StaffProvider>(
-                      builder: (context, staffProv, _) => _buildExecutiveSummary(
-                        totalRevenue,
-                        paidExpenses,
-                        netProfit,
-                        staffProv.totalNetPayable,
-                        profile,
-                      ),
+                      builder: (context, staffProv, _) =>
+                          _buildExecutiveSummary(
+                            totalRevenue,
+                            paidExpenses,
+                            netProfit,
+                            staffProv.totalNetPayable,
+                            profile,
+                          ),
                     ),
                 ],
               ),
@@ -242,7 +282,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ],
         ),
       ),
-
     );
   }
 
@@ -267,7 +306,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
             decoration: BoxDecoration(
               color: profile.themeColor.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: profile.themeColor.withValues(alpha: 0.1)),
+              border: Border.all(
+                color: profile.themeColor.withValues(alpha: 0.1),
+              ),
             ),
             child: Row(
               children: [
@@ -275,21 +316,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 _verticalDivider(profile),
                 _summaryItem('EXPENSE', expense, Colors.redAccent, profile),
                 _verticalDivider(profile),
-                _summaryItem('PROFIT', profit, profit >= 0 ? profile.themeColor : Colors.redAccent, profile, isBold: true),
+                _summaryItem(
+                  'PROFIT',
+                  profit,
+                  profit >= 0 ? profile.themeColor : Colors.redAccent,
+                  profile,
+                  isBold: true,
+                ),
               ],
             ),
           ),
           // if (revenue > 0) ...[
           //   const SizedBox(height: 8),
-            // ClipRRect(
-            //   borderRadius: BorderRadius.circular(10),
-            //   child: LinearProgressIndicator(
-            //     value: (revenue > 0) ? (revenue - expense).clamp(0, revenue) / revenue : 0,
-            //     backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-            //     valueColor: AlwaysStoppedAnimation<Color>(profit >= 0 ? profile.themeColor : Colors.redAccent),
-            //     minHeight: 4,
-            //   ),
-            // ),
+          // ClipRRect(
+          //   borderRadius: BorderRadius.circular(10),
+          //   child: LinearProgressIndicator(
+          //     value: (revenue > 0) ? (revenue - expense).clamp(0, revenue) / revenue : 0,
+          //     backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
+          //     valueColor: AlwaysStoppedAnimation<Color>(profit >= 0 ? profile.themeColor : Colors.redAccent),
+          //     minHeight: 4,
+          //   ),
+          // ),
           // ],
           const SizedBox(height: 8),
           InkWell(
@@ -307,14 +354,31 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.pending_actions_rounded, size: 14, color: Colors.orange),
+                      Icon(
+                        Icons.pending_actions_rounded,
+                        size: 14,
+                        color: Colors.orange,
+                      ),
                       SizedBox(width: 6),
-                      Text('UPCOMING SALARY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.orange)),
+                      Text(
+                        'UPCOMING SALARY',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.orange,
+                        ),
+                      ),
                     ],
                   ),
                   Text(
-                    profile.showAmount ? '${profile.currencySymbol}${pending.toStringAsFixed(0)}' : '${profile.currencySymbol}****',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.orange),
+                    profile.showAmount
+                        ? '${profile.currencySymbol}${pending.toStringAsFixed(0)}'
+                        : '${profile.currencySymbol}****',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.orange,
+                    ),
                   ),
                 ],
               ),
@@ -389,15 +453,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     if (range != null) setState(() => _selectedRange = range);
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(color: profile.scaffoldColor, borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: profile.scaffoldColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.calendar_month_rounded, size: 16, color: profile.themeColor),
+                        Icon(
+                          Icons.calendar_month_rounded,
+                          size: 16,
+                          color: profile.themeColor,
+                        ),
                         const SizedBox(width: 8),
-                        Text('${DateFormat('dd MMM').format(_selectedRange.start)} - ${DateFormat('dd MMM').format(_selectedRange.end)}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        Text(
+                          '${DateFormat('dd MMM').format(_selectedRange.start)} - ${DateFormat('dd MMM').format(_selectedRange.end)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
                         const Icon(Icons.arrow_drop_down, color: Colors.grey),
                       ],
                     ),
@@ -411,7 +490,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   child: _buildFilterDropdown(
                     value: _selectedPaymentMode,
                     items: ['All', 'Cash', 'UPI', 'Card', 'Credit', 'Split'],
-                    onChanged: (val) => setState(() => _selectedPaymentMode = val!),
+                    onChanged: (val) =>
+                        setState(() => _selectedPaymentMode = val!),
                     profile: profile,
                   ),
                 ),
@@ -423,20 +503,39 @@ class _ReportsScreenState extends State<ReportsScreen> {
               builder: (context, catProv, itemProv, _) {
                 // 1. Filter categories based on current tab
                 final filteredCats = _currentIndex == 0
-                  ? catProv.categories.where((c) => c.type == 'selling').toList()
-                  : (_currentIndex == 1 ? catProv.categories.where((c) => c.type == 'purchase').toList() : catProv.categories);
+                    ? catProv.categories
+                          .where((c) => c.type == 'selling')
+                          .toList()
+                    : (_currentIndex == 1
+                          ? catProv.categories
+                                .where((c) => c.type == 'purchase')
+                                .toList()
+                          : catProv.categories);
 
-                final categoryNames = ['All', ...filteredCats.map((c) => c.name)];
+                final categoryNames = [
+                  'All',
+                  ...filteredCats.map((c) => c.name),
+                ];
 
                 // 2. Filter items based on selected categories
                 List<String> itemNames = ['All'];
                 if (_selectedCategories.contains('All')) {
                   // If All categories, show all items belonging to filtered categories
                   final catSet = filteredCats.map((c) => c.name).toSet();
-                  itemNames.addAll(itemProv.items.where((it) => catSet.contains(it.category)).map((it) => it.name));
+                  itemNames.addAll(
+                    itemProv.items
+                        .where((it) => catSet.contains(it.category))
+                        .map((it) => it.name),
+                  );
                 } else {
                   // Show items only from selected categories
-                  itemNames.addAll(itemProv.items.where((it) => _selectedCategories.contains(it.category)).map((it) => it.name));
+                  itemNames.addAll(
+                    itemProv.items
+                        .where(
+                          (it) => _selectedCategories.contains(it.category),
+                        )
+                        .map((it) => it.name),
+                  );
                 }
 
                 return Row(
@@ -444,27 +543,59 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     // Category Multi-Select (50%)
                     Expanded(
                       child: InkWell(
-                        onTap: () => _showMultiSelectModal(context, categoryNames, _selectedCategories, "SELECT CATEGORIES", profile, (newList) {
-                          setState(() {
-                            _selectedCategories = newList;
-                            _selectedItems = ['All']; // Reset items when category changes
-                          });
-                        }),
+                        onTap: () => _showMultiSelectModal(
+                          context,
+                          categoryNames,
+                          _selectedCategories,
+                          "SELECT CATEGORIES",
+                          profile,
+                          (newList) {
+                            setState(() {
+                              _selectedCategories = newList;
+                              _selectedItems = [
+                                'All',
+                              ]; // Reset items when category changes
+                            });
+                          },
+                        ),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                          decoration: BoxDecoration(color: profile.scaffoldColor, borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: profile.scaffoldColor,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           child: Row(
                             children: [
-                              Icon(Icons.category_rounded, size: 14, color: profile.themeColor),
+                              Icon(
+                                Icons.category_rounded,
+                                size: 14,
+                                color: profile.themeColor,
+                              ),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  _selectedCategories.contains('All') ? "ALL CATS" : _selectedCategories.join(", ").toUpperCase(),
-                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: profile.textColor),
-                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  _selectedCategories.contains('All')
+                                      ? "ALL CATS"
+                                      : _selectedCategories
+                                            .join(", ")
+                                            .toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    color: profile.textColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const Icon(Icons.arrow_drop_down, size: 18, color: Colors.grey),
+                              const Icon(
+                                Icons.arrow_drop_down,
+                                size: 18,
+                                color: Colors.grey,
+                              ),
                             ],
                           ),
                         ),
@@ -474,24 +605,52 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     // Item Multi-Select (50%)
                     Expanded(
                       child: InkWell(
-                        onTap: () => _showMultiSelectModal(context, itemNames, _selectedItems, "SELECT ITEMS", profile, (newList) {
-                          setState(() => _selectedItems = newList);
-                        }),
+                        onTap: () => _showMultiSelectModal(
+                          context,
+                          itemNames,
+                          _selectedItems,
+                          "SELECT ITEMS",
+                          profile,
+                          (newList) {
+                            setState(() => _selectedItems = newList);
+                          },
+                        ),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                          decoration: BoxDecoration(color: profile.scaffoldColor, borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: profile.scaffoldColor,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           child: Row(
                             children: [
-                              Icon(Icons.inventory_2_rounded, size: 14, color: profile.themeColor),
+                              Icon(
+                                Icons.inventory_2_rounded,
+                                size: 14,
+                                color: profile.themeColor,
+                              ),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  _selectedItems.contains('All') ? "ALL ITEMS" : _selectedItems.join(", ").toUpperCase(),
-                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: profile.textColor),
-                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  _selectedItems.contains('All')
+                                      ? "ALL ITEMS"
+                                      : _selectedItems.join(", ").toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    color: profile.textColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const Icon(Icons.arrow_drop_down, size: 18, color: Colors.grey),
+                              const Icon(
+                                Icons.arrow_drop_down,
+                                size: 18,
+                                color: Colors.grey,
+                              ),
                             ],
                           ),
                         ),
@@ -520,18 +679,28 @@ class _ReportsScreenState extends State<ReportsScreen> {
       context: context,
       backgroundColor: profile.cardColor,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.7,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Text(title, style: TextStyle(fontWeight: FontWeight.w900, color: profile.textColor)),
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: profile.textColor,
+                      ),
+                    ),
                   ),
                   Flexible(
                     child: ListView.builder(
@@ -541,7 +710,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         final item = options[i];
                         final isSelected = tempSelected.contains(item);
                         return CheckboxListTile(
-                          title: Text(item, style: TextStyle(color: profile.textColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                          title: Text(
+                            item,
+                            style: TextStyle(
+                              color: profile.textColor,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                           value: isSelected,
                           activeColor: profile.themeColor,
                           onChanged: (val) {
@@ -554,7 +730,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   tempSelected.add(item);
                                 } else {
                                   tempSelected.remove(item);
-                                  if (tempSelected.isEmpty) tempSelected = ['All'];
+                                  if (tempSelected.isEmpty)
+                                    tempSelected = ['All'];
                                 }
                               }
                             });
@@ -570,8 +747,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         onApplied(tempSelected);
                         if (context.mounted) Navigator.pop(context);
                       },
-                      style: ElevatedButton.styleFrom(backgroundColor: profile.themeColor, minimumSize: const Size(double.infinity, 50)),
-                      child: const Text("APPLY", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: profile.themeColor,
+                        minimumSize: const Size(double.infinity, 50),
+                      ),
+                      child: const Text(
+                        "APPLY",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -588,7 +774,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     required List<String> items,
     required ValueChanged<String?> onChanged,
     required ProfileProvider profile,
-    bool isFullWidth = false,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -636,43 +821,74 @@ class _ReportsScreenState extends State<ReportsScreen> {
           _exportTile(
             Icons.picture_as_pdf_rounded,
             'Save as PDF Report',
-            _currentIndex == 0 ? 'Sales summary report' : 'Expense summary report',
+            _currentIndex == 0
+                ? 'Sales summary report'
+                : 'Expense summary report',
             Colors.red,
             () async {
               final exportService = ExportService();
-              final txProvider = Provider.of<TransactionProvider>(context, listen: false);
+              final txProvider = Provider.of<TransactionProvider>(
+                context,
+                listen: false,
+              );
 
               final type = _currentIndex == 0 ? 'sale' : 'purchase';
 
-                // Helper to check category match
-                bool matches(String cat) => _selectedCategories.contains('All') || _selectedCategories.contains(cat);
+              // Helper to check category match
+              bool matches(String cat) =>
+                  _selectedCategories.contains('All') ||
+                  _selectedCategories.contains(cat);
 
-                if (_currentIndex == 0 || _currentIndex == 1) {
-                  final transactions = txProvider.getFilteredTransactions(
-                    type: type,
-                    range: _selectedRange,
-                    category: null,
-                    status: 'completed',
-                  ).where((tx) => matches(tx.category) && (_selectedPaymentMode == 'All' || tx.paymentMode == _selectedPaymentMode)).toList();
+              if (_currentIndex == 0 || _currentIndex == 1) {
+                final transactions = txProvider
+                    .getFilteredTransactions(
+                      type: type,
+                      range: _selectedRange,
+                      category: null,
+                      status: 'completed',
+                    )
+                    .where(
+                      (tx) =>
+                          matches(tx.category) &&
+                          (_selectedPaymentMode == 'All' ||
+                              tx.paymentMode == _selectedPaymentMode),
+                    )
+                    .toList();
 
-                  await exportService.exportToPdf(
-                    transactions,
-                    '${type.toUpperCase()}_Report_${DateFormat('ddMMM').format(_selectedRange.start)}',
-                  );
-                } else {
-                  final sales = txProvider.getFilteredTransactions(
-                    type: 'sale',
-                    range: _selectedRange,
-                    category: null,
-                    status: 'completed',
-                  ).where((tx) => matches(tx.category) && (_selectedPaymentMode == 'All' || tx.paymentMode == _selectedPaymentMode)).toList();
+                await exportService.exportToPdf(
+                  transactions,
+                  '${type.toUpperCase()}_Report_${DateFormat('ddMMM').format(_selectedRange.start)}',
+                );
+              } else {
+                final sales = txProvider
+                    .getFilteredTransactions(
+                      type: 'sale',
+                      range: _selectedRange,
+                      category: null,
+                      status: 'completed',
+                    )
+                    .where(
+                      (tx) =>
+                          matches(tx.category) &&
+                          (_selectedPaymentMode == 'All' ||
+                              tx.paymentMode == _selectedPaymentMode),
+                    )
+                    .toList();
 
-                  final expenses = txProvider.getFilteredTransactions(
-                    type: 'purchase',
-                    range: _selectedRange,
-                    category: null,
-                    status: 'completed',
-                  ).where((tx) => matches(tx.category) && (_selectedPaymentMode == 'All' || tx.paymentMode == _selectedPaymentMode)).toList();
+                final expenses = txProvider
+                    .getFilteredTransactions(
+                      type: 'purchase',
+                      range: _selectedRange,
+                      category: null,
+                      status: 'completed',
+                    )
+                    .where(
+                      (tx) =>
+                          matches(tx.category) &&
+                          (_selectedPaymentMode == 'All' ||
+                              tx.paymentMode == _selectedPaymentMode),
+                    )
+                    .toList();
 
                 await exportService.generateFullReport(
                   profile.displayBusinessName,
@@ -695,12 +911,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
               final exportService = ExportService();
 
               final type = _currentIndex == 0 ? 'sale' : 'purchase';
-              final allTransactions = txProvider.getFilteredTransactions(
-                type: type,
-                range: _selectedRange,
-                category: null,
-                status: 'completed',
-              ).where((tx) => (_selectedCategories.contains('All') || _selectedCategories.contains(tx.category)) && (_selectedPaymentMode == 'All' || tx.paymentMode == _selectedPaymentMode)).toList();
+              final allTransactions = txProvider
+                  .getFilteredTransactions(
+                    type: type,
+                    range: _selectedRange,
+                    category: null,
+                    status: 'completed',
+                  )
+                  .where(
+                    (tx) =>
+                        (_selectedCategories.contains('All') ||
+                            _selectedCategories.contains(tx.category)) &&
+                        (_selectedPaymentMode == 'All' ||
+                            tx.paymentMode == _selectedPaymentMode),
+                  )
+                  .toList();
 
               await exportService.exportToExcel(
                 allTransactions,
@@ -734,12 +959,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: Icon(icon, color: color),
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text(sub, style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
+      subtitle: Text(
+        sub,
+        style: TextStyle(fontSize: 12, color: profile.secondaryTextColor),
+      ),
       trailing: const Icon(Icons.chevron_right, size: 20),
     );
   }
 
-  void _showStaffPayrollSheet(BuildContext context, ProfileProvider profile, double pending) {
+  void _showStaffPayrollSheet(
+    BuildContext context,
+    ProfileProvider profile,
+    double pending,
+  ) {
     AppBottomSheet.show(
       context: context,
       profile: profile,
@@ -751,7 +983,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: profile.themeColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -759,28 +994,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Total Net Payable', style: TextStyle(fontSize: 13, color: profile.secondaryTextColor)),
-                    Text('${profile.currencySymbol}${pending.toStringAsFixed(0)}', 
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: profile.themeColor)),
+                    Text(
+                      'Total Net Payable',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: profile.secondaryTextColor,
+                      ),
+                    ),
+                    Text(
+                      '${profile.currencySymbol}${pending.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: profile.themeColor,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
               Flexible(
                 child: staffList.isEmpty
-                  ? const Center(child: Text('No staff added yet'))
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: staffList.length,
-                      itemBuilder: (context, index) {
-                        return _StaffPayrollCard(
-                          staff: staffList[index],
-                          profile: profile,
-                          staffProvider: staffProvider,
-                        );
-                      },
-                    ),
+                    ? const Center(child: Text('No staff added yet'))
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: staffList.length,
+                        itemBuilder: (context, index) {
+                          return _StaffPayrollCard(
+                            staff: staffList[index],
+                            profile: profile,
+                            staffProvider: staffProvider,
+                          );
+                        },
+                      ),
               ),
             ],
           );
@@ -790,7 +1037,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 }
 
-class _StickySummaryHeader extends SliverPersistentHeaderDelegate {
+final class _StickySummaryHeader extends SliverPersistentHeaderDelegate {
   final Widget child;
 
   _StickySummaryHeader({required this.child});
@@ -861,17 +1108,28 @@ class _ReportList extends StatelessWidget {
           String cat = tx.category;
           if (cat.isEmpty || cat.toLowerCase() == 'sale') cat = 'General';
           bool cM = categories.contains('All') || categories.contains(cat);
-          bool iM = items.contains('All') || (tx.type == 'sale' ? items.contains('Quick Sale') : items.contains(tx.category));
+          bool iM =
+              items.contains('All') ||
+              (tx.type == 'sale'
+                  ? items.contains('Quick Sale')
+                  : items.contains(tx.category));
           if (cM && iM) displayAmount = tx.amount;
         } else {
           for (var s in tx.itemSnapshots) {
             String name = s.name;
             String cat = s.category;
-            if (cat == '' || cat.toLowerCase() == 'general' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'sale') {
+            if (cat == '' ||
+                cat.toLowerCase() == 'general' ||
+                cat.toLowerCase() == 'uncategorized' ||
+                cat.toLowerCase() == 'sale') {
               try {
-                final master = itemProvider.items.firstWhere((i) => i.name == name);
+                final master = itemProvider.items.firstWhere(
+                  (i) => i.name == name,
+                );
                 cat = master.category;
-              } catch (_) { cat = 'General'; }
+              } catch (_) {
+                cat = 'General';
+              }
             }
             bool cM = categories.contains('All') || categories.contains(cat);
             bool iM = items.contains('All') || items.contains(name);
@@ -888,13 +1146,11 @@ class _ReportList extends StatelessWidget {
           double pending = tx.amount - tx.paidAmount;
           paymentSplit['Credit'] = (paymentSplit['Credit'] ?? 0) + pending;
         } else {
-          paymentSplit[tx.paymentMode] = (paymentSplit[tx.paymentMode] ?? 0) + displayAmount;
+          paymentSplit[tx.paymentMode] =
+              (paymentSplit[tx.paymentMode] ?? 0) + displayAmount;
         }
 
-        reportData.add({
-          'tx': tx,
-          'amount': displayAmount,
-        });
+        reportData.add({'tx': tx, 'amount': displayAmount});
       }
     }
 
@@ -903,9 +1159,19 @@ class _ReportList extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.analytics_outlined, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.1)),
+            Icon(
+              Icons.analytics_outlined,
+              size: 64,
+              color: profile.secondaryTextColor.withValues(alpha: 0.1),
+            ),
             const SizedBox(height: 16),
-            Text('No records found', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+            Text(
+              'No records found',
+              style: TextStyle(
+                color: profile.secondaryTextColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
       );
@@ -922,38 +1188,76 @@ class _ReportList extends StatelessWidget {
             decoration: BoxDecoration(
               color: profile.themeColor.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: profile.themeColor.withValues(alpha: 0.1)),
+              border: Border.all(
+                color: profile.themeColor.withValues(alpha: 0.1),
+              ),
             ),
             child: Column(
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('${reportData.length} TRANSACTIONS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: profile.themeColor, letterSpacing: 0.5)),
-                    Text('TOTAL: ${profile.currencySymbol}${profile.showAmount ? totalAmount.toStringAsFixed(0) : "****"}', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: profile.themeColor)),
+                    Text(
+                      '${reportData.length} TRANSACTIONS',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 11,
+                        color: profile.themeColor,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      'TOTAL: ${profile.currencySymbol}${profile.showAmount ? totalAmount.toStringAsFixed(0) : "****"}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                        color: profile.themeColor,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    _miniStat('Cash', paymentSplit['Cash']!, profile.themeColor, profile),
+                    _miniStat(
+                      'Cash',
+                      paymentSplit['Cash']!,
+                      profile.themeColor,
+                      profile,
+                    ),
                     const SizedBox(width: 8),
-                    _miniStat('UPI', paymentSplit['UPI']!, profile.themeColor.withValues(alpha: 0.7), profile),
+                    _miniStat(
+                      'UPI',
+                      paymentSplit['UPI']!,
+                      profile.themeColor.withValues(alpha: 0.7),
+                      profile,
+                    ),
                     const SizedBox(width: 8),
                     _miniStat(
                       'Credit',
                       paymentSplit['Credit']!,
                       Colors.orangeAccent,
                       profile,
-                      onTap: paymentSplit['Credit']! > 0 ? () {
-                        // Extract only transactions that have a balance due
-                        final pendingTxs = reportData.where((data) {
-                          final tx = data['tx'] as TransactionModel;
-                          return tx.paymentMode == 'Credit' && (tx.amount - tx.paidAmount) > 0;
-                        }).map((data) => data['tx'] as TransactionModel).toList();
+                      onTap: paymentSplit['Credit']! > 0
+                          ? () {
+                              // Extract only transactions that have a balance due
+                              final pendingTxs = reportData
+                                  .where((data) {
+                                    final tx = data['tx'] as TransactionModel;
+                                    return tx.paymentMode == 'Credit' &&
+                                        (tx.amount - tx.paidAmount) > 0;
+                                  })
+                                  .map((data) => data['tx'] as TransactionModel)
+                                  .toList();
 
-                        _showPendingDetails(context, pendingTxs, profile, itemProvider);
-                      } : null,
+                              _showPendingDetails(
+                                context,
+                                pendingTxs,
+                                profile,
+                                itemProvider,
+                              );
+                            }
+                          : null,
                     ),
                   ],
                 ),
@@ -1058,11 +1362,30 @@ class _ReportList extends StatelessWidget {
                 ),
                 title: Row(
                   children: [
-                    if (tx.paymentMode == 'Credit' && tx.customerContact.isNotEmpty) ...[
-                      const Icon(Icons.person_pin_rounded, size: 16, color: Colors.orange),
+                    if (tx.paymentMode == 'Credit' &&
+                        tx.customerContact.isNotEmpty) ...[
+                      const Icon(
+                        Icons.person_pin_rounded,
+                        size: 16,
+                        color: Colors.orange,
+                      ),
                       const SizedBox(width: 4),
-                      Text(tx.customerContact, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: profile.themeColor)),
-                      Text(' • ', style: TextStyle(color: profile.secondaryTextColor.withValues(alpha: 0.5))),
+                      Text(
+                        tx.customerContact,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                          color: profile.themeColor,
+                        ),
+                      ),
+                      Text(
+                        ' • ',
+                        style: TextStyle(
+                          color: profile.secondaryTextColor.withValues(
+                            alpha: 0.5,
+                          ),
+                        ),
+                      ),
                     ],
                     Expanded(
                       child: Text(
@@ -1077,16 +1400,27 @@ class _ReportList extends StatelessWidget {
                       ),
                     ),
                     if (tx.paymentMode == 'Credit')
-                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         margin: const EdgeInsets.only(left: 8),
                         decoration: BoxDecoration(
-                          color: (tx.amount - tx.paidAmount) > 0 ? Colors.red.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
+                          color: (tx.amount - tx.paidAmount) > 0
+                              ? Colors.red.withValues(alpha: 0.1)
+                              : Colors.green.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           (tx.amount - tx.paidAmount) > 0 ? 'DUE' : 'PAID',
-                          style: TextStyle(color: (tx.amount - tx.paidAmount) > 0 ? Colors.red : Colors.green, fontSize: 8, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            color: (tx.amount - tx.paidAmount) > 0
+                                ? Colors.red
+                                : Colors.green,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                   ],
@@ -1101,10 +1435,15 @@ class _ReportList extends StatelessWidget {
                         color: profile.secondaryTextColor,
                       ),
                     ),
-                    if (tx.paymentMode == 'Credit' && (tx.amount - tx.paidAmount) > 0)
+                    if (tx.paymentMode == 'Credit' &&
+                        (tx.amount - tx.paidAmount) > 0)
                       Text(
                         'Pending: ${profile.currencySymbol}${(tx.amount - tx.paidAmount).toStringAsFixed(0)}',
-                        style: const TextStyle(fontSize: 9, color: Colors.red, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                   ],
                 ),
@@ -1125,7 +1464,11 @@ class _ReportList extends StatelessWidget {
                     if (tx.paymentMode == 'Credit')
                       Text(
                         'Rec: ${profile.currencySymbol}${tx.paidAmount.toStringAsFixed(0)}',
-                        style: TextStyle(fontSize: 9, color: profile.secondaryTextColor, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: profile.secondaryTextColor,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                   ],
                 ),
@@ -1148,40 +1491,55 @@ class _ReportList extends StatelessWidget {
     return DateFormat('dd MMMM yyyy').format(date).toUpperCase();
   }
 
-  String _getMixedCategoryLabel(TransactionModel tx, ItemProvider itemProvider) {
+  String _getMixedCategoryLabel(
+    TransactionModel tx,
+    ItemProvider itemProvider,
+  ) {
     final items = tx.itemSnapshots;
     if (items.isEmpty) {
       String cat = tx.category;
       try {
         final lookupName = tx.type == 'sale' ? 'Quick Sale' : tx.category;
         final master = itemProvider.items.firstWhere(
-          (i) => i.name.trim().toLowerCase() == lookupName.trim().toLowerCase()
+          (i) => i.name.trim().toLowerCase() == lookupName.trim().toLowerCase(),
         );
         if (master.category.isNotEmpty) cat = master.category;
       } catch (_) {}
 
-      if (cat.isEmpty || cat.toLowerCase() == 'sale' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'all') {
+      if (cat.isEmpty ||
+          cat.toLowerCase() == 'sale' ||
+          cat.toLowerCase() == 'uncategorized' ||
+          cat.toLowerCase() == 'all') {
         return 'General';
       }
       return cat;
     }
 
-    final categories = items.map((s) {
-      String c = s.category;
-      try {
-        final master = itemProvider.items.firstWhere(
-          (i) => i.name.trim().toLowerCase() == s.name.trim().toLowerCase()
-        );
-        if (master.category.isNotEmpty) c = master.category;
-      } catch (_) {}
-      return c;
-    }).where((c) => c.isNotEmpty && c != 'All' && c.toLowerCase() != 'sale' && c.toLowerCase() != 'uncategorized').toSet().toList();
+    final categories = items
+        .map((s) {
+          String c = s.category;
+          try {
+            final master = itemProvider.items.firstWhere(
+              (i) => i.name.trim().toLowerCase() == s.name.trim().toLowerCase(),
+            );
+            if (master.category.isNotEmpty) c = master.category;
+          } catch (_) {}
+          return c;
+        })
+        .where(
+          (c) =>
+              c.isNotEmpty &&
+              c != 'All' &&
+              c.toLowerCase() != 'sale' &&
+              c.toLowerCase() != 'uncategorized',
+        )
+        .toSet()
+        .toList();
 
     if (categories.isEmpty) return 'General';
     if (categories.length > 1) return 'Mix';
     return categories.first;
   }
-
 
   Widget _buildAnalysisSummary(
     BuildContext context,
@@ -1191,8 +1549,6 @@ class _ReportList extends StatelessWidget {
     ItemProvider itemProvider,
     String reportType,
   ) {
-    final split = provider.getPaymentSplit(txs);
-
     Map<String, double> itemRevenue = {};
     Map<String, double> catRevenue = {};
     Map<String, List<Map<String, dynamic>>> catAuditHistory = {};
@@ -1203,23 +1559,31 @@ class _ReportList extends StatelessWidget {
 
       if (snapshots.isEmpty) {
         String cat = tx.category;
-        
+
         // Step 1: Lookup Current Category from Stock
         String name = tx.type == 'sale' ? 'Quick Sale' : tx.category;
         try {
           final master = itemProvider.items.firstWhere(
-            (i) => i.name.trim().toLowerCase() == name.trim().toLowerCase()
+            (i) => i.name.trim().toLowerCase() == name.trim().toLowerCase(),
           );
           if (master.category.isNotEmpty) cat = master.category;
         } catch (_) {}
 
-        if (cat.isEmpty || cat.toLowerCase() == 'sale' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'general' || cat == 'All') {
+        if (cat.isEmpty ||
+            cat.toLowerCase() == 'sale' ||
+            cat.toLowerCase() == 'uncategorized' ||
+            cat.toLowerCase() == 'general' ||
+            cat == 'All') {
           cat = 'General';
         }
 
         // FILTER CHECK: Skip if category/item not in selected filters
         bool catMatch = categories.contains('All') || categories.contains(cat);
-        bool itemMatch = items.contains('All') || (tx.type == 'sale' ? items.contains('Quick Sale') : items.contains(tx.category));
+        bool itemMatch =
+            items.contains('All') ||
+            (tx.type == 'sale'
+                ? items.contains('Quick Sale')
+                : items.contains(tx.category));
         if (!catMatch || !itemMatch) continue;
 
         catRevenue[cat] = (catRevenue[cat] ?? 0) + tx.amount;
@@ -1256,14 +1620,17 @@ class _ReportList extends StatelessWidget {
         // Step 1: Lookup Current Category from Stock
         try {
           final master = itemProvider.items.firstWhere(
-            (i) => i.name.trim().toLowerCase() == name.trim().toLowerCase()
+            (i) => i.name.trim().toLowerCase() == name.trim().toLowerCase(),
           );
           if (master.category.isNotEmpty) {
             cat = master.category;
           }
         } catch (_) {}
 
-        if (cat.isEmpty || cat.toLowerCase() == 'sale' || cat.toLowerCase() == 'uncategorized' || cat.toLowerCase() == 'general') {
+        if (cat.isEmpty ||
+            cat.toLowerCase() == 'sale' ||
+            cat.toLowerCase() == 'uncategorized' ||
+            cat.toLowerCase() == 'general') {
           cat = 'General';
         }
 
@@ -1310,7 +1677,10 @@ class _ReportList extends StatelessWidget {
       children: [
         _buildLowStockAlert(context, itemProvider, profile),
         const SizedBox(height: 8),
-        _sectionHeader(isExpense ? 'CATEGORY-WISE EXPENSES' : 'CATEGORY-WISE SALES', profile),
+        _sectionHeader(
+          isExpense ? 'CATEGORY-WISE EXPENSES' : 'CATEGORY-WISE SALES',
+          profile,
+        ),
         const SizedBox(height: 12),
         // PROFESSIONAL AUDIT CLICK
         _summaryBox(
@@ -1327,7 +1697,10 @@ class _ReportList extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        _sectionHeader(isExpense ? 'ITEM-WISE EXPENSES' : 'ITEM-WISE SALES', profile),
+        _sectionHeader(
+          isExpense ? 'ITEM-WISE EXPENSES' : 'ITEM-WISE SALES',
+          profile,
+        ),
         const SizedBox(height: 12),
         _summaryBox(
           sortedItems.take(15).toList(),
@@ -1349,13 +1722,20 @@ class _ReportList extends StatelessWidget {
     );
   }
 
-  Widget _buildLowStockAlert(BuildContext context, ItemProvider itemProvider, ProfileProvider profile) {
+  Widget _buildLowStockAlert(
+    BuildContext context,
+    ItemProvider itemProvider,
+    ProfileProvider profile,
+  ) {
     // Logic: Use minStock from ItemModel for the alert
-    final lowStockItems = itemProvider.items.where((item) =>
-      item.lowStockAlert == 1 &&
-      item.currentStock <= item.minStock &&
-      item.currentStock >= 0
-    ).toList();
+    final lowStockItems = itemProvider.items
+        .where(
+          (item) =>
+              item.lowStockAlert == 1 &&
+              item.currentStock <= item.minStock &&
+              item.currentStock >= 0,
+        )
+        .toList();
 
     if (lowStockItems.isEmpty) return const SizedBox.shrink();
 
@@ -1372,52 +1752,93 @@ class _ReportList extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.red,
+                size: 18,
+              ),
               const SizedBox(width: 8),
               Text(
                 "LOW STOCK ALERT (${lowStockItems.length})",
-                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5),
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 11,
+                  letterSpacing: 0.5,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          ...lowStockItems.take(3).map((item) => InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (c) => ItemManagementScreen(category: item.category, editItem: item),
-                ),
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 6, top: 2),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 4, height: 4,
-                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+          ...lowStockItems
+              .take(3)
+              .map(
+                (item) => InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (c) => ItemManagementScreen(
+                          category: item.category,
+                          editItem: item,
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      Text(item.name, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.textColor)),
-                    ],
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 6, top: 2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 4,
+                              height: 4,
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              item.name,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: profile.textColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            Text(
+                              "${item.currentStock} ${item.unit} left",
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 10,
+                              color: Colors.red,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  Row(
-                    children: [
-                      Text("${item.currentStock} ${item.unit} left", style: const TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Colors.red),
-                    ],
-                  ),
-                ],
+                ),
               ),
-            ),
-          )),
           if (lowStockItems.length > 3)
-            Text("...and ${lowStockItems.length - 3} more", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            Text(
+              "...and ${lowStockItems.length - 3} more",
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            ),
         ],
       ),
     );
@@ -1470,73 +1891,112 @@ class _ReportList extends StatelessWidget {
                         horizontal: 16,
                         vertical: 4,
                       ),
-                    leading: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.south_west_rounded,
-                        color: Colors.orange,
-                        size: 18,
-                      ),
-                    ),
-                    title: Row(
-                      children: [
-                        if (tx.type == 'purchase' && tx.description.contains(' | Vendor: ')) ...[
-                          const Icon(Icons.store_rounded, size: 16, color: Colors.orange),
-                          const SizedBox(width: 4),
-                          Text(
-                            tx.description.split(' | Vendor: ').last.split(' | ').first,
-                            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: profile.themeColor)
-                          ),
-                          Text(' • ', style: TextStyle(color: profile.secondaryTextColor.withValues(alpha: 0.5))),
-                        ] else if (tx.customerContact.isNotEmpty) ...[
-                          const Icon(Icons.person_pin_rounded, size: 16, color: Colors.orange),
-                          const SizedBox(width: 4),
-                          Text(tx.customerContact, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: profile.themeColor)),
-                          Text(' • ', style: TextStyle(color: profile.secondaryTextColor.withValues(alpha: 0.5))),
-                        ],
-                        Expanded(
-                          child: Text(
-                            _getMixedCategoryLabel(tx, itemProvider),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: profile.textColor,
-                              fontSize: 13,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
                         ),
-                      ],
-                    ),
-                    subtitle: Text(
-                      'Pending: ${profile.currencySymbol}${pending.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.red,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
+                        child: const Icon(
+                          Icons.south_west_rounded,
+                          color: Colors.orange,
+                          size: 18,
+                        ),
+                      ),
+                      title: Row(
+                        children: [
+                          if (tx.type == 'purchase' &&
+                              tx.description.contains(' | Vendor: ')) ...[
+                            const Icon(
+                              Icons.store_rounded,
+                              size: 16,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              tx.description
+                                  .split(' | Vendor: ')
+                                  .last
+                                  .split(' | ')
+                                  .first,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                                color: profile.themeColor,
+                              ),
+                            ),
+                            Text(
+                              ' • ',
+                              style: TextStyle(
+                                color: profile.secondaryTextColor.withValues(
+                                  alpha: 0.5,
+                                ),
+                              ),
+                            ),
+                          ] else if (tx.customerContact.isNotEmpty) ...[
+                            const Icon(
+                              Icons.person_pin_rounded,
+                              size: 16,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              tx.customerContact,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                                color: profile.themeColor,
+                              ),
+                            ),
+                            Text(
+                              ' • ',
+                              style: TextStyle(
+                                color: profile.secondaryTextColor.withValues(
+                                  alpha: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                          Expanded(
+                            child: Text(
+                              _getMixedCategoryLabel(tx, itemProvider),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: profile.textColor,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      subtitle: Text(
+                        'Pending: ${profile.currencySymbol}${pending.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      trailing: Text(
+                        '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14,
+                          color: profile.textColor,
+                        ),
                       ),
                     ),
-                    trailing: Text(
-                      '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                        color: profile.textColor,
-                      ),
-                    ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ));
+    );
   }
 
   void _showItemDetails(
@@ -1547,7 +2007,15 @@ class _ReportList extends StatelessWidget {
     ProfileProvider profile,
     bool isExpense,
   ) {
-    _showAuditSheet(context, itemName, total, history, profile, isItem: true, isExpense: isExpense);
+    _showAuditSheet(
+      context,
+      itemName,
+      total,
+      history,
+      profile,
+      isItem: true,
+      isExpense: isExpense,
+    );
   }
 
   void _showCategoryDetails(
@@ -1558,7 +2026,15 @@ class _ReportList extends StatelessWidget {
     ProfileProvider profile,
     bool isExpense,
   ) {
-    _showAuditSheet(context, catName, total, history, profile, isItem: false, isExpense: isExpense);
+    _showAuditSheet(
+      context,
+      catName,
+      total,
+      history,
+      profile,
+      isItem: false,
+      isExpense: isExpense,
+    );
   }
 
   void _showAuditSheet(
@@ -1594,7 +2070,9 @@ class _ReportList extends StatelessWidget {
     AppBottomSheet.show(
       context: context,
       profile: profile,
-      title: isExpense ? 'EXPENSE AUDIT' : (isItem ? 'ITEM AUDIT' : 'CATEGORY AUDIT'),
+      title: isExpense
+          ? 'EXPENSE AUDIT'
+          : (isItem ? 'ITEM AUDIT' : 'CATEGORY AUDIT'),
       footer: ElevatedButton.icon(
         onPressed: () async {
           final exportService = ExportService();
@@ -1647,20 +2125,23 @@ class _ReportList extends StatelessWidget {
             children: [
               if (isExpense)
                 _insightStat(
-                    'Total Quantity',
-                    totalQty.toStringAsFixed(totalQty % 1 == 0 ? 0 : 2),
-                    Colors.orange)
+                  'Total Quantity',
+                  totalQty.toStringAsFixed(totalQty % 1 == 0 ? 0 : 2),
+                  Colors.orange,
+                )
               else ...[
                 _insightStat(
-                    halfQty > 0 ? 'Full Portions' : 'Total Portions',
-                    fullQty.toStringAsFixed(fullQty % 1 == 0 ? 0 : 1),
-                    profile.themeColor),
+                  halfQty > 0 ? 'Full Portions' : 'Total Portions',
+                  fullQty.toStringAsFixed(fullQty % 1 == 0 ? 0 : 1),
+                  profile.themeColor,
+                ),
                 if (halfQty > 0) ...[
                   const SizedBox(width: 12),
                   _insightStat(
-                      'Half Portions',
-                      halfQty.toStringAsFixed(halfQty % 1 == 0 ? 0 : 1),
-                      Colors.orange),
+                    'Half Portions',
+                    halfQty.toStringAsFixed(halfQty % 1 == 0 ? 0 : 1),
+                    Colors.orange,
+                  ),
                 ],
               ],
             ],
@@ -1685,8 +2166,8 @@ class _ReportList extends StatelessWidget {
               String qLabel = sale['qty'] == 0.5
                   ? "Half"
                   : (sale['qty'] == 1.0
-                      ? "Full"
-                      : sale['qty'].toStringAsFixed(1));
+                        ? "Full"
+                        : sale['qty'].toStringAsFixed(1));
               bool hasExtras = sale['extraQty'] > 0 || sale['extraPrice'] > 0;
 
               return Container(
@@ -1759,9 +2240,7 @@ class _ReportList extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: profile.themeColor.withValues(
-                              alpha: 0.1,
-                            ),
+                            color: profile.themeColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -1841,7 +2320,6 @@ class _ReportList extends StatelessWidget {
     );
   }
 
-
   Widget _sectionHeader(String title, ProfileProvider profile) {
     return Text(
       title,
@@ -1898,7 +2376,9 @@ class _ReportList extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 8,
                                   fontWeight: FontWeight.w900,
-                                  color: isExpense ? Colors.red.shade700 : Colors.green.shade700,
+                                  color: isExpense
+                                      ? Colors.red.shade700
+                                      : Colors.green.shade700,
                                   letterSpacing: 0.5,
                                 ),
                               ),
@@ -2061,251 +2541,287 @@ class _ReportList extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color:
-                          (tx.status == 'pending' ? Colors.orange : Colors.green)
-                              .withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      tx.status.toUpperCase(),
-                      style: TextStyle(
-                        color: tx.status == 'pending'
-                            ? Colors.orange
-                            : Colors.green,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10,
-                      ),
-                    ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: (tx.status == 'pending' ? Colors.orange : Colors.green)
+                      .withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  tx.status.toUpperCase(),
+                  style: TextStyle(
+                    color: tx.status == 'pending'
+                        ? Colors.orange
+                        : Colors.green,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
                   ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _detailRow(
-                'Date/Time',
-                DateFormat('dd MMM yyyy, hh:mm a').format(tx.date),
-                profile,
-              ),
-              _detailRow('Payment Mode', tx.paymentMode, profile),
-              const Divider(height: 40),
-              Text(
-                'ITEMS BREAKDOWN',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11,
-                  color: profile.secondaryTextColor,
-                  letterSpacing: 1,
                 ),
               ),
-              const SizedBox(height: 16),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _detailRow(
+            'Date/Time',
+            DateFormat('dd MMM yyyy, hh:mm a').format(tx.date),
+            profile,
+          ),
+          _detailRow('Payment Mode', tx.paymentMode, profile),
+          const Divider(height: 40),
+          Text(
+            'ITEMS BREAKDOWN',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+              color: profile.secondaryTextColor,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 16),
 
-              Column(
-                children: snapshots.map((s) {
-                  String qLabel = s.qty == 0.5
-                      ? "Half"
-                      : (s.qty == 1.0 ? "Full" : s.qty.toStringAsFixed(1));
-                  bool hasExtras = s.extraQty > 0 || s.extraPrice > 0;
+          Column(
+            children: snapshots.map((s) {
+              String qLabel = s.qty == 0.5
+                  ? "Half"
+                  : (s.qty == 1.0 ? "Full" : s.qty.toStringAsFixed(1));
+              bool hasExtras = s.extraQty > 0 || s.extraPrice > 0;
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: profile.scaffoldColor.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: profile.isDarkMode
-                            ? Colors.white10
-                            : Colors.grey.shade100,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              return Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: profile.scaffoldColor.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: profile.isDarkMode
+                        ? Colors.white10
+                        : Colors.grey.shade100,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    s.name,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      color: profile.textColor,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '$qLabel x ${profile.currencySymbol}${s.price.toStringAsFixed(0)} • ${s.variant}',
-                                    style: TextStyle(
-                                      color: profile.secondaryTextColor,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '${profile.currencySymbol}${s.lineTotal.toStringAsFixed(0)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    color: profile.themeColor,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                Text(
-                                  'Total',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    color: profile.secondaryTextColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        if (hasExtras) ...[
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
-                            child: Divider(height: 1, thickness: 0.5),
-                          ),
-                          Row(
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(
-                                Icons.add_circle_outline_rounded,
-                                size: 14,
-                                color: Colors.blue.shade600,
-                              ),
-                              const SizedBox(width: 8),
                               Text(
-                                'Extra Qty: ${s.extraQty.toInt()} • Extra Rs: ${profile.currencySymbol}${s.extraPrice.toInt()}',
+                                s.name,
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
                                   color: profile.textColor,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$qLabel x ${profile.currencySymbol}${s.price.toStringAsFixed(0)} • ${s.variant}',
+                                style: TextStyle(
+                                  color: profile.secondaryTextColor,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-
-              const Divider(height: 40),
-              _rowBreakdown(
-                'Subtotal',
-                '${profile.currencySymbol}${calculatedSubtotal.toStringAsFixed(0)}',
-                profile,
-              ),
-              if (discount > 0)
-                _rowBreakdown(
-                  'Discount',
-                  '- ${profile.currencySymbol}${discount.toStringAsFixed(0)}',
-                  profile,
-                  color: Colors.green,
-                ),
-              if (taxAmount > 0)
-                _rowBreakdown(
-                  'Tax',
-                  '${profile.currencySymbol}${taxAmount.toStringAsFixed(0)}',
-                  profile,
-                ),
-
-              if (tx.paymentMode == 'Credit') ...[
-                const SizedBox(height: 8),
-                _rowBreakdown('Total Bill', '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', profile, isBold: true),
-                _rowBreakdown('Paid (Deposit)', '${profile.currencySymbol}${tx.paidAmount.toStringAsFixed(0)}', profile, color: Colors.green, isBold: true),
-                const Divider(height: 20, thickness: 0.5),
-                _rowBreakdown('Remaining Due', '${profile.currencySymbol}${(tx.amount - tx.paidAmount).toStringAsFixed(0)}', profile, color: Colors.red, isBold: true),
-              ],
-
-              if (tx.customerContact.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _rowBreakdown('Customer', tx.customerContact, profile, color: profile.themeColor),
-                    Row(
-                      children: [
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          icon: const Icon(Icons.call, size: 18, color: Colors.green),
-                          onPressed: () => _launchURL('tel:${tx.customerContact}'),
                         ),
-                        if (tx.paymentMode == 'Credit' && (tx.amount - tx.paidAmount) > 0)
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            icon: const Icon(Icons.message_rounded, size: 18, color: Color(0xFF25D366)),
-                            onPressed: () {
-                              double due = tx.amount - tx.paidAmount;
-                              String msg = "Reminder from ${profile.displayBusinessName}: Pending balance of ${profile.currencySymbol}${due.toStringAsFixed(0)}. Please clear it. Thank you!";
-                              _launchURL('https://wa.me/${tx.customerContact.replaceAll(RegExp(r'[^0-9]'), '')}?text=${Uri.encodeComponent(msg)}');
-                            },
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '${profile.currencySymbol}${s.lineTotal.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: profile.themeColor,
+                                fontSize: 16,
+                              ),
+                            ),
+                            Text(
+                              'Total',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: profile.secondaryTextColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
+                    if (hasExtras) ...[
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Divider(height: 1, thickness: 0.5),
+                      ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.add_circle_outline_rounded,
+                            size: 14,
+                            color: Colors.blue.shade600,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Extra Qty: ${s.extraQty.toInt()} • Extra Rs: ${profile.currencySymbol}${s.extraPrice.toInt()}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: profile.textColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+
+          const Divider(height: 40),
+          _rowBreakdown(
+            'Subtotal',
+            '${profile.currencySymbol}${calculatedSubtotal.toStringAsFixed(0)}',
+            profile,
+          ),
+          if (discount > 0)
+            _rowBreakdown(
+              'Discount',
+              '- ${profile.currencySymbol}${discount.toStringAsFixed(0)}',
+              profile,
+              color: Colors.green,
+            ),
+          if (taxAmount > 0)
+            _rowBreakdown(
+              'Tax',
+              '${profile.currencySymbol}${taxAmount.toStringAsFixed(0)}',
+              profile,
+            ),
+
+          if (tx.paymentMode == 'Credit') ...[
+            const SizedBox(height: 8),
+            _rowBreakdown(
+              'Total Bill',
+              '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}',
+              profile,
+              isBold: true,
+            ),
+            _rowBreakdown(
+              'Paid (Deposit)',
+              '${profile.currencySymbol}${tx.paidAmount.toStringAsFixed(0)}',
+              profile,
+              color: Colors.green,
+              isBold: true,
+            ),
+            const Divider(height: 20, thickness: 0.5),
+            _rowBreakdown(
+              'Remaining Due',
+              '${profile.currencySymbol}${(tx.amount - tx.paidAmount).toStringAsFixed(0)}',
+              profile,
+              color: Colors.red,
+              isBold: true,
+            ),
+          ],
+
+          if (tx.customerContact.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _rowBreakdown(
+                  'Customer',
+                  tx.customerContact,
+                  profile,
+                  color: profile.themeColor,
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(
+                        Icons.call,
+                        size: 18,
+                        color: Colors.green,
+                      ),
+                      onPressed: () => _launchURL('tel:${tx.customerContact}'),
+                    ),
+                    if (tx.paymentMode == 'Credit' &&
+                        (tx.amount - tx.paidAmount) > 0)
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.message_rounded,
+                          size: 18,
+                          color: Color(0xFF25D366),
+                        ),
+                        onPressed: () {
+                          double due = tx.amount - tx.paidAmount;
+                          String msg =
+                              "Reminder from ${profile.displayBusinessName}: Pending balance of ${profile.currencySymbol}${due.toStringAsFixed(0)}. Please clear it. Thank you!";
+                          _launchURL(
+                            'https://wa.me/${tx.customerContact.replaceAll(RegExp(r'[^0-9]'), '')}?text=${Uri.encodeComponent(msg)}',
+                          );
+                        },
+                      ),
                   ],
                 ),
               ],
+            ),
+          ],
 
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: profile.themeColor.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: profile.themeColor.withValues(alpha: 0.1),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: profile.themeColor.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: profile.themeColor.withValues(alpha: 0.1),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  tx.paymentMode == 'Credit' ? 'DUE BALANCE' : 'GRAND TOTAL',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    color: tx.paymentMode == 'Credit'
+                        ? Colors.red
+                        : profile.textColor,
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      tx.paymentMode == 'Credit' ? 'DUE BALANCE' : 'GRAND TOTAL',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                        color: tx.paymentMode == 'Credit' ? Colors.red : profile.textColor,
-                      ),
-                    ),
-                    Text(
-                      profile.showAmount
-                          ? '${profile.currencySymbol}${tx.paymentMode == 'Credit' ? (tx.amount - tx.paidAmount).toStringAsFixed(0) : tx.amount.toStringAsFixed(0)}'
-                          : '${profile.currencySymbol}****',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 26,
-                        color: tx.paymentMode == 'Credit' ? Colors.red : profile.themeColor,
-                      ),
-                    ),
-                  ],
+                Text(
+                  profile.showAmount
+                      ? '${profile.currencySymbol}${tx.paymentMode == 'Credit' ? (tx.amount - tx.paidAmount).toStringAsFixed(0) : tx.amount.toStringAsFixed(0)}'
+                      : '${profile.currencySymbol}****',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 26,
+                    color: tx.paymentMode == 'Credit'
+                        ? Colors.red
+                        : profile.themeColor,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-            ],
+              ],
+            ),
           ),
+          const SizedBox(height: 12),
+        ],
+      ),
     );
   }
-
 
   Widget _rowBreakdown(
     String l,
@@ -2370,7 +2886,11 @@ class _ReportList extends StatelessWidget {
     }
   }
 
-  void _showStaffPayrollSheet(BuildContext context, ProfileProvider profile, double pending) {
+  void _showStaffPayrollSheet(
+    BuildContext context,
+    ProfileProvider profile,
+    double pending,
+  ) {
     AppBottomSheet.show(
       context: context,
       profile: profile,
@@ -2382,7 +2902,10 @@ class _ReportList extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: profile.themeColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -2390,28 +2913,40 @@ class _ReportList extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Total Net Payable', style: TextStyle(fontSize: 13, color: profile.secondaryTextColor)),
-                    Text('${profile.currencySymbol}${pending.toStringAsFixed(0)}', 
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: profile.themeColor)),
+                    Text(
+                      'Total Net Payable',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: profile.secondaryTextColor,
+                      ),
+                    ),
+                    Text(
+                      '${profile.currencySymbol}${pending.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: profile.themeColor,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
               Flexible(
                 child: staffList.isEmpty
-                  ? const Center(child: Text('No staff added yet'))
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: staffList.length,
-                      itemBuilder: (context, index) {
-                        return _StaffPayrollCard(
-                          staff: staffList[index],
-                          profile: profile,
-                          staffProvider: staffProvider,
-                        );
-                      },
-                    ),
+                    ? const Center(child: Text('No staff added yet'))
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: staffList.length,
+                        itemBuilder: (context, index) {
+                          return _StaffPayrollCard(
+                            staff: staffList[index],
+                            profile: profile,
+                            staffProvider: staffProvider,
+                          );
+                        },
+                      ),
               ),
             ],
           );
@@ -2544,14 +3079,11 @@ class _TrashListState extends State<_TrashList> {
       setState(() => _selectedIds.clear());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Selected items permanently deleted!'),
-          ),
+          const SnackBar(content: Text('Selected items permanently deleted!')),
         );
       }
     }
   }
-
 
   Widget _filterChip(String id, String label, ProfileProvider profile) {
     final isSelected = _filterType == id;
@@ -3304,7 +3836,11 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
               _buildDateBox('FROM', _startDate, true),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Icon(Icons.arrow_forward, color: profile.themeColor, size: 16),
+                child: Icon(
+                  Icons.arrow_forward,
+                  color: profile.themeColor,
+                  size: 16,
+                ),
               ),
               _buildDateBox('TO', _endDate, false),
             ],
@@ -3316,11 +3852,26 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
               children: [
                 _quickFilterBtn('Today', () {
                   final now = DateTime.now();
-                  _updateRange(DateTime(now.year, now.month, now.day), DateTime(now.year, now.month, now.day, 23, 59, 59));
+                  _updateRange(
+                    DateTime(now.year, now.month, now.day),
+                    DateTime(now.year, now.month, now.day, 23, 59, 59),
+                  );
                 }),
                 _quickFilterBtn('Yesterday', () {
-                  final yesterday = DateTime.now().subtract(const Duration(days: 1));
-                  _updateRange(DateTime(yesterday.year, yesterday.month, yesterday.day), DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59));
+                  final yesterday = DateTime.now().subtract(
+                    const Duration(days: 1),
+                  );
+                  _updateRange(
+                    DateTime(yesterday.year, yesterday.month, yesterday.day),
+                    DateTime(
+                      yesterday.year,
+                      yesterday.month,
+                      yesterday.day,
+                      23,
+                      59,
+                      59,
+                    ),
+                  );
                 }),
                 _quickFilterBtn('Last 7 Days', () {
                   final now = DateTime.now();
@@ -3339,17 +3890,25 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
             height: 55,
             child: ElevatedButton(
               onPressed: () {
-                widget.onRangeSelected(DateTimeRange(start: _startDate, end: _endDate));
+                widget.onRangeSelected(
+                  DateTimeRange(start: _startDate, end: _endDate),
+                );
                 Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: profile.themeColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
                 elevation: 0,
               ),
               child: const Text(
                 'APPLY FILTER',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                ),
               ),
             ),
           ),
@@ -3384,9 +3943,15 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
           );
           if (selected != null) {
             if (isStart) {
-              _updateRange(selected, _endDate.isBefore(selected) ? selected : _endDate);
+              _updateRange(
+                selected,
+                _endDate.isBefore(selected) ? selected : _endDate,
+              );
             } else {
-              _updateRange(_startDate.isAfter(selected) ? selected : _startDate, selected);
+              _updateRange(
+                _startDate.isAfter(selected) ? selected : _startDate,
+                selected,
+              );
             }
           }
         },
@@ -3400,11 +3965,22 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 5),
               Text(
                 DateFormat('dd MMM yyyy').format(date),
-                style: TextStyle(color: widget.profile.textColor, fontWeight: FontWeight.w900, fontSize: 14),
+                style: TextStyle(
+                  color: widget.profile.textColor,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                ),
               ),
             ],
           ),
@@ -3420,15 +3996,24 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
           side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 15),
         ),
-        child: Text(label, style: TextStyle(color: widget.profile.textColor, fontSize: 12)),
+        child: Text(
+          label,
+          style: TextStyle(color: widget.profile.textColor, fontSize: 12),
+        ),
       ),
     );
   }
 
-  void _showStaffPayrollSheet(BuildContext context, ProfileProvider profile, double pending) {
+  void _showStaffPayrollSheet(
+    BuildContext context,
+    ProfileProvider profile,
+    double pending,
+  ) {
     AppBottomSheet.show(
       context: context,
       profile: profile,
@@ -3440,7 +4025,10 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: profile.themeColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -3448,28 +4036,40 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Total Net Payable', style: TextStyle(fontSize: 13, color: profile.secondaryTextColor)),
-                    Text('${profile.currencySymbol}${pending.toStringAsFixed(0)}', 
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: profile.themeColor)),
+                    Text(
+                      'Total Net Payable',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: profile.secondaryTextColor,
+                      ),
+                    ),
+                    Text(
+                      '${profile.currencySymbol}${pending.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: profile.themeColor,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
               Flexible(
                 child: staffList.isEmpty
-                  ? const Center(child: Text('No staff added yet'))
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: staffList.length,
-                      itemBuilder: (context, index) {
-                        return _StaffPayrollCard(
-                          staff: staffList[index],
-                          profile: profile,
-                          staffProvider: staffProvider,
-                        );
-                      },
-                    ),
+                    ? const Center(child: Text('No staff added yet'))
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: staffList.length,
+                        itemBuilder: (context, index) {
+                          return _StaffPayrollCard(
+                            staff: staffList[index],
+                            profile: profile,
+                            staffProvider: staffProvider,
+                          );
+                        },
+                      ),
               ),
             ],
           );
@@ -3522,7 +4122,11 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
       decoration: BoxDecoration(
         color: widget.profile.scaffoldColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: widget.profile.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+        border: Border.all(
+          color: widget.profile.isDarkMode
+              ? Colors.white10
+              : Colors.grey.shade200,
+        ),
       ),
       child: Column(
         children: [
@@ -3533,24 +4137,53 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
             },
             leading: CircleAvatar(
               backgroundColor: widget.profile.themeColor.withValues(alpha: 0.1),
-              backgroundImage: widget.staff.imagePath != null && widget.staff.imagePath!.isNotEmpty
+              backgroundImage:
+                  widget.staff.imagePath != null &&
+                      widget.staff.imagePath!.isNotEmpty
                   ? FileImage(File(widget.staff.imagePath!))
                   : null,
-              child: widget.staff.imagePath == null || widget.staff.imagePath!.isEmpty
-                  ? Text(widget.staff.name[0].toUpperCase(), style: TextStyle(color: widget.profile.themeColor, fontWeight: FontWeight.bold))
+              child:
+                  widget.staff.imagePath == null ||
+                      widget.staff.imagePath!.isEmpty
+                  ? Text(
+                      widget.staff.name[0].toUpperCase(),
+                      style: TextStyle(
+                        color: widget.profile.themeColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
                   : null,
             ),
-            title: Text(widget.staff.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(widget.staff.role, style: TextStyle(fontSize: 12, color: widget.profile.secondaryTextColor)),
+            title: Text(
+              widget.staff.name,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              widget.staff.role,
+              style: TextStyle(
+                fontSize: 12,
+                color: widget.profile.secondaryTextColor,
+              ),
+            ),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
                   '${widget.profile.currencySymbol}${payable.toStringAsFixed(0)}',
-                  style: TextStyle(fontWeight: FontWeight.w900, color: widget.profile.themeColor, fontSize: 16),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: widget.profile.themeColor,
+                    fontSize: 16,
+                  ),
                 ),
-                Text('Payable', style: TextStyle(fontSize: 10, color: widget.profile.secondaryTextColor)),
+                Text(
+                  'Payable',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: widget.profile.secondaryTextColor,
+                  ),
+                ),
               ],
             ),
           ),
@@ -3561,18 +4194,52 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _infoRow('Join Date', DateFormat('dd MMM yyyy').format(widget.staff.joinDate)),
+                  _infoRow(
+                    'Join Date',
+                    DateFormat('dd MMM yyyy').format(widget.staff.joinDate),
+                  ),
                   const SizedBox(height: 16),
-                  const Text('HISTORY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.grey)),
+                  const Text(
+                    'HISTORY',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.grey,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   if (_isLoadingHistory)
-                    const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2)))
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
                   else ...[
                     if (_advances.isEmpty && _leaves.isEmpty)
-                      const Text('No recent history', style: TextStyle(fontSize: 12, color: Colors.grey))
+                      const Text(
+                        'No recent history',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      )
                     else ...[
-                      ..._advances.map((a) => _historyItem(Icons.money_off_rounded, 'Advance', a.amount, a.date, Colors.redAccent)),
-                      ..._leaves.map((l) => _historyItem(Icons.event_busy_rounded, l.type == 1.0 ? 'Full Leave' : 'Half Leave', l.type, l.date, Colors.orange)),
+                      ..._advances.map(
+                        (a) => _historyItem(
+                          Icons.money_off_rounded,
+                          'Advance',
+                          a.amount,
+                          a.date,
+                          Colors.redAccent,
+                        ),
+                      ),
+                      ..._leaves.map(
+                        (l) => _historyItem(
+                          Icons.event_busy_rounded,
+                          l.type == 1.0 ? 'Full Leave' : 'Half Leave',
+                          l.type,
+                          l.date,
+                          Colors.orange,
+                        ),
+                      ),
                     ],
                   ],
                   const SizedBox(height: 24),
@@ -3587,7 +4254,9 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
                             foregroundColor: widget.profile.themeColor,
                             side: BorderSide(color: widget.profile.themeColor),
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ),
@@ -3600,9 +4269,14 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                          child: const Text('PAY SALARY', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'PAY SALARY',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
                     ],
@@ -3623,21 +4297,44 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
 
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => Container(
         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Download Staff Report', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              'Download Staff Report',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
-            Text('Select a time period for ${widget.staff.name}\'s payroll report', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+            Text(
+              'Select a time period for ${widget.staff.name}\'s payroll report',
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
             const SizedBox(height: 24),
             _reportOption(context, 'This Month (Ongoing)', firstOfCurrent, now),
-            _reportOption(context, 'Last 3 Months (Completed)', DateTime(now.year, now.month - 3, 1), lastOfPrevious),
-            _reportOption(context, 'Last 6 Months (Completed)', DateTime(now.year, now.month - 6, 1), lastOfPrevious),
-            _reportOption(context, 'Last 12 Months (Completed)', DateTime(now.year, now.month - 12, 1), lastOfPrevious),
+            _reportOption(
+              context,
+              'Last 3 Months (Completed)',
+              DateTime(now.year, now.month - 3, 1),
+              lastOfPrevious,
+            ),
+            _reportOption(
+              context,
+              'Last 6 Months (Completed)',
+              DateTime(now.year, now.month - 6, 1),
+              lastOfPrevious,
+            ),
+            _reportOption(
+              context,
+              'Last 12 Months (Completed)',
+              DateTime(now.year, now.month - 12, 1),
+              lastOfPrevious,
+            ),
             const SizedBox(height: 12),
           ],
         ),
@@ -3645,11 +4342,22 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
     );
   }
 
-  Widget _reportOption(BuildContext context, String title, DateTime start, DateTime end) {
+  Widget _reportOption(
+    BuildContext context,
+    String title,
+    DateTime start,
+    DateTime end,
+  ) {
     return ListTile(
-      leading: Icon(Icons.picture_as_pdf_outlined, color: widget.profile.themeColor),
+      leading: Icon(
+        Icons.picture_as_pdf_outlined,
+        color: widget.profile.themeColor,
+      ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text('${DateFormat('dd MMM yyyy').format(start)} - ${DateFormat('dd MMM yyyy').format(end)}', style: const TextStyle(fontSize: 11)),
+      subtitle: Text(
+        '${DateFormat('dd MMM yyyy').format(start)} - ${DateFormat('dd MMM yyyy').format(end)}',
+        style: const TextStyle(fontSize: 11),
+      ),
       trailing: const Icon(Icons.chevron_right_rounded),
       onTap: () {
         Navigator.pop(context);
@@ -3667,13 +4375,28 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(fontSize: 13, color: widget.profile.secondaryTextColor)),
-        Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: widget.profile.secondaryTextColor,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+        ),
       ],
     );
   }
 
-  Widget _historyItem(IconData icon, String label, double amount, DateTime date, Color color) {
+  Widget _historyItem(
+    IconData icon,
+    String label,
+    double amount,
+    DateTime date,
+    Color color,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -3681,11 +4404,23 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 8),
           Expanded(child: Text(label, style: const TextStyle(fontSize: 12))),
-          Text(DateFormat('dd MMM').format(date), style: TextStyle(fontSize: 11, color: widget.profile.secondaryTextColor)),
+          Text(
+            DateFormat('dd MMM').format(date),
+            style: TextStyle(
+              fontSize: 11,
+              color: widget.profile.secondaryTextColor,
+            ),
+          ),
           const SizedBox(width: 12),
           Text(
-            label.contains('Leave') ? '${amount.toStringAsFixed(1)}' : '${widget.profile.currencySymbol}${amount.toStringAsFixed(0)}',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+            label.contains('Leave')
+                ? '${amount.toStringAsFixed(1)}'
+                : '${widget.profile.currencySymbol}${amount.toStringAsFixed(0)}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
         ],
       ),
@@ -3698,7 +4433,8 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
       context: context,
       profile: widget.profile,
       title: 'Pay Salary',
-      message: 'Confirm paying ${widget.profile.currencySymbol}${payable.toStringAsFixed(0)} to ${widget.staff.name}?\nThis will clear all advances and leaves for this period.',
+      message:
+          'Confirm paying ${widget.profile.currencySymbol}${payable.toStringAsFixed(0)} to ${widget.staff.name}?\nThis will clear all advances and leaves for this period.',
       confirmLabel: 'PAY NOW',
       icon: Icons.payments_rounded,
     ).then((confirmed) {
@@ -3715,72 +4451,90 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
 
     // Create itemized snapshots for salary breakdown
     final List<TransactionItemSnapshot> salarySnapshots = [];
-    
+
     // Calculate deductions
     final double mSalary = widget.staff.monthlySalary;
-    final double leaveDeduction = widget.staffProvider.calculateLeaveDeduction(widget.staff);
-    final double advanceDeduction = widget.staffProvider.calculateAdvanceTotal(widget.staff);
-    
+    final double leaveDeduction = widget.staffProvider.calculateLeaveDeduction(
+      widget.staff,
+    );
+    final double advanceDeduction = widget.staffProvider.calculateAdvanceTotal(
+      widget.staff,
+    );
+
     // Accurate Day Count: Uses the same logic as StaffProvider (getDaysInMonth)
-    final int daysInThisMonth = DateUtils.getDaysInMonth(DateTime.now().year, DateTime.now().month);
+    final int daysInThisMonth = DateUtils.getDaysInMonth(
+      DateTime.now().year,
+      DateTime.now().month,
+    );
     final double perDaySalary = mSalary / daysInThisMonth;
-    
+
     // Estimate leave days based on the current month's per-day rate
-    final double estLeaveDays = perDaySalary > 0 ? (leaveDeduction / perDaySalary) : 0;
+    final double estLeaveDays = perDaySalary > 0
+        ? (leaveDeduction / perDaySalary)
+        : 0;
     // Format to 1 decimal if half day exists, else round
-    final String leaveDaysStr = (estLeaveDays % 1 == 0) ? estLeaveDays.toInt().toString() : estLeaveDays.toStringAsFixed(1);
+    final String leaveDaysStr = (estLeaveDays % 1 == 0)
+        ? estLeaveDays.toInt().toString()
+        : estLeaveDays.toStringAsFixed(1);
 
-    salarySnapshots.add(TransactionItemSnapshot(
-      id: -1,
-      name: 'Base Salary (${DateFormat('MMMM').format(DateTime.now())})',
-      category: 'Salary',
-      qty: 1,
-      unit: 'month',
-      variant: 'Full',
-      price: mSalary,
-      extraQty: 0,
-      extraPrice: 0,
-      servingMethod: 'N/A',
-      tableNumber: '',
-    ));
-
-    if (leaveDeduction > 0) {
-      salarySnapshots.add(TransactionItemSnapshot(
-        id: -2,
-        name: 'Leave Deductions ($leaveDaysStr Days)',
+    salarySnapshots.add(
+      TransactionItemSnapshot(
+        id: -1,
+        name: 'Base Salary (${DateFormat('MMMM').format(DateTime.now())})',
         category: 'Salary',
         qty: 1,
-        unit: 'days',
-        variant: 'Deduction',
-        price: -leaveDeduction,
+        unit: 'month',
+        variant: 'Full',
+        price: mSalary,
         extraQty: 0,
         extraPrice: 0,
         servingMethod: 'N/A',
         tableNumber: '',
-      ));
+      ),
+    );
+
+    if (leaveDeduction > 0) {
+      salarySnapshots.add(
+        TransactionItemSnapshot(
+          id: -2,
+          name: 'Leave Deductions ($leaveDaysStr Days)',
+          category: 'Salary',
+          qty: 1,
+          unit: 'days',
+          variant: 'Deduction',
+          price: -leaveDeduction,
+          extraQty: 0,
+          extraPrice: 0,
+          servingMethod: 'N/A',
+          tableNumber: '',
+        ),
+      );
     }
 
     if (advanceDeduction > 0) {
-      salarySnapshots.add(TransactionItemSnapshot(
-        id: -3,
-        name: 'Advance Adjusted',
-        category: 'Salary',
-        qty: 1,
-        unit: 'amt',
-        variant: 'Deduction',
-        price: -advanceDeduction,
-        extraQty: 0,
-        extraPrice: 0,
-        servingMethod: 'N/A',
-        tableNumber: '',
-      ));
+      salarySnapshots.add(
+        TransactionItemSnapshot(
+          id: -3,
+          name: 'Advance Adjusted',
+          category: 'Salary',
+          qty: 1,
+          unit: 'amt',
+          variant: 'Deduction',
+          price: -advanceDeduction,
+          extraQty: 0,
+          extraPrice: 0,
+          servingMethod: 'N/A',
+          tableNumber: '',
+        ),
+      );
     }
 
     final expenseTx = TransactionModel(
       amount: amount,
       type: 'expense',
       category: 'Salary',
-      description: 'Salary paid to ${widget.staff.name} ${jsonEncode(salarySnapshots.map((s) => s.toMap()).toList())}',
+      description:
+          'Salary paid to ${widget.staff.name} ${jsonEncode(salarySnapshots.map((s) => s.toMap()).toList())}',
       date: DateTime.now(),
       paymentMode: 'Cash',
       isSynced: 0,
@@ -3791,11 +4545,13 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
     // 2. Clear Staff Advances & Leaves
     await widget.staffProvider.clearStaffAdvances(widget.staff.id!);
     await widget.staffProvider.clearStaffLeaves(widget.staff.id!);
-    
+
     if (mounted) {
       Navigator.pop(context); // Close sheet
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Salary paid successfully to ${widget.staff.name}')),
+        SnackBar(
+          content: Text('Salary paid successfully to ${widget.staff.name}'),
+        ),
       );
     }
   }

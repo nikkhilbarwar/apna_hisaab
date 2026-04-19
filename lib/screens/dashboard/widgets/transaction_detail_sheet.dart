@@ -7,6 +7,7 @@ import '../../../providers/item_provider.dart';
 import '../../../providers/profile_provider.dart';
 import '../../../providers/transaction_provider.dart';
 import '../../../services/export_service.dart';
+import '../../daily_entry/entry_screen.dart';
 
 class TransactionDetailSheet extends StatelessWidget {
   final TransactionModel tx;
@@ -36,7 +37,7 @@ class TransactionDetailSheet extends StatelessWidget {
       height: MediaQuery.of(context).size.height * 0.85,
       decoration: BoxDecoration(
         color: profile.cardColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32))
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
       ),
       child: Column(
         children: [
@@ -48,11 +49,11 @@ class TransactionDetailSheet extends StatelessWidget {
               margin: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.grey.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2)
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
-          
+
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -64,21 +65,43 @@ class TransactionDetailSheet extends StatelessWidget {
                     children: [
                       Text(
                         isSalary ? 'PAYROLL VOUCHER' : 'BILL DETAILS',
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: profile.secondaryTextColor, letterSpacing: 1.5)
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                          color: profile.secondaryTextColor,
+                          letterSpacing: 1.5,
+                        ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: (isPending ? Colors.orange : (isSalary ? Colors.purple : (isSale ? Colors.green : Colors.red))).withValues(alpha: 0.1),
+                          color:
+                              (isPending
+                                      ? Colors.orange
+                                      : (isSalary
+                                            ? Colors.purple
+                                            : (isSale
+                                                  ? Colors.green
+                                                  : Colors.red)))
+                                  .withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          isPending ? 'PENDING' : (isSalary ? 'PAID' : 'COMPLETED'),
+                          isPending
+                              ? 'PENDING'
+                              : (isSalary ? 'PAID' : 'COMPLETED'),
                           style: TextStyle(
-                            color: isPending ? Colors.orange : (isSalary ? Colors.purple : (isSale ? Colors.green : Colors.red)),
+                            color: isPending
+                                ? Colors.orange
+                                : (isSalary
+                                      ? Colors.purple
+                                      : (isSale ? Colors.green : Colors.red)),
                             fontWeight: FontWeight.bold,
-                            fontSize: 10
-                          )
+                            fontSize: 10,
+                          ),
                         ),
                       ),
                     ],
@@ -86,67 +109,117 @@ class TransactionDetailSheet extends StatelessWidget {
                   const SizedBox(height: 20),
                   Text(
                     isSalary ? 'STAFF PAYROLL' : tx.category.toUpperCase(),
-                    style: TextStyle(color: isSalary ? Colors.purple : profile.themeColor, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1)
+                    style: TextStyle(
+                      color: isSalary ? Colors.purple : profile.themeColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      letterSpacing: 1,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     _getSmartItemTitle(tx),
-                    style: TextStyle(color: profile.textColor, fontWeight: FontWeight.w900, fontSize: 24, letterSpacing: -0.5)
+                    style: TextStyle(
+                      color: profile.textColor,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 24,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                   if (isSalary) ...[
                     const SizedBox(height: 4),
                     Text(
-                      'Monthly Salary: ${profile.currencySymbol}${snapshots.isNotEmpty ? snapshots.firstWhere((s) => s.id == -1, orElse: () => snapshots.first).price.abs().toStringAsFixed(0) : "0"}', 
-                      style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.w700, fontSize: 14)
+                      'Monthly Salary: ${profile.currencySymbol}${snapshots.isNotEmpty ? snapshots.firstWhere((s) => s.id == -1, orElse: () => snapshots.first).price.abs().toStringAsFixed(0) : "0"}',
+                      style: TextStyle(
+                        color: profile.themeColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.calendar_today, size: 14, color: profile.secondaryTextColor),
+                      Icon(
+                        Icons.calendar_today,
+                        size: 14,
+                        color: profile.secondaryTextColor,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         DateFormat('dd MMMM yyyy, hh:mm a').format(tx.date),
-                        style: TextStyle(color: profile.secondaryTextColor, fontSize: 13)
+                        style: TextStyle(
+                          color: profile.secondaryTextColor,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
                   const Divider(height: 40),
-                  
+
                   Text(
                     isSalary ? 'PAYROLL BREAKDOWN' : 'ITEMS BREAKDOWN',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                      color: profile.secondaryTextColor,
+                      letterSpacing: 1,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   ...snapshots.map((s) {
                     bool isDeduction = s.price < 0;
-                    String qLabel = s.qty == 0.5 ? "Half" : (s.qty == 1.0 ? "Full" : s.qty.toStringAsFixed(1));
-                    
+                    String qLabel = s.qty == 0.5
+                        ? "Half"
+                        : (s.qty == 1.0 ? "Full" : s.qty.toStringAsFixed(1));
+
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: isDeduction 
-                          ? Colors.red.withValues(alpha: 0.05) 
-                          : (isSalary ? Colors.purple.withValues(alpha: 0.03) : profile.scaffoldColor.withValues(alpha: 0.5)),
+                        color: isDeduction
+                            ? Colors.red.withValues(alpha: 0.05)
+                            : (isSalary
+                                  ? Colors.purple.withValues(alpha: 0.03)
+                                  : profile.scaffoldColor.withValues(
+                                      alpha: 0.5,
+                                    )),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: isDeduction 
-                          ? Colors.red.withValues(alpha: 0.1) 
-                          : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100))
+                        border: Border.all(
+                          color: isDeduction
+                              ? Colors.red.withValues(alpha: 0.1)
+                              : (profile.isDarkMode
+                                    ? Colors.white10
+                                    : Colors.grey.shade100),
+                        ),
                       ),
                       child: Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: isDeduction ? Colors.red.withValues(alpha: 0.1) : (isSalary ? Colors.purple.withValues(alpha: 0.1) : profile.themeColor.withValues(alpha: 0.1)),
+                              color: isDeduction
+                                  ? Colors.red.withValues(alpha: 0.1)
+                                  : (isSalary
+                                        ? Colors.purple.withValues(alpha: 0.1)
+                                        : profile.themeColor.withValues(
+                                            alpha: 0.1,
+                                          )),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              isDeduction ? Icons.remove_circle_outline : (isSalary ? Icons.person_outline : Icons.shopping_bag_outlined),
+                              isDeduction
+                                  ? Icons.remove_circle_outline
+                                  : (isSalary
+                                        ? Icons.person_outline
+                                        : Icons.shopping_bag_outlined),
                               size: 18,
-                              color: isDeduction ? Colors.red : (isSalary ? Colors.purple : profile.themeColor),
+                              color: isDeduction
+                                  ? Colors.red
+                                  : (isSalary
+                                        ? Colors.purple
+                                        : profile.themeColor),
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -154,17 +227,38 @@ class TransactionDetailSheet extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(s.name, style: TextStyle(fontWeight: FontWeight.w800, color: profile.textColor, fontSize: 14)),
                                 Text(
-                                  isDeduction ? 'Deduction' : (isSalary ? 'Base Component' : '$qLabel x ${profile.currencySymbol}${s.price.toInt()}'),
-                                  style: TextStyle(color: profile.secondaryTextColor, fontSize: 11, fontWeight: FontWeight.w500)
+                                  s.name,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: profile.textColor,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  isDeduction
+                                      ? 'Deduction'
+                                      : (isSalary
+                                            ? 'Base Component'
+                                            : '$qLabel x ${profile.currencySymbol}${s.price.toInt()}'),
+                                  style: TextStyle(
+                                    color: profile.secondaryTextColor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                           Text(
                             '${isDeduction ? "-" : ""}${profile.currencySymbol}${s.lineTotal.abs().toStringAsFixed(0)}',
-                            style: TextStyle(fontWeight: FontWeight.w900, color: isDeduction ? Colors.red : profile.textColor, fontSize: 16)
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: isDeduction
+                                  ? Colors.red
+                                  : profile.textColor,
+                              fontSize: 16,
+                            ),
                           ),
                         ],
                       ),
@@ -172,47 +266,113 @@ class TransactionDetailSheet extends StatelessWidget {
                   }),
 
                   const Divider(height: 40),
-                  _detailRow('Subtotal', '${profile.currencySymbol}${isSalary ? tx.amount.toStringAsFixed(0) : calculatedSubtotal.toStringAsFixed(0)}', profile),
-                  if (!isSalary && discount > 0) _detailRow('Discount', '- ${profile.currencySymbol}${discount.toStringAsFixed(0)}', profile, color: Colors.green),
-                  if (!isSalary && taxAmount > 0) _detailRow('Tax (${profile.taxPercentage}%)', '${profile.currencySymbol}${taxAmount.toStringAsFixed(0)}', profile),
-                  
+                  _detailRow(
+                    'Subtotal',
+                    '${profile.currencySymbol}${isSalary ? tx.amount.toStringAsFixed(0) : calculatedSubtotal.toStringAsFixed(0)}',
+                    profile,
+                  ),
+                  if (!isSalary && discount > 0)
+                    _detailRow(
+                      'Discount',
+                      '- ${profile.currencySymbol}${discount.toStringAsFixed(0)}',
+                      profile,
+                      color: Colors.green,
+                    ),
+                  if (!isSalary && taxAmount > 0)
+                    _detailRow(
+                      'Tax (${profile.taxPercentage}%)',
+                      '${profile.currencySymbol}${taxAmount.toStringAsFixed(0)}',
+                      profile,
+                    ),
+
                   if (tx.paymentMode == 'Credit') ...[
                     const SizedBox(height: 8),
-                    _detailRow('Total Bill', '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', profile, isBold: true),
-                    _detailRow('Paid (Deposit)', '${profile.currencySymbol}${tx.paidAmount.toStringAsFixed(0)}', profile, color: Colors.green, isBold: true),
+                    _detailRow(
+                      'Total Bill',
+                      '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}',
+                      profile,
+                      isBold: true,
+                    ),
+                    _detailRow(
+                      'Paid (Deposit)',
+                      '${profile.currencySymbol}${tx.paidAmount.toStringAsFixed(0)}',
+                      profile,
+                      color: Colors.green,
+                      isBold: true,
+                    ),
                     const Divider(height: 20, thickness: 0.5),
-                    _detailRow('Remaining Due', '${profile.currencySymbol}${(tx.amount - tx.paidAmount).toStringAsFixed(0)}', profile, color: Colors.red, isBold: true),
+                    _detailRow(
+                      'Remaining Due',
+                      '${profile.currencySymbol}${(tx.amount - tx.paidAmount).toStringAsFixed(0)}',
+                      profile,
+                      color: Colors.red,
+                      isBold: true,
+                    ),
                   ],
-                  
+
                   if (tx.paymentMode == 'Split') ...[
                     const SizedBox(height: 8),
-                    _detailRow('Cash Part', '${profile.currencySymbol}${tx.cashAmount.toStringAsFixed(0)}', profile),
-                    _detailRow('UPI Part', '${profile.currencySymbol}${tx.upiAmount.toStringAsFixed(0)}', profile),
+                    _detailRow(
+                      'Cash Part',
+                      '${profile.currencySymbol}${tx.cashAmount.toStringAsFixed(0)}',
+                      profile,
+                    ),
+                    _detailRow(
+                      'UPI Part',
+                      '${profile.currencySymbol}${tx.upiAmount.toStringAsFixed(0)}',
+                      profile,
+                    ),
                   ],
 
                   if (tx.customerContact.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Text('Customer', style: TextStyle(color: profile.secondaryTextColor, fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text(
+                          'Customer',
+                          style: TextStyle(
+                            color: profile.secondaryTextColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(tx.customerContact, 
-                            style: TextStyle(fontWeight: FontWeight.w900, color: profile.themeColor, fontSize: 14)),
+                          child: Text(
+                            tx.customerContact,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: profile.themeColor,
+                              fontSize: 14,
+                            ),
+                          ),
                         ),
                         IconButton(
                           visualDensity: VisualDensity.compact,
-                          icon: const Icon(Icons.call, size: 20, color: Colors.green),
-                          onPressed: () => _launchURL('tel:${tx.customerContact}'),
+                          icon: const Icon(
+                            Icons.call,
+                            size: 20,
+                            color: Colors.green,
+                          ),
+                          onPressed: () =>
+                              _launchURL('tel:${tx.customerContact}'),
                         ),
-                        if (tx.paymentMode == 'Credit' && (tx.amount - tx.paidAmount) > 0)
+                        if (tx.paymentMode == 'Credit' &&
+                            (tx.amount - tx.paidAmount) > 0)
                           IconButton(
                             visualDensity: VisualDensity.compact,
-                            icon: const Icon(Icons.message_rounded, size: 20, color: Color(0xFF25D366)),
+                            icon: const Icon(
+                              Icons.message_rounded,
+                              size: 20,
+                              color: Color(0xFF25D366),
+                            ),
                             onPressed: () {
                               double due = tx.amount - tx.paidAmount;
-                              String msg = "Hi, this is a reminder from ${profile.displayBusinessName} regarding your pending balance of ${profile.currencySymbol}${due.toStringAsFixed(0)}. Please clear it at your earliest convenience. Thank you!";
-                              _launchURL('https://wa.me/${tx.customerContact.replaceAll(RegExp(r'[^0-9]'), '')}?text=${Uri.encodeComponent(msg)}');
+                              String msg =
+                                  "Hi, this is a reminder from ${profile.displayBusinessName} regarding your pending balance of ${profile.currencySymbol}${due.toStringAsFixed(0)}. Please clear it at your earliest convenience. Thank you!";
+                              _launchURL(
+                                'https://wa.me/${tx.customerContact.replaceAll(RegExp(r'[^0-9]'), '')}?text=${Uri.encodeComponent(msg)}',
+                              );
                             },
                           ),
                       ],
@@ -223,40 +383,84 @@ class TransactionDetailSheet extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [profile.themeColor.withValues(alpha: 0.1), profile.themeColor.withValues(alpha: 0.05)]),
+                      gradient: LinearGradient(
+                        colors: [
+                          profile.themeColor.withValues(alpha: 0.1),
+                          profile.themeColor.withValues(alpha: 0.05),
+                        ],
+                      ),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: profile.themeColor.withValues(alpha: 0.1))
+                      border: Border.all(
+                        color: profile.themeColor.withValues(alpha: 0.1),
+                      ),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          tx.paymentMode == 'Credit' ? 'DUE BALANCE' : 'GRAND TOTAL', 
-                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: tx.paymentMode == 'Credit' ? Colors.red : profile.textColor, letterSpacing: 1)
+                          tx.paymentMode == 'Credit'
+                              ? 'DUE BALANCE'
+                              : 'GRAND TOTAL',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                            color: tx.paymentMode == 'Credit'
+                                ? Colors.red
+                                : profile.textColor,
+                            letterSpacing: 1,
+                          ),
                         ),
                         Text(
-                          profile.showAmount 
-                            ? '${profile.currencySymbol}${tx.paymentMode == 'Credit' ? (tx.amount - tx.paidAmount).toStringAsFixed(0) : tx.amount.toStringAsFixed(0)}' 
-                            : '${profile.currencySymbol}****', 
-                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, color: tx.paymentMode == 'Credit' ? Colors.red : profile.themeColor, letterSpacing: -1)
+                          profile.showAmount
+                              ? '${profile.currencySymbol}${tx.paymentMode == 'Credit' ? (tx.amount - tx.paidAmount).toStringAsFixed(0) : tx.amount.toStringAsFixed(0)}'
+                              : '${profile.currencySymbol}****',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 26,
+                            color: tx.paymentMode == 'Credit'
+                                ? Colors.red
+                                : profile.themeColor,
+                            letterSpacing: -1,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Action Buttons
                   Row(
                     children: [
                       Expanded(
                         child: _actionButton(
+                          label: 'Edit',
+                          icon: Icons.edit_rounded,
+                          color: Colors.blue,
+                          onPressed: () {
+                            Navigator.pop(context); // Close the sheet
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    EntryScreen(transaction: tx),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _actionButton(
                           label: 'Print',
                           icon: Icons.print_rounded,
                           color: profile.themeColor,
-                          onPressed: () => ExportService().saveBillAsPdf(tx, profile.displayBusinessName),
+                          onPressed: () => ExportService().saveBillAsPdf(
+                            tx,
+                            profile.displayBusinessName,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _actionButton(
                           label: 'Delete',
@@ -277,20 +481,45 @@ class TransactionDetailSheet extends StatelessWidget {
     );
   }
 
-  Widget _detailRow(String label, String value, ProfileProvider profile, {bool isBold = false, Color? color}) {
+  Widget _detailRow(
+    String label,
+    String value,
+    ProfileProvider profile, {
+    bool isBold = false,
+    Color? color,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: profile.secondaryTextColor, fontSize: 14, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-          Text(value, style: TextStyle(color: color ?? profile.textColor, fontSize: 14, fontWeight: isBold ? FontWeight.w900 : FontWeight.bold)),
+          Text(
+            label,
+            style: TextStyle(
+              color: profile.secondaryTextColor,
+              fontSize: 14,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: color ?? profile.textColor,
+              fontSize: 14,
+              fontWeight: isBold ? FontWeight.w900 : FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _actionButton({required String label, required IconData icon, required Color color, required VoidCallback onPressed}) {
+  Widget _actionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
     return Material(
       color: color.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(16),
@@ -303,7 +532,14 @@ class TransactionDetailSheet extends StatelessWidget {
             children: [
               Icon(icon, color: color),
               const SizedBox(height: 4),
-              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
             ],
           ),
         ),
@@ -313,7 +549,10 @@ class TransactionDetailSheet extends StatelessWidget {
 
   String _getSmartItemTitle(TransactionModel tx) {
     if (tx.category == 'Salary') {
-      final namePart = tx.description.replaceFirst('Salary paid to ', '').split(' ').first;
+      final namePart = tx.description
+          .replaceFirst('Salary paid to ', '')
+          .split(' ')
+          .first;
       return 'Salary: $namePart';
     }
     if (tx.itemSnapshots.isEmpty) return tx.category;
@@ -333,13 +572,24 @@ class TransactionDetailSheet extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Transaction?'),
-        content: const Text('This action cannot be undone. All related snapshots will be removed.'),
+        content: const Text(
+          'This action cannot be undone. All related snapshots will be removed.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () {
-              final itemProvider = Provider.of<ItemProvider>(context, listen: false);
-              Provider.of<TransactionProvider>(context, listen: false).softDeleteTransaction(tx.id!, itemProvider);
+              final itemProvider = Provider.of<ItemProvider>(
+                context,
+                listen: false,
+              );
+              Provider.of<TransactionProvider>(
+                context,
+                listen: false,
+              ).softDeleteTransaction(tx.id!, itemProvider);
               Navigator.pop(ctx);
               Navigator.pop(context);
             },

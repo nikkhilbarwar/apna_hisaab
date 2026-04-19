@@ -40,12 +40,18 @@ class _StaffScreenState extends State<StaffScreen> {
 
   Color _getRoleColor(String role, Color themeColor) {
     switch (role.toLowerCase()) {
-      case 'manager': return Colors.amber.shade700;
-      case 'chef': return Colors.orange.shade700;
-      case 'waiter': return Colors.blue.shade700;
-      case 'cleaner': return Colors.teal.shade700;
-      case 'security': return Colors.indigo.shade700;
-      default: return themeColor;
+      case 'manager':
+        return Colors.amber.shade700;
+      case 'chef':
+        return Colors.orange.shade700;
+      case 'waiter':
+        return Colors.blue.shade700;
+      case 'cleaner':
+        return Colors.teal.shade700;
+      case 'security':
+        return Colors.indigo.shade700;
+      default:
+        return themeColor;
     }
   }
 
@@ -55,11 +61,15 @@ class _StaffScreenState extends State<StaffScreen> {
     final profileProvider = Provider.of<ProfileProvider>(context);
     final themeColor = profileProvider.themeColor;
 
-    final filteredStaff = (_showDeleted ? staffProvider.deletedStaff : staffProvider.staffList).where((s) {
-      final matchesSearch = s.name.toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                           s.role.toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchesSearch;
-    }).toList();
+    final filteredStaff =
+        (_showDeleted ? staffProvider.deletedStaff : staffProvider.staffList)
+            .where((s) {
+              final matchesSearch =
+                  s.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  s.role.toLowerCase().contains(_searchQuery.toLowerCase());
+              return matchesSearch;
+            })
+            .toList();
 
     return Scaffold(
       backgroundColor: profileProvider.scaffoldColor,
@@ -78,7 +88,10 @@ class _StaffScreenState extends State<StaffScreen> {
               profileProvider: profileProvider,
               child: Container(
                 color: profileProvider.scaffoldColor,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -88,16 +101,24 @@ class _StaffScreenState extends State<StaffScreen> {
                         decoration: InputDecoration(
                           hintText: 'Search staff by name or role...',
                           prefixIcon: const Icon(Icons.search),
-                          suffixIcon: _searchQuery.isNotEmpty 
-                            ? IconButton(icon: const Icon(Icons.clear), onPressed: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = "");
-                              })
-                            : null,
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _searchQuery = "");
+                                  },
+                                )
+                              : null,
                           filled: true,
                           fillColor: profileProvider.cardColor,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 0,
+                          ),
                         ),
                       ),
                     ),
@@ -105,22 +126,29 @@ class _StaffScreenState extends State<StaffScreen> {
                     Tooltip(
                       message: _showDeleted ? 'Show Active' : 'Show Removed',
                       child: InkWell(
-                        onTap: () => setState(() => _showDeleted = !_showDeleted),
+                        onTap: () =>
+                            setState(() => _showDeleted = !_showDeleted),
                         borderRadius: BorderRadius.circular(15),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: _showDeleted
                                 ? Colors.red
-                                : profileProvider.themeColor.withValues(alpha: 0.1),
+                                : profileProvider.themeColor.withValues(
+                                    alpha: 0.1,
+                                  ),
                             borderRadius: BorderRadius.circular(15),
                             boxShadow: _showDeleted
                                 ? [
                                     BoxShadow(
-                                        color: Colors.red.withValues(alpha: 0.3),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 4))
+                                      color: Colors.red.withValues(alpha: 0.3),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
                                   ]
                                 : [],
                           ),
@@ -165,11 +193,25 @@ class _StaffScreenState extends State<StaffScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(_searchQuery.isNotEmpty ? Icons.search_off : Icons.people_outline, 
-                      size: 80, color: profileProvider.secondaryTextColor.withValues(alpha: 0.2)),
+                    Icon(
+                      _searchQuery.isNotEmpty
+                          ? Icons.search_off
+                          : Icons.people_outline,
+                      size: 80,
+                      color: profileProvider.secondaryTextColor.withValues(
+                        alpha: 0.2,
+                      ),
+                    ),
                     const SizedBox(height: 16),
-                    Text(_searchQuery.isNotEmpty ? 'No staff found for "$_searchQuery"' : 'No staff members added', 
-                      style: TextStyle(color: profileProvider.secondaryTextColor, fontWeight: FontWeight.bold)),
+                    Text(
+                      _searchQuery.isNotEmpty
+                          ? 'No staff found for "$_searchQuery"'
+                          : 'No staff members added',
+                      style: TextStyle(
+                        color: profileProvider.secondaryTextColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -178,200 +220,427 @@ class _StaffScreenState extends State<StaffScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
               sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final staff = filteredStaff[index];
-                    final payable = staffProvider.calculatePayable(staff);
-                    final nextSalaryDate = staffProvider.calculateNextSalaryDate(staff.joinDate);
-                    final isExpanded = _expandedIndex == index;
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final staff = filteredStaff[index];
+                  final payable = staffProvider.calculatePayable(staff);
+                  final nextSalaryDate = staffProvider.calculateNextSalaryDate(
+                    staff.joinDate,
+                  );
+                  final isExpanded = _expandedIndex == index;
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      elevation: 0,
-                      color: profileProvider.cardColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        side: BorderSide(color: profileProvider.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    elevation: 0,
+                    color: profileProvider.cardColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(
+                        color: profileProvider.isDarkMode
+                            ? Colors.white10
+                            : Colors.grey.shade200,
                       ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: () => setState(() => _expandedIndex = isExpanded ? null : index),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: AnimatedSize(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(2),
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: themeColor.withValues(alpha: 0.2), width: 1.5),
-                                      ),
-                                      child: CircleAvatar(
-                                        radius: 22,
-                                        backgroundColor: themeColor.withValues(alpha: 0.1),
-                                        backgroundImage: (staff.imagePath != null && File(staff.imagePath!).existsSync()) 
-                                            ? FileImage(File(staff.imagePath!)) 
-                                            : (staff.imageUrl != null && staff.imageUrl!.isNotEmpty)
-                                                ? (staff.imageUrl!.startsWith('base64:') 
-                                                    ? MemoryImage(base64Decode(staff.imageUrl!.replaceFirst('base64:', '')))
-                                                    : NetworkImage(staff.imageUrl!) as ImageProvider)
-                                                : null,
-                                        child: (staff.imagePath == null || !File(staff.imagePath!).existsSync()) && (staff.imageUrl == null || staff.imageUrl!.isEmpty)
-                                            ? Icon(Icons.person, color: themeColor, size: 24) 
-                                            : null,
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () => setState(
+                        () => _expandedIndex = isExpanded ? null : index,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: AnimatedSize(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: themeColor.withValues(
+                                          alpha: 0.2,
+                                        ),
+                                        width: 1.5,
                                       ),
                                     ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(staff.name, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: staff.isDeleted == 1 ? Colors.grey : profileProvider.textColor, letterSpacing: 0.3)),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                decoration: BoxDecoration(
-                                                  color: _getRoleColor(staff.role, themeColor).withValues(alpha: 0.15),
-                                                  borderRadius: BorderRadius.circular(6),
-                                                  border: Border.all(color: _getRoleColor(staff.role, themeColor).withValues(alpha: 0.3), width: 0.5),
-                                                ),
-                                                child: Text(
-                                                  staff.role.toUpperCase(), 
-                                                  style: TextStyle(color: _getRoleColor(staff.role, themeColor), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)
+                                    child: CircleAvatar(
+                                      radius: 22,
+                                      backgroundColor: themeColor.withValues(
+                                        alpha: 0.1,
+                                      ),
+                                      backgroundImage:
+                                          (staff.imagePath != null &&
+                                              File(
+                                                staff.imagePath!,
+                                              ).existsSync())
+                                          ? FileImage(File(staff.imagePath!))
+                                          : (staff.imageUrl != null &&
+                                                staff.imageUrl!.isNotEmpty)
+                                          ? (staff.imageUrl!.startsWith(
+                                                  'base64:',
+                                                )
+                                                ? MemoryImage(
+                                                    base64Decode(
+                                                      staff.imageUrl!
+                                                          .replaceFirst(
+                                                            'base64:',
+                                                            '',
+                                                          ),
+                                                    ),
+                                                  )
+                                                : NetworkImage(staff.imageUrl!)
+                                                      as ImageProvider)
+                                          : null,
+                                      child:
+                                          (staff.imagePath == null ||
+                                                  !File(
+                                                    staff.imagePath!,
+                                                  ).existsSync()) &&
+                                              (staff.imageUrl == null ||
+                                                  staff.imageUrl!.isEmpty)
+                                          ? Icon(
+                                              Icons.person,
+                                              color: themeColor,
+                                              size: 24,
+                                            )
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          staff.name,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 17,
+                                            color: staff.isDeleted == 1
+                                                ? Colors.grey
+                                                : profileProvider.textColor,
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: _getRoleColor(
+                                                  staff.role,
+                                                  themeColor,
+                                                ).withValues(alpha: 0.15),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                border: Border.all(
+                                                  color: _getRoleColor(
+                                                    staff.role,
+                                                    themeColor,
+                                                  ).withValues(alpha: 0.3),
+                                                  width: 0.5,
                                                 ),
                                               ),
-                                              if (staff.isDeleted == 1) ...[
-                                                const SizedBox(width: 8),
-                                                const Text('(DELETED)', style: TextStyle(color: Colors.red, fontSize: 8, fontWeight: FontWeight.bold)),
-                                              ],
-                                              // Upcoming Leave Alert Logic
-                                              Builder(builder: (context) {
+                                              child: Text(
+                                                staff.role.toUpperCase(),
+                                                style: TextStyle(
+                                                  color: _getRoleColor(
+                                                    staff.role,
+                                                    themeColor,
+                                                  ),
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w900,
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                            ),
+                                            if (staff.isDeleted == 1) ...[
+                                              const SizedBox(width: 8),
+                                              const Text(
+                                                '(DELETED)',
+                                                style: TextStyle(
+                                                  color: Colors.red,
+                                                  fontSize: 8,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                            // Upcoming Leave Alert Logic
+                                            Builder(
+                                              builder: (context) {
                                                 final now = DateTime.now();
-                                                return FutureBuilder<List<StaffLeaveModel>>(
-                                                  future: staffProvider.getStaffLeaves(staff.id!),
+                                                return FutureBuilder<
+                                                  List<StaffLeaveModel>
+                                                >(
+                                                  future: staffProvider
+                                                      .getStaffLeaves(
+                                                        staff.id!,
+                                                      ),
                                                   builder: (context, snapshot) {
-                                                    final leaves = snapshot.data ?? [];
-                                                    final upcoming = leaves.where((l) => 
-                                                      l.date.isAfter(now) && 
-                                                      l.date.isBefore(now.add(const Duration(days: 3)))
-                                                    );
+                                                    final leaves =
+                                                        snapshot.data ?? [];
+                                                    final upcoming = leaves
+                                                        .where(
+                                                          (l) =>
+                                                              l.date.isAfter(
+                                                                now,
+                                                              ) &&
+                                                              l.date.isBefore(
+                                                                now.add(
+                                                                  const Duration(
+                                                                    days: 3,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                        );
                                                     if (upcoming.isNotEmpty) {
                                                       return Padding(
-                                                        padding: const EdgeInsets.only(left: 8.0),
-                                                        child: Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange.shade700),
+                                                        padding:
+                                                            const EdgeInsets.only(
+                                                              left: 8.0,
+                                                            ),
+                                                        child: Icon(
+                                                          Icons
+                                                              .warning_amber_rounded,
+                                                          size: 14,
+                                                          color: Colors
+                                                              .orange
+                                                              .shade700,
+                                                        ),
                                                       );
                                                     }
                                                     return const SizedBox.shrink();
-                                                  }
+                                                  },
                                                 );
-                                              }),
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (!isExpanded)
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          'Net Pay',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: profileProvider
+                                                .secondaryTextColor,
+                                          ),
+                                        ),
+                                        Text(
+                                          '₹${payable.toStringAsFixed(0)}',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: staff.isDeleted == 1
+                                                ? Colors.grey
+                                                : Colors.green,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  const SizedBox(width: 8),
+                                  Icon(
+                                    isExpanded
+                                        ? Icons.keyboard_arrow_up
+                                        : Icons.keyboard_arrow_down,
+                                    color: profileProvider.secondaryTextColor,
+                                    size: 20,
+                                  ),
+                                ],
+                              ),
+                              if (isExpanded) ...[
+                                const Divider(height: 20),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        children: [
+                                          GridView.count(
+                                            shrinkWrap: true,
+                                            physics:
+                                                const NeverScrollableScrollPhysics(),
+                                            crossAxisCount: 2,
+                                            mainAxisSpacing: 8,
+                                            crossAxisSpacing: 8,
+                                            childAspectRatio: 2.8,
+                                            children: [
+                                              _staffInfoTile(
+                                                'Base Salary',
+                                                '₹${staff.monthlySalary.toStringAsFixed(0)}',
+                                                Icons.payments_outlined,
+                                                Colors.blue,
+                                                profileProvider,
+                                              ),
+                                              _staffInfoTile(
+                                                'Total Leaves',
+                                                '${staff.totalLeaves} Days',
+                                                Icons.event_busy_outlined,
+                                                Colors.orange,
+                                                profileProvider,
+                                              ),
+                                              InkWell(
+                                                onTap: staff.isDeleted == 1
+                                                    ? null
+                                                    : () =>
+                                                          _showAdvanceHistorySheet(
+                                                            context,
+                                                            staff,
+                                                          ),
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                                child: _staffInfoTile(
+                                                  'Advance Taken',
+                                                  '₹${staff.advance.toStringAsFixed(0)}',
+                                                  Icons
+                                                      .account_balance_wallet_outlined,
+                                                  Colors.red,
+                                                  profileProvider,
+                                                ),
+                                              ),
+                                              _staffInfoTile(
+                                                'Pay Date',
+                                                DateFormat(
+                                                  'dd MMM',
+                                                ).format(nextSalaryDate),
+                                                Icons.calendar_month_outlined,
+                                                Colors.purple,
+                                                profileProvider,
+                                              ),
                                             ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 8,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  (staff.isDeleted == 1
+                                                          ? Colors.grey
+                                                          : Colors.green)
+                                                      .withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Text(
+                                                  'NET PAYABLE',
+                                                  style: TextStyle(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: staff.isDeleted == 1
+                                                        ? Colors.grey
+                                                        : Colors.green.shade800,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '₹${payable.toStringAsFixed(0)}',
+                                                  style: TextStyle(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: staff.isDeleted == 1
+                                                        ? Colors.grey
+                                                        : Colors.green.shade800,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    if (!isExpanded)
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      width: 44,
+                                      height: staff.isDeleted == 1 ? 110 : 155,
+                                      decoration: BoxDecoration(
+                                        color: profileProvider.scaffoldColor
+                                            .withValues(alpha: 0.5),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceEvenly,
                                         children: [
-                                          Text('Net Pay', style: TextStyle(fontSize: 10, color: profileProvider.secondaryTextColor)),
-                                          Text('₹${payable.toStringAsFixed(0)}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: staff.isDeleted == 1 ? Colors.grey : Colors.green)),
+                                          if (staff.isDeleted == 0) ...[
+                                            _actionBtn(
+                                              Icons.calendar_month_rounded,
+                                              Colors.orange,
+                                              () => _showLeaveCalendarSheet(
+                                                context,
+                                                staff,
+                                              ),
+                                            ),
+                                            _actionBtn(
+                                              Icons.edit_outlined,
+                                              Colors.blue,
+                                              () => _showStaffBottomSheet(
+                                                context,
+                                                staff: staff,
+                                              ),
+                                            ),
+                                            _actionBtn(
+                                              Icons.delete_outline,
+                                              Colors.red,
+                                              () => _showActionConfirm(
+                                                context,
+                                                staffProvider,
+                                                staff,
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            _actionBtn(
+                                              Icons.restore,
+                                              Colors.green,
+                                              () => staffProvider.restoreStaff(
+                                                staff.id!,
+                                              ),
+                                            ),
+                                            _actionBtn(
+                                              Icons.delete_forever,
+                                              Colors.red,
+                                              () => _showPermanentDeleteConfirm(
+                                                context,
+                                                staffProvider,
+                                                staff,
+                                              ),
+                                            ),
+                                          ],
                                         ],
                                       ),
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                                      color: profileProvider.secondaryTextColor,
-                                      size: 20,
                                     ),
                                   ],
                                 ),
-                                if (isExpanded) ...[
-                                  const Divider(height: 20),
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          children: [
-                                            GridView.count(
-                                              shrinkWrap: true,
-                                              physics: const NeverScrollableScrollPhysics(),
-                                              crossAxisCount: 2,
-                                              mainAxisSpacing: 8,
-                                              crossAxisSpacing: 8,
-                                              childAspectRatio: 2.8,
-                                              children: [
-                                                _staffInfoTile('Base Salary', '₹${staff.monthlySalary.toStringAsFixed(0)}', Icons.payments_outlined, Colors.blue, profileProvider),
-                                                _staffInfoTile('Total Leaves', '${staff.totalLeaves} Days', Icons.event_busy_outlined, Colors.orange, profileProvider),
-                                                InkWell(
-                                                  onTap: staff.isDeleted == 1 ? null : () => _showAdvanceHistorySheet(context, staff),
-                                                  borderRadius: BorderRadius.circular(10),
-                                                  child: _staffInfoTile('Advance Taken', '₹${staff.advance.toStringAsFixed(0)}', Icons.account_balance_wallet_outlined, Colors.red, profileProvider),
-                                                ),
-                                                _staffInfoTile('Pay Date', DateFormat('dd MMM').format(nextSalaryDate), Icons.calendar_month_outlined, Colors.purple, profileProvider),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                              decoration: BoxDecoration(
-                                                color: (staff.isDeleted == 1 ? Colors.grey : Colors.green).withValues(alpha: 0.1),
-                                                borderRadius: BorderRadius.circular(10),
-                                              ),
-                                              child: Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                children: [
-                                                  Text('NET PAYABLE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: staff.isDeleted == 1 ? Colors.grey : Colors.green.shade800, letterSpacing: 0.5)),
-                                                  Text('₹${payable.toStringAsFixed(0)}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: staff.isDeleted == 1 ? Colors.grey : Colors.green.shade800)),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        width: 44,
-                                        height: staff.isDeleted == 1 ? 110 : 155, 
-                                        decoration: BoxDecoration(
-                                          color: profileProvider.scaffoldColor.withValues(alpha: 0.5),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                          children: [
-                                            if (staff.isDeleted == 0) ...[
-                                              _actionBtn(Icons.calendar_month_rounded, Colors.orange, () => _showLeaveCalendarSheet(context, staff)),
-                                              _actionBtn(Icons.edit_outlined, Colors.blue, () => _showStaffBottomSheet(context, staff: staff)),
-                                              _actionBtn(Icons.delete_outline, Colors.red, () => _showActionConfirm(context, staffProvider, staff)),
-                                            ] else ...[
-                                              _actionBtn(Icons.restore, Colors.green, () => staffProvider.restoreStaff(staff.id!)),
-                                              _actionBtn(Icons.delete_forever, Colors.red, () => _showPermanentDeleteConfirm(context, staffProvider, staff)),
-                                            ]
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
                               ],
-                            ),
+                            ],
                           ),
                         ),
                       ),
-                    );
-                  },
-                  childCount: filteredStaff.length,
-                ),
+                    ),
+                  );
+                }, childCount: filteredStaff.length),
               ),
             ),
         ],
@@ -380,7 +649,13 @@ class _StaffScreenState extends State<StaffScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
         decoration: BoxDecoration(
           color: profileProvider.cardColor,
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -5))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
           borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
         ),
         child: SafeArea(
@@ -389,12 +664,17 @@ class _StaffScreenState extends State<StaffScreen> {
               backgroundColor: themeColor,
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 55),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
               elevation: 0,
             ),
             onPressed: () => _showStaffBottomSheet(context),
             icon: const Icon(Icons.person_add_alt_1),
-            label: const Text('ADD NEW STAFF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            label: const Text(
+              'ADD NEW STAFF',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
           ),
         ),
       ),
@@ -403,7 +683,11 @@ class _StaffScreenState extends State<StaffScreen> {
 
   Widget _actionBtn(IconData icon, Color color, VoidCallback? onTap) {
     return IconButton(
-      icon: Icon(icon, color: onTap == null ? Colors.grey.withValues(alpha: 0.3) : color, size: 18),
+      icon: Icon(
+        icon,
+        color: onTap == null ? Colors.grey.withValues(alpha: 0.3) : color,
+        size: 18,
+      ),
       onPressed: onTap,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -420,58 +704,104 @@ class _StaffScreenState extends State<StaffScreen> {
           offset = _scrollController.offset;
         }
         double opacity = (1.0 - (offset / 100)).clamp(0.0, 1.0);
-        
+
         return Opacity(
           opacity: opacity,
           child: Container(
-            height: 135, 
+            height: 135,
             width: double.infinity,
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [themeColor.withValues(alpha: 0.8), themeColor]),
+              gradient: LinearGradient(
+                colors: [themeColor.withValues(alpha: 0.8), themeColor],
+              ),
               borderRadius: BorderRadius.circular(24),
               boxShadow: profile.themeShadow,
             ),
-            child: opacity > 0.1 ? Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _summaryItem('Active Workers', '${provider.staffList.length}', Colors.white, Colors.white70),
-                    _summaryItem('Total Base Salary', '₹${provider.totalMonthlySalary.toStringAsFixed(0)}', Colors.white, Colors.white70),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Divider(color: Colors.white.withValues(alpha: 0.2), height: 1),
-                const SizedBox(height: 10),
-                _summaryItem('Total Net Payable (Excl. Deleted)', '₹${provider.totalNetPayable.toStringAsFixed(0)}', Colors.white, Colors.white70, isCenter: true),
-              ],
-            ) : const SizedBox.shrink(),
+            child: opacity > 0.1
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _summaryItem(
+                            'Active Workers',
+                            '${provider.staffList.length}',
+                            Colors.white,
+                            Colors.white70,
+                          ),
+                          _summaryItem(
+                            'Total Base Salary',
+                            '₹${provider.totalMonthlySalary.toStringAsFixed(0)}',
+                            Colors.white,
+                            Colors.white70,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Divider(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        height: 1,
+                      ),
+                      const SizedBox(height: 10),
+                      _summaryItem(
+                        'Total Net Payable (Excl. Deleted)',
+                        '₹${provider.totalNetPayable.toStringAsFixed(0)}',
+                        Colors.white,
+                        Colors.white70,
+                        isCenter: true,
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
           ),
         );
       },
     );
   }
 
-  Widget _summaryItem(String label, String value, Color valueColor, Color labelColor, {bool isCenter = false}) {
+  Widget _summaryItem(
+    String label,
+    String value,
+    Color valueColor,
+    Color labelColor, {
+    bool isCenter = false,
+  }) {
     return Column(
-      crossAxisAlignment: isCenter ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      crossAxisAlignment: isCenter
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
       children: [
         Text(label, style: TextStyle(color: labelColor, fontSize: 11)),
-        Text(value, style: TextStyle(color: valueColor, fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _staffInfoTile(String label, String value, IconData icon, Color color, ProfileProvider profile) {
+  Widget _staffInfoTile(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+    ProfileProvider profile,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: profile.scaffoldColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+        border: Border.all(
+          color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100,
+        ),
       ),
       child: Row(
         children: [
@@ -482,8 +812,23 @@ class _StaffScreenState extends State<StaffScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(label, style: TextStyle(fontSize: 8, color: profile.secondaryTextColor, fontWeight: FontWeight.w500)),
-                Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.textColor), overflow: TextOverflow.ellipsis),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 8,
+                    color: profile.secondaryTextColor,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: profile.textColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
@@ -498,21 +843,29 @@ class _StaffScreenState extends State<StaffScreen> {
       context: context,
       profile: profile,
       title: 'Leave: ${staff.name}',
-      child: _LeaveCalendarWidget(staff: staff, profile: profile, themeColor: profile.themeColor),
+      child: _LeaveCalendarWidget(
+        staff: staff,
+        profile: profile,
+        themeColor: profile.themeColor,
+      ),
     );
   }
 
-  void _showActionConfirm(BuildContext context, StaffProvider provider, StaffModel staff) async {
+  void _showActionConfirm(
+    BuildContext context,
+    StaffProvider provider,
+    StaffModel staff,
+  ) async {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final isDeleting = staff.isDeleted == 0;
-    
+
     final confirmed = await AppBottomSheet.showAction(
       context: context,
       profile: profile,
       title: isDeleting ? 'Remove Staff?' : 'Restore Staff?',
-      message: isDeleting 
-        ? 'Are you sure you want to remove "${staff.name}"? They will no longer appear in active totals.'
-        : 'Do you want to restore "${staff.name}" to active staff list?',
+      message: isDeleting
+          ? 'Are you sure you want to remove "${staff.name}"? They will no longer appear in active totals.'
+          : 'Do you want to restore "${staff.name}" to active staff list?',
       confirmLabel: isDeleting ? 'REMOVE' : 'RESTORE',
       isDestructive: isDeleting,
     );
@@ -526,14 +879,19 @@ class _StaffScreenState extends State<StaffScreen> {
     }
   }
 
-  void _showPermanentDeleteConfirm(BuildContext context, StaffProvider provider, StaffModel staff) async {
+  void _showPermanentDeleteConfirm(
+    BuildContext context,
+    StaffProvider provider,
+    StaffModel staff,
+  ) async {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
-    
+
     final confirmed = await AppBottomSheet.showAction(
       context: context,
       profile: profile,
       title: 'Permanent Delete?',
-      message: 'Are you sure you want to permanently delete "${staff.name}"? This action will also delete all their leave and advance history and cannot be undone.',
+      message:
+          'Are you sure you want to permanently delete "${staff.name}"? This action will also delete all their leave and advance history and cannot be undone.',
       confirmLabel: 'DELETE FOREVER',
       isDestructive: true,
     );
@@ -544,7 +902,10 @@ class _StaffScreenState extends State<StaffScreen> {
   }
 
   void _showAdvanceHistorySheet(BuildContext context, StaffModel staff) {
-    final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
+    final profileProvider = Provider.of<ProfileProvider>(
+      context,
+      listen: false,
+    );
     final themeColor = profileProvider.themeColor;
     final advanceController = TextEditingController();
 
@@ -554,7 +915,9 @@ class _StaffScreenState extends State<StaffScreen> {
       title: 'Advance: ${staff.name}',
       child: StatefulBuilder(
         builder: (ctx, setStateSheet) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -571,11 +934,20 @@ class _StaffScreenState extends State<StaffScreen> {
                       child: TextField(
                         controller: advanceController,
                         keyboardType: TextInputType.number,
-                        style: TextStyle(color: profileProvider.textColor, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: profileProvider.textColor,
+                          fontWeight: FontWeight.bold,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'Enter amount...',
-                          hintStyle: TextStyle(color: profileProvider.secondaryTextColor.withValues(alpha: 0.5)),
-                          prefixIcon: Icon(Icons.currency_rupee_rounded, color: themeColor),
+                          hintStyle: TextStyle(
+                            color: profileProvider.secondaryTextColor
+                                .withValues(alpha: 0.5),
+                          ),
+                          prefixIcon: Icon(
+                            Icons.currency_rupee_rounded,
+                            color: themeColor,
+                          ),
                           border: InputBorder.none,
                         ),
                       ),
@@ -583,19 +955,31 @@ class _StaffScreenState extends State<StaffScreen> {
                     const SizedBox(width: 12),
                     ElevatedButton(
                       onPressed: () async {
-                        final amount = double.tryParse(advanceController.text) ?? 0;
+                        final amount =
+                            double.tryParse(advanceController.text) ?? 0;
                         if (amount > 0) {
-                          await Provider.of<StaffProvider>(context, listen: false).addAdvance(staff.id!, amount);
+                          await Provider.of<StaffProvider>(
+                            context,
+                            listen: false,
+                          ).addAdvance(staff.id!, amount);
                           advanceController.clear();
                           setStateSheet(() {}); // Refresh local UI
                         }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: themeColor,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         elevation: 0,
                       ),
-                      child: const Text('ADD', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                      child: const Text(
+                        'ADD',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -608,12 +992,22 @@ class _StaffScreenState extends State<StaffScreen> {
                     return FutureBuilder<List<StaffAdvanceModel>>(
                       future: provider.getStaffAdvances(staff.id!),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(child: CircularProgressIndicator());
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
                         }
                         final advances = snapshot.data ?? [];
                         if (advances.isEmpty) {
-                          return Center(child: Text('No history found', style: TextStyle(color: profileProvider.secondaryTextColor)));
+                          return Center(
+                            child: Text(
+                              'No history found',
+                              style: TextStyle(
+                                color: profileProvider.secondaryTextColor,
+                              ),
+                            ),
+                          );
                         }
                         return ListView.builder(
                           itemCount: advances.length,
@@ -621,14 +1015,37 @@ class _StaffScreenState extends State<StaffScreen> {
                             final adv = advances[index];
                             return ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: Colors.red.withValues(alpha: 0.1), 
-                                child: const Icon(Icons.arrow_downward, color: Colors.red, size: 16)
+                                backgroundColor: Colors.red.withValues(
+                                  alpha: 0.1,
+                                ),
+                                child: const Icon(
+                                  Icons.arrow_downward,
+                                  color: Colors.red,
+                                  size: 16,
+                                ),
                               ),
-                              title: Text('₹${adv.amount.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text(DateFormat('dd MMM yyyy, hh:mm a').format(adv.date)),
+                              title: Text(
+                                '₹${adv.amount.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Text(
+                                DateFormat(
+                                  'dd MMM yyyy, hh:mm a',
+                                ).format(adv.date),
+                              ),
                               trailing: IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                onPressed: () => _confirmDeleteAdvance(context, provider, adv),
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red,
+                                  size: 20,
+                                ),
+                                onPressed: () => _confirmDeleteAdvance(
+                                  context,
+                                  provider,
+                                  adv,
+                                ),
                               ),
                             );
                           },
@@ -645,7 +1062,11 @@ class _StaffScreenState extends State<StaffScreen> {
     );
   }
 
-  void _confirmDeleteAdvance(BuildContext context, StaffProvider provider, StaffAdvanceModel advance) async {
+  void _confirmDeleteAdvance(
+    BuildContext context,
+    StaffProvider provider,
+    StaffAdvanceModel advance,
+  ) async {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final confirmed = await AppBottomSheet.showAction(
       context: context,
@@ -662,14 +1083,28 @@ class _StaffScreenState extends State<StaffScreen> {
 
   void _showStaffBottomSheet(BuildContext context, {StaffModel? staff}) {
     final staffProvider = Provider.of<StaffProvider>(context, listen: false);
-    final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
+    final profileProvider = Provider.of<ProfileProvider>(
+      context,
+      listen: false,
+    );
     final themeColor = profileProvider.themeColor;
     final nameController = TextEditingController(text: staff?.name);
-    final salaryController = TextEditingController(text: staff?.monthlySalary.toStringAsFixed(0));
-    final advanceController = TextEditingController(text: staff?.advance.toStringAsFixed(0));
+    final salaryController = TextEditingController(
+      text: staff?.monthlySalary.toStringAsFixed(0),
+    );
+    final advanceController = TextEditingController(
+      text: staff?.advance.toStringAsFixed(0),
+    );
     final contactController = TextEditingController(text: staff?.contact);
     String selectedRole = staff?.role ?? 'Staff';
-    final List<String> roles = ['Staff', 'Waiter', 'Chef', 'Manager', 'Cleaner', 'Security'];
+    final List<String> roles = [
+      'Staff',
+      'Waiter',
+      'Chef',
+      'Manager',
+      'Cleaner',
+      'Security',
+    ];
     DateTime selectedDate = staff?.joinDate ?? DateTime.now();
     String? currentImagePath = staff?.imagePath;
 
@@ -679,7 +1114,9 @@ class _StaffScreenState extends State<StaffScreen> {
       title: staff == null ? 'Add New Staff' : 'Edit Staff Details',
       child: StatefulBuilder(
         builder: (ctx, setStateSheet) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -691,35 +1128,61 @@ class _StaffScreenState extends State<StaffScreen> {
                       CircleAvatar(
                         radius: 50,
                         backgroundColor: themeColor.withValues(alpha: 0.1),
-                        backgroundImage: (currentImagePath != null && File(currentImagePath!).existsSync())
+                        backgroundImage:
+                            (currentImagePath != null &&
+                                File(currentImagePath!).existsSync())
                             ? FileImage(File(currentImagePath!))
-                            : (staff?.imageUrl != null && staff!.imageUrl!.isNotEmpty)
-                                ? (staff!.imageUrl!.startsWith('base64:')
-                                    ? MemoryImage(base64Decode(staff!.imageUrl!.replaceFirst('base64:', '')))
-                                    : NetworkImage(staff!.imageUrl!) as ImageProvider)
-                                : null,
-                        child: (currentImagePath == null || !File(currentImagePath!).existsSync()) && (staff?.imageUrl == null || staff?.imageUrl == "")
-                            ? Icon(Icons.person, size: 50, color: themeColor) 
+                            : (staff?.imageUrl != null &&
+                                  staff!.imageUrl!.isNotEmpty)
+                            ? (staff.imageUrl!.startsWith('base64:')
+                                  ? MemoryImage(
+                                      base64Decode(
+                                        staff.imageUrl!.replaceFirst(
+                                          'base64:',
+                                          '',
+                                        ),
+                                      ),
+                                    )
+                                  : NetworkImage(staff.imageUrl!)
+                                        as ImageProvider)
+                            : null,
+                        child:
+                            (currentImagePath == null ||
+                                    !File(currentImagePath!).existsSync()) &&
+                                (staff?.imageUrl == null ||
+                                    staff?.imageUrl == "")
+                            ? Icon(Icons.person, size: 50, color: themeColor)
                             : null,
                       ),
                       Positioned(
                         bottom: 0,
                         right: 0,
                         child: GestureDetector(
-                        onTap: () async {
-                          final String? croppedPath = await ImageHelper.pickAndCropItemIcon(
-                            context: context,
-                            themeColor: themeColor,
-                            isCircle: true,
-                          );
-                          if (croppedPath != null) {
-                            setStateSheet(() => currentImagePath = croppedPath);
-                          }
-                        },
+                          onTap: () async {
+                            final String? croppedPath =
+                                await ImageHelper.pickAndCropItemIcon(
+                                  context: context,
+                                  themeColor: themeColor,
+                                  isCircle: true,
+                                );
+                            if (croppedPath != null) {
+                              setStateSheet(
+                                () => currentImagePath = croppedPath,
+                              );
+                            }
+                          },
                           child: Container(
                             padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(color: themeColor, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                            child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                            decoration: BoxDecoration(
+                              color: themeColor,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                           ),
                         ),
                       ),
@@ -727,7 +1190,12 @@ class _StaffScreenState extends State<StaffScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                _sheetTextField(nameController, 'Staff Full Name', Icons.person_outline, profileProvider),
+                _sheetTextField(
+                  nameController,
+                  'Staff Full Name',
+                  Icons.person_outline,
+                  profileProvider,
+                ),
                 const SizedBox(height: 16),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -739,11 +1207,22 @@ class _StaffScreenState extends State<StaffScreen> {
                         child: ChoiceChip(
                           label: Text(role),
                           selected: isSelected,
-                          onSelected: (val) => setStateSheet(() => selectedRole = role),
+                          onSelected: (val) =>
+                              setStateSheet(() => selectedRole = role),
                           selectedColor: themeColor,
-                          labelStyle: TextStyle(color: isSelected ? Colors.white : profileProvider.textColor, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+                          labelStyle: TextStyle(
+                            color: isSelected
+                                ? Colors.white
+                                : profileProvider.textColor,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
                           backgroundColor: profileProvider.scaffoldColor,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide.none),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide.none,
+                          ),
                           showCheckmark: false,
                         ),
                       );
@@ -753,27 +1232,60 @@ class _StaffScreenState extends State<StaffScreen> {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Expanded(child: _sheetTextField(salaryController, 'Monthly Salary', Icons.payments_outlined, profileProvider, isNumber: true)),
+                    Expanded(
+                      child: _sheetTextField(
+                        salaryController,
+                        'Monthly Salary',
+                        Icons.payments_outlined,
+                        profileProvider,
+                        isNumber: true,
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: _sheetTextField(advanceController, 'Initial Advance', Icons.account_balance_wallet_outlined, profileProvider, isNumber: true)),
+                    Expanded(
+                      child: _sheetTextField(
+                        advanceController,
+                        'Initial Advance',
+                        Icons.account_balance_wallet_outlined,
+                        profileProvider,
+                        isNumber: true,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                _sheetTextField(contactController, 'Contact Number', Icons.phone_android_outlined, profileProvider, isNumber: true),
+                _sheetTextField(
+                  contactController,
+                  'Contact Number',
+                  Icons.phone_android_outlined,
+                  profileProvider,
+                  isNumber: true,
+                ),
                 const SizedBox(height: 20),
                 InkWell(
                   onTap: () async {
-                    final date = await ReportHelper.showAppDatePicker(context, selectedDate, themeColor, lastDate: DateTime.now());
+                    final date = await ReportHelper.showAppDatePicker(
+                      context,
+                      selectedDate,
+                      themeColor,
+                      lastDate: DateTime.now(),
+                    );
                     if (date != null) setStateSheet(() => selectedDate = date);
                   },
                   child: Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: profileProvider.scaffoldColor, borderRadius: BorderRadius.circular(16)),
+                    decoration: BoxDecoration(
+                      color: profileProvider.scaffoldColor,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: Row(
                       children: [
                         Icon(Icons.calendar_month_outlined, color: themeColor),
                         const SizedBox(width: 12),
-                        Text(DateFormat('dd MMMM yyyy').format(selectedDate), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(
+                          DateFormat('dd MMMM yyyy').format(selectedDate),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                   ),
@@ -786,7 +1298,8 @@ class _StaffScreenState extends State<StaffScreen> {
                         id: staff?.id,
                         name: nameController.text,
                         role: selectedRole,
-                        monthlySalary: double.tryParse(salaryController.text) ?? 0,
+                        monthlySalary:
+                            double.tryParse(salaryController.text) ?? 0,
                         advance: double.tryParse(advanceController.text) ?? 0,
                         joinDate: selectedDate,
                         contact: contactController.text,
@@ -805,9 +1318,17 @@ class _StaffScreenState extends State<StaffScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: themeColor,
                     minimumSize: const Size(double.infinity, 60),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
                   ),
-                  child: Text(staff == null ? 'ADD STAFF MEMBER' : 'UPDATE DETAILS', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  child: Text(
+                    staff == null ? 'ADD STAFF MEMBER' : 'UPDATE DETAILS',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -817,7 +1338,13 @@ class _StaffScreenState extends State<StaffScreen> {
     );
   }
 
-  Widget _sheetTextField(TextEditingController controller, String label, IconData icon, ProfileProvider profile, {bool isNumber = false}) {
+  Widget _sheetTextField(
+    TextEditingController controller,
+    String label,
+    IconData icon,
+    ProfileProvider profile, {
+    bool isNumber = false,
+  }) {
     return TextField(
       controller: controller,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
@@ -827,7 +1354,10 @@ class _StaffScreenState extends State<StaffScreen> {
         prefixIcon: Icon(icon, color: profile.themeColor),
         filled: true,
         fillColor: profile.scaffoldColor,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }
@@ -837,21 +1367,30 @@ class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
   final ProfileProvider profileProvider;
   final Widget child;
 
-  _StickySearchBarDelegate({required this.profileProvider, required this.child});
+  _StickySearchBarDelegate({
+    required this.profileProvider,
+    required this.child,
+  });
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(
       height: 60,
       decoration: BoxDecoration(
         color: profileProvider.scaffoldColor,
-        boxShadow: overlapsContent ? [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          )
-        ] : null,
+        boxShadow: overlapsContent
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
       ),
       child: child,
     );
@@ -862,16 +1401,20 @@ class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   double get minExtent => 60;
   @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => true;
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
+      true;
 }
-
 
 class _LeaveCalendarWidget extends StatefulWidget {
   final StaffModel staff;
   final ProfileProvider profile;
   final Color themeColor;
 
-  const _LeaveCalendarWidget({required this.staff, required this.profile, required this.themeColor});
+  const _LeaveCalendarWidget({
+    required this.staff,
+    required this.profile,
+    required this.themeColor,
+  });
 
   @override
   State<_LeaveCalendarWidget> createState() => _LeaveCalendarWidgetState();
@@ -899,24 +1442,43 @@ class _LeaveCalendarWidgetState extends State<_LeaveCalendarWidget> {
       mainAxisSize: MainAxisSize.min,
       children: [
         TableCalendar(
-          firstDay: DateTime(DateTime.now().year, DateTime.now().month, 1), // Current month ki 1st date
-          lastDay: DateTime(DateTime.now().year, DateTime.now().month + 2, 0), // Agle mahine ki aakhri date
+          firstDay: DateTime(
+            DateTime.now().year,
+            DateTime.now().month,
+            1,
+          ), // Current month ki 1st date
+          lastDay: DateTime(
+            DateTime.now().year,
+            DateTime.now().month + 2,
+            0,
+          ), // Agle mahine ki aakhri date
           focusedDay: _focusedDay,
           calendarFormat: CalendarFormat.month,
           headerStyle: HeaderStyle(
             formatButtonVisible: false,
             titleCentered: true,
-            titleTextStyle: TextStyle(fontWeight: FontWeight.bold, color: widget.profile.textColor),
+            titleTextStyle: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: widget.profile.textColor,
+            ),
           ),
           calendarStyle: CalendarStyle(
             defaultTextStyle: TextStyle(color: widget.profile.textColor),
-            todayDecoration: BoxDecoration(color: widget.themeColor.withValues(alpha: 0.2), shape: BoxShape.circle),
-            todayTextStyle: TextStyle(color: widget.themeColor, fontWeight: FontWeight.bold),
+            todayDecoration: BoxDecoration(
+              color: widget.themeColor.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            todayTextStyle: TextStyle(
+              color: widget.themeColor,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          onPageChanged: (focusedDay) => setState(() => _focusedDay = focusedDay),
+          onPageChanged: (focusedDay) =>
+              setState(() => _focusedDay = focusedDay),
           calendarBuilders: CalendarBuilders(
             defaultBuilder: (context, day, focusedDay) => _buildDayCell(day),
-            todayBuilder: (context, day, focusedDay) => _buildDayCell(day, isToday: true),
+            todayBuilder: (context, day, focusedDay) =>
+                _buildDayCell(day, isToday: true),
           ),
           onDaySelected: (selectedDay, focusedDay) async {
             final provider = Provider.of<StaffProvider>(context, listen: false);
@@ -939,27 +1501,55 @@ class _LeaveCalendarWidgetState extends State<_LeaveCalendarWidget> {
   }
 
   Widget _buildDayCell(DateTime day, {bool isToday = false}) {
-    final leave = _leaves.firstWhere((l) => isSameDay(l.date, day), orElse: () => StaffLeaveModel(staffId: -1, date: day, type: 0));
+    final leave = _leaves.firstWhere(
+      (l) => isSameDay(l.date, day),
+      orElse: () => StaffLeaveModel(staffId: -1, date: day, type: 0),
+    );
     Color? bgColor;
     Color textColor = widget.profile.textColor;
-    if (leave.type == 1.0) { bgColor = Colors.red; textColor = Colors.white; }
-    else if (leave.type == 0.5) { bgColor = Colors.orange; textColor = Colors.white; }
-    else if (isToday) { bgColor = widget.themeColor.withValues(alpha: 0.15); textColor = widget.themeColor; }
+    if (leave.type == 1.0) {
+      bgColor = Colors.red;
+      textColor = Colors.white;
+    } else if (leave.type == 0.5) {
+      bgColor = Colors.orange;
+      textColor = Colors.white;
+    } else if (isToday) {
+      bgColor = widget.themeColor.withValues(alpha: 0.15);
+      textColor = widget.themeColor;
+    }
 
     return Container(
       margin: const EdgeInsets.all(4),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
-      child: Text('${day.day}', style: TextStyle(color: textColor, fontWeight: (isToday || leave.type > 0) ? FontWeight.bold : FontWeight.normal)),
+      child: Text(
+        '${day.day}',
+        style: TextStyle(
+          color: textColor,
+          fontWeight: (isToday || leave.type > 0)
+              ? FontWeight.bold
+              : FontWeight.normal,
+        ),
+      ),
     );
   }
 
   Widget _legendItem(String label, Color color) {
     return Row(
       children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 12, color: widget.profile.secondaryTextColor)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: widget.profile.secondaryTextColor,
+          ),
+        ),
       ],
     );
   }

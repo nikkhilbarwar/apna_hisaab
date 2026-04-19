@@ -15,12 +15,16 @@ class ItemProvider with ChangeNotifier {
   // Alert Tracking State (using string keys to support category groups)
   final Map<String, String> _dismissedKeysToday = {}; // key -> dateString
   final Map<String, DateTime> _snoozedKeys = {}; // key -> snoozeUntil
-  final Map<String, double> _lastAlertStockLevel = {}; // key -> stockLevelWhenAlerted
+  final Map<String, double> _lastAlertStockLevel =
+      {}; // key -> stockLevelWhenAlerted
 
   String _getAlertKey(ItemModel item) {
     CategoryModel? cat;
     try {
-      cat = _categories.firstWhere((c) => c.name.trim().toLowerCase() == item.category.trim().toLowerCase());
+      cat = _categories.firstWhere(
+        (c) =>
+            c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
+      );
     } catch (_) {}
     if (cat != null && cat.useCategoryStock == 1) {
       return "CAT_${cat.name.trim().toLowerCase()}";
@@ -31,7 +35,10 @@ class ItemProvider with ChangeNotifier {
   double _getAlertCurrentValue(ItemModel item) {
     CategoryModel? cat;
     try {
-      cat = _categories.firstWhere((c) => c.name.trim().toLowerCase() == item.category.trim().toLowerCase());
+      cat = _categories.firstWhere(
+        (c) =>
+            c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
+      );
     } catch (_) {}
     if (cat != null && cat.useCategoryStock == 1) {
       return cat.stockQty;
@@ -48,14 +55,18 @@ class ItemProvider with ChangeNotifier {
     return sorted;
   }
 
-  List<ItemModel> get deletedItems => _items.where((i) => i.isDeleted == 1).toList();
+  List<ItemModel> get deletedItems =>
+      _items.where((i) => i.isDeleted == 1).toList();
 
   bool isLowStock(ItemModel item) {
     if (item.isDeleted == 1 || item.lowStockAlert == 0) return false;
 
     CategoryModel? cat;
     try {
-      cat = _categories.firstWhere((c) => c.name.trim().toLowerCase() == item.category.trim().toLowerCase());
+      cat = _categories.firstWhere(
+        (c) =>
+            c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
+      );
     } catch (_) {}
 
     if (cat != null && cat.useCategoryStock == 1) {
@@ -84,7 +95,8 @@ class ItemProvider with ChangeNotifier {
       double currentVal = _getAlertCurrentValue(item);
 
       // 1. If stock level changed since last dismissal, show again
-      if (_lastAlertStockLevel.containsKey(key) && _lastAlertStockLevel[key] != currentVal) {
+      if (_lastAlertStockLevel.containsKey(key) &&
+          _lastAlertStockLevel[key] != currentVal) {
         _dismissedKeysToday.remove(key);
         _snoozedKeys.remove(key);
       }
@@ -93,7 +105,8 @@ class ItemProvider with ChangeNotifier {
       if (_dismissedKeysToday[key] == todayStr) continue;
 
       // 3. Don't alert if snoozed
-      if (_snoozedKeys.containsKey(key) && now.isBefore(_snoozedKeys[key]!)) continue;
+      if (_snoozedKeys.containsKey(key) && now.isBefore(_snoozedKeys[key]!))
+        continue;
 
       // Store one representative item per alert key
       if (!alerts.containsKey(key)) {
@@ -120,13 +133,22 @@ class ItemProvider with ChangeNotifier {
   List<ItemModel> getItemsByCategory(String categoryName) {
     final cleanCategory = categoryName.trim().toLowerCase();
     if (cleanCategory == 'uncategorized') {
-      final categoryNames = _categories.map((c) => c.name.trim().toLowerCase()).toSet();
+      final categoryNames = _categories
+          .map((c) => c.name.trim().toLowerCase())
+          .toSet();
       return _items.where((i) {
+        if (i.isDeleted == 1) return false;
         final itemCat = i.category.trim().toLowerCase();
         return itemCat.isEmpty || !categoryNames.contains(itemCat);
       }).toList();
     }
-    return _items.where((item) => item.category.trim().toLowerCase() == cleanCategory).toList();
+    return _items
+        .where(
+          (item) =>
+              item.isDeleted == 0 &&
+              item.category.trim().toLowerCase() == cleanCategory,
+        )
+        .toList();
   }
 
   ItemProvider() {
@@ -140,7 +162,9 @@ class ItemProvider with ChangeNotifier {
   }
 
   void _setupConnectivityListener() {
-    Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+    Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
       if (results.any((result) => result != ConnectivityResult.none)) {
         syncAllPendingItems();
       }
@@ -185,23 +209,29 @@ class ItemProvider with ChangeNotifier {
   }
 
   bool isItemExists(String name, {int? excludeId}) {
-    return _items.any((item) => 
-      item.name.toLowerCase().trim() == name.toLowerCase().trim() && item.id != excludeId);
+    return _items.any(
+      (item) =>
+          item.name.toLowerCase().trim() == name.toLowerCase().trim() &&
+          item.id != excludeId,
+    );
   }
 
   Future<bool> addItem(ItemModel item) async {
     item.name = item.name.trim();
     item.category = item.category.trim();
-    
+
     if (isItemExists(item.name)) return false;
-    
+
     try {
       item.isSynced = 0;
 
       // If item is in a shared stock category, force it to use category stock
       CategoryModel? cat;
       try {
-        cat = _categories.firstWhere((c) => c.name.trim().toLowerCase() == item.category.trim().toLowerCase());
+        cat = _categories.firstWhere(
+          (c) =>
+              c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
+        );
       } catch (_) {}
       if (cat != null && cat.useCategoryStock == 1) {
         item.currentStock = cat.stockQty;
@@ -211,14 +241,17 @@ class ItemProvider with ChangeNotifier {
       int id = await DatabaseHelper.instance.insertItem(item);
       item.id = id;
       await fetchItems();
-      
-      _firebaseService.syncItem(item).then((_) {
-        DatabaseHelper.instance.updateSyncStatus('items', id, 1);
-      }).catchError((e) {
-        debugPrint("Immediate Item Sync Error: $e");
-        return null;
-      });
-      
+
+      _firebaseService
+          .syncItem(item)
+          .then((_) {
+            DatabaseHelper.instance.updateSyncStatus('items', id, 1);
+          })
+          .catchError((e) {
+            debugPrint("Immediate Item Sync Error: $e");
+            return null;
+          });
+
       return true;
     } catch (e) {
       debugPrint("Error adding item: $e");
@@ -231,14 +264,17 @@ class ItemProvider with ChangeNotifier {
     item.category = item.category.trim();
 
     if (isItemExists(item.name, excludeId: item.id)) return false;
-    
+
     try {
       item.isSynced = 0;
 
       // If item moved to/is in a shared stock category, sync its stock
       CategoryModel? cat;
       try {
-        cat = _categories.firstWhere((c) => c.name.trim().toLowerCase() == item.category.trim().toLowerCase());
+        cat = _categories.firstWhere(
+          (c) =>
+              c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
+        );
       } catch (_) {}
       if (cat != null && cat.useCategoryStock == 1) {
         item.currentStock = cat.stockQty;
@@ -246,14 +282,17 @@ class ItemProvider with ChangeNotifier {
 
       await DatabaseHelper.instance.updateItem(item);
       await fetchItems();
-      
-      _firebaseService.syncItem(item).then((_) {
-        DatabaseHelper.instance.updateSyncStatus('items', item.id!, 1);
-      }).catchError((e) {
-        debugPrint("Update Item Sync Error: $e");
-        return null;
-      });
-      
+
+      _firebaseService
+          .syncItem(item)
+          .then((_) {
+            DatabaseHelper.instance.updateSyncStatus('items', item.id!, 1);
+          })
+          .catchError((e) {
+            debugPrint("Update Item Sync Error: $e");
+            return null;
+          });
+
       return true;
     } catch (e) {
       debugPrint("Error updating item: $e");
@@ -274,7 +313,9 @@ class ItemProvider with ChangeNotifier {
   Future<void> toggleCategoryAlerts(String category, bool value) async {
     try {
       final cleanCat = category.trim().toLowerCase();
-      final categoryItems = _items.where((i) => i.category.trim().toLowerCase() == cleanCat).toList();
+      final categoryItems = _items
+          .where((i) => i.category.trim().toLowerCase() == cleanCat)
+          .toList();
       for (var item in categoryItems) {
         item.lowStockAlert = value ? 1 : 0;
         await DatabaseHelper.instance.updateItem(item);
@@ -331,30 +372,42 @@ class ItemProvider with ChangeNotifier {
   Future<void> updateStock(int id, double newStock) async {
     try {
       final item = _items.firstWhere((i) => i.id == id);
-      
+
       CategoryModel? cat;
       try {
-        cat = _categories.firstWhere((c) => c.name.trim().toLowerCase() == item.category.trim().toLowerCase());
+        cat = _categories.firstWhere(
+          (c) =>
+              c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
+        );
       } catch (_) {}
 
       if (cat != null && cat.useCategoryStock == 1) {
         // Shared Category Stock Logic:
         // Use the newStock as the NEW absolute pool value
         double newCatStock = newStock;
-        
+
         // 1. Update Category Stock in DB
         await DatabaseHelper.instance.updateCategoryStock(cat.id!, newCatStock);
 
         // 2. Update ALL items in this category to have the same stock level in DB
-        await DatabaseHelper.instance.updateCategoryItemsStock(cat.name, newCatStock);
+        await DatabaseHelper.instance.updateCategoryItemsStock(
+          cat.name,
+          newCatStock,
+        );
 
         // 3. Sync all affected items to Firebase before refreshing local state
         // to ensure the local state reflects the synced status accurately if needed
-        final affectedItems = _items.where((i) => i.category.trim().toLowerCase() == cat!.name.trim().toLowerCase()).toList();
+        final affectedItems = _items
+            .where(
+              (i) =>
+                  i.category.trim().toLowerCase() ==
+                  cat!.name.trim().toLowerCase(),
+            )
+            .toList();
         for (var ai in affectedItems) {
-           _firebaseService.syncItem(ai).then((_) {
-             DatabaseHelper.instance.updateSyncStatus('items', ai.id!, 1);
-           });
+          _firebaseService.syncItem(ai).then((_) {
+            DatabaseHelper.instance.updateSyncStatus('items', ai.id!, 1);
+          });
         }
 
         // 4. Refresh local state (this will re-fetch everything from DB)
@@ -376,10 +429,10 @@ class ItemProvider with ChangeNotifier {
   Future<void> adjustStock(int itemId, double quantity, bool isAdding) async {
     try {
       final item = _items.firstWhere((i) => i.id == itemId);
-      double newStock = isAdding 
-          ? item.currentStock + quantity 
+      double newStock = isAdding
+          ? item.currentStock + quantity
           : item.currentStock - quantity;
-      
+
       await updateStock(itemId, newStock);
     } catch (e) {
       debugPrint("Adjust Stock Error: $e");

@@ -15,17 +15,16 @@ class HistoryScreen extends StatefulWidget {
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProviderStateMixin {
+class _HistoryScreenState extends State<HistoryScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final Set<int> _selectedIds = {};
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
-  
+
   // Advanced Filters
   String _filterPaymentMode = 'All';
   String _filterTable = 'All';
-  DateTime? _startDate;
-  DateTime? _endDate;
 
   @override
   void initState() {
@@ -46,8 +45,7 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
   void _resetFilters() {
     _filterPaymentMode = 'All';
     _filterTable = 'All';
-    _startDate = null;
-    _endDate = null;
+    // _startDate and _endDate are not used in this implementation
   }
 
   @override
@@ -64,32 +62,63 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
       backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Container(
-          decoration: BoxDecoration(color: profile.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
+          decoration: BoxDecoration(
+            color: profile.cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          ),
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Filter History', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: profile.textColor)),
+              Text(
+                'Filter History',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: profile.textColor,
+                ),
+              ),
               const SizedBox(height: 24),
 
-              Text('Payment Mode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.secondaryTextColor)),
+              Text(
+                'Payment Mode',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: profile.secondaryTextColor,
+                ),
+              ),
               const SizedBox(height: 8),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: ['All', 'Cash', 'UPI', 'Split', 'Credit'].map((mode) {
+                  children: ['All', 'Cash', 'UPI', 'Split', 'Credit'].map((
+                    mode,
+                  ) {
                     bool isSel = _filterPaymentMode == mode;
                     return GestureDetector(
-                      onTap: () => setModalState(() => _filterPaymentMode = mode),
+                      onTap: () =>
+                          setModalState(() => _filterPaymentMode = mode),
                       child: Container(
                         margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          color: isSel ? profile.themeColor : profile.themeColor.withValues(alpha: 0.05),
+                          color: isSel
+                              ? profile.themeColor
+                              : profile.themeColor.withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(mode, style: TextStyle(color: isSel ? Colors.white : profile.themeColor, fontWeight: FontWeight.bold)),
+                        child: Text(
+                          mode,
+                          style: TextStyle(
+                            color: isSel ? Colors.white : profile.themeColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     );
                   }).toList(),
@@ -97,17 +126,43 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
               ),
 
               const SizedBox(height: 20),
-              Text('Table Number', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.secondaryTextColor)),
+              Text(
+                'Table Number',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: profile.secondaryTextColor,
+                ),
+              ),
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(color: profile.scaffoldColor, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: profile.scaffoldColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: _filterTable,
                     isExpanded: true,
                     dropdownColor: profile.cardColor,
-                    items: ['All', ...List.generate(profile.totalTables, (i) => (i + 1).toString())].map((t) => DropdownMenuItem(value: t, child: Text(t == 'All' ? 'All Tables' : 'Table $t'))).toList(),
+                    items:
+                        [
+                              'All',
+                              ...List.generate(
+                                profile.totalTables,
+                                (i) => (i + 1).toString(),
+                              ),
+                            ]
+                            .map(
+                              (t) => DropdownMenuItem(
+                                value: t,
+                                child: Text(
+                                  t == 'All' ? 'All Tables' : 'Table $t',
+                                ),
+                              ),
+                            )
+                            .toList(),
                     onChanged: (v) => setModalState(() => _filterTable = v!),
                   ),
                 ),
@@ -119,8 +174,20 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
                   setState(() {});
                   Navigator.pop(context);
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: profile.themeColor, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                child: const Text('APPLY FILTERS', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: profile.themeColor,
+                  minimumSize: const Size(double.infinity, 56),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text(
+                  'APPLY FILTERS',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ],
           ),
@@ -142,14 +209,19 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
   void _bulkDelete() {
     final txProvider = Provider.of<TransactionProvider>(context, listen: false);
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
-    
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Delete ${_selectedIds.length} Records?'),
-        content: const Text('Are you sure you want to move these items to Trash?'),
+        content: const Text(
+          'Are you sure you want to move these items to Trash?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCEL'),
+          ),
           TextButton(
             onPressed: () async {
               for (int id in _selectedIds) {
@@ -173,35 +245,62 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
 
     return Scaffold(
       backgroundColor: profile.scaffoldColor,
-      appBar: widget.isPopup ? null : AppBar(
-        backgroundColor: isSelectionMode ? Colors.red.shade700 : profile.cardColor,
-        foregroundColor: isSelectionMode ? Colors.white : profile.textColor,
-        title: Text(isSelectionMode ? '${_selectedIds.length} SELECTED' : 'HISTORY & TRASH', 
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        leading: isSelectionMode 
-            ? IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _selectedIds.clear()))
-            : null,
-        actions: [
-          if (isSelectionMode)
-            IconButton(icon: const Icon(Icons.delete_sweep_rounded), onPressed: _bulkDelete)
-          else ...[
-            IconButton(icon: const Icon(Icons.filter_list_rounded), onPressed: _showFilterSheet),
-          ]
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: isSelectionMode ? Colors.white : themeColor,
-          labelColor: isSelectionMode ? Colors.white : themeColor,
-          unselectedLabelColor: isSelectionMode ? Colors.white70 : profile.secondaryTextColor,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-          tabs: const [
-            Tab(text: 'SALES'),
-            Tab(text: 'EXPENSES'),
-            Tab(text: 'TRASH'),
-          ],
-        ),
-        elevation: 0,
-      ),
+      appBar: widget.isPopup
+          ? null
+          : AppBar(
+              backgroundColor: isSelectionMode
+                  ? Colors.red.shade700
+                  : profile.cardColor,
+              foregroundColor: isSelectionMode
+                  ? Colors.white
+                  : profile.textColor,
+              title: Text(
+                isSelectionMode
+                    ? '${_selectedIds.length} SELECTED'
+                    : 'HISTORY & TRASH',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              leading: isSelectionMode
+                  ? IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => setState(() => _selectedIds.clear()),
+                    )
+                  : null,
+              actions: [
+                if (isSelectionMode)
+                  IconButton(
+                    icon: const Icon(Icons.delete_sweep_rounded),
+                    onPressed: _bulkDelete,
+                  )
+                else ...[
+                  IconButton(
+                    icon: const Icon(Icons.filter_list_rounded),
+                    onPressed: _showFilterSheet,
+                  ),
+                ],
+              ],
+              bottom: TabBar(
+                controller: _tabController,
+                indicatorColor: isSelectionMode ? Colors.white : themeColor,
+                labelColor: isSelectionMode ? Colors.white : themeColor,
+                unselectedLabelColor: isSelectionMode
+                    ? Colors.white70
+                    : profile.secondaryTextColor,
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+                tabs: const [
+                  Tab(text: 'SALES'),
+                  Tab(text: 'EXPENSES'),
+                  Tab(text: 'TRASH'),
+                ],
+              ),
+              elevation: 0,
+            ),
       body: Column(
         children: [
           if (!isSelectionMode)
@@ -209,14 +308,22 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: TextField(
                 controller: _searchController,
-                style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: profile.textColor,
+                  fontWeight: FontWeight.bold,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Search by Bill No or Item Name...',
                   prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = "");
-                  }) : null,
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = "");
+                          },
+                        )
+                      : null,
                   fillColor: profile.cardColor,
                 ),
                 onChanged: (v) => setState(() => _searchQuery = v),
@@ -226,9 +333,30 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
             child: TabBarView(
               controller: _tabController,
               children: [
-                _HistoryList(type: 'sale', selectedIds: _selectedIds, onToggle: _toggleSelection, searchQuery: _searchQuery, paymentMode: _filterPaymentMode, table: _filterTable),
-                _HistoryList(type: 'expense', selectedIds: _selectedIds, onToggle: _toggleSelection, searchQuery: _searchQuery, paymentMode: _filterPaymentMode, table: _filterTable),
-                _HistoryList(type: 'trash', selectedIds: _selectedIds, onToggle: _toggleSelection, searchQuery: _searchQuery, paymentMode: 'All', table: 'All'),
+                _HistoryList(
+                  type: 'sale',
+                  selectedIds: _selectedIds,
+                  onToggle: _toggleSelection,
+                  searchQuery: _searchQuery,
+                  paymentMode: _filterPaymentMode,
+                  table: _filterTable,
+                ),
+                _HistoryList(
+                  type: 'expense',
+                  selectedIds: _selectedIds,
+                  onToggle: _toggleSelection,
+                  searchQuery: _searchQuery,
+                  paymentMode: _filterPaymentMode,
+                  table: _filterTable,
+                ),
+                _HistoryList(
+                  type: 'trash',
+                  selectedIds: _selectedIds,
+                  onToggle: _toggleSelection,
+                  searchQuery: _searchQuery,
+                  paymentMode: 'All',
+                  table: 'All',
+                ),
               ],
             ),
           ),
@@ -246,7 +374,14 @@ class _HistoryList extends StatelessWidget {
   final String paymentMode;
   final String table;
 
-  const _HistoryList({required this.type, required this.selectedIds, required this.onToggle, required this.searchQuery, required this.paymentMode, required this.table});
+  const _HistoryList({
+    required this.type,
+    required this.selectedIds,
+    required this.onToggle,
+    required this.searchQuery,
+    required this.paymentMode,
+    required this.table,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -268,12 +403,16 @@ class _HistoryList extends StatelessWidget {
       bool matchSearch = true;
       if (searchQuery.isNotEmpty) {
         bool billMatch = tx.id.toString().contains(searchQuery);
-        bool itemMatch = tx.parsedItems.any((i) => (i['name'] ?? '').toLowerCase().contains(searchQuery.toLowerCase()));
+        bool itemMatch = tx.parsedItems.any(
+          (i) => (i['name'] ?? '').toLowerCase().contains(
+            searchQuery.toLowerCase(),
+          ),
+        );
         matchSearch = billMatch || itemMatch;
       }
 
       bool matchPayment = paymentMode == 'All' || tx.paymentMode == paymentMode;
-      
+
       bool matchTable = true;
       if (table != 'All' && type == 'sale') {
         matchTable = tx.parsedItems.any((i) => i['table_number'] == table);
@@ -287,9 +426,19 @@ class _HistoryList extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.history_rounded, size: 64, color: profile.secondaryTextColor.withValues(alpha: 0.1)),
+            Icon(
+              Icons.history_rounded,
+              size: 64,
+              color: profile.secondaryTextColor.withValues(alpha: 0.1),
+            ),
             const SizedBox(height: 16),
-            Text('No matching records found', style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+            Text(
+              'No matching records found',
+              style: TextStyle(
+                color: profile.secondaryTextColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
       );
@@ -316,10 +465,18 @@ class _HistoryList extends StatelessWidget {
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: isSelected ? Colors.red.withValues(alpha: 0.05) : profile.cardColor,
+              color: isSelected
+                  ? Colors.red.withValues(alpha: 0.05)
+                  : profile.cardColor,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isSelected ? Colors.red : (isCredit ? Colors.orange.withValues(alpha: 0.5) : (profile.isDarkMode ? Colors.white10 : Colors.grey.shade100)),
+                color: isSelected
+                    ? Colors.red
+                    : (isCredit
+                          ? Colors.orange.withValues(alpha: 0.5)
+                          : (profile.isDarkMode
+                                ? Colors.white10
+                                : Colors.grey.shade100)),
                 width: (isSelected || isCredit) ? 2 : 1,
               ),
             ),
@@ -330,12 +487,21 @@ class _HistoryList extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: isTrash ? Colors.grey.withValues(alpha: 0.1) : (tx.type == 'sale' ? Colors.green : Colors.red).withValues(alpha: 0.1),
+                      color: isTrash
+                          ? Colors.grey.withValues(alpha: 0.1)
+                          : (tx.type == 'sale' ? Colors.green : Colors.red)
+                                .withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      isTrash ? Icons.delete_outline : (tx.type == 'sale' ? Icons.south_west_rounded : Icons.north_east_rounded), 
-                      color: isTrash ? Colors.grey : (tx.type == 'sale' ? Colors.green : Colors.red),
+                      isTrash
+                          ? Icons.delete_outline
+                          : (tx.type == 'sale'
+                                ? Icons.south_west_rounded
+                                : Icons.north_east_rounded),
+                      color: isTrash
+                          ? Colors.grey
+                          : (tx.type == 'sale' ? Colors.green : Colors.red),
                       size: 20,
                     ),
                   ),
@@ -346,23 +512,65 @@ class _HistoryList extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Text('#${tx.id}', style: TextStyle(fontSize: 10, color: profile.themeColor, fontWeight: FontWeight.bold)),
+                            Text(
+                              '#${tx.id}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: profile.themeColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             const SizedBox(width: 8),
-                            Expanded(child: Text(tx.type == 'sale' ? (tx.parsedItems.isNotEmpty ? tx.parsedItems[0]['name']! : 'Sale Order') : tx.category, 
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: profile.textColor), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                            Expanded(
+                              child: Text(
+                                tx.type == 'sale'
+                                    ? (tx.parsedItems.isNotEmpty
+                                          ? tx.parsedItems[0]['name']!
+                                          : 'Sale Order')
+                                    : tx.category,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: profile.textColor,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Text(DateFormat('dd MMM, hh:mm a').format(tx.date), style: TextStyle(fontSize: 11, color: profile.secondaryTextColor)),
+                        Text(
+                          DateFormat('dd MMM, hh:mm a').format(tx.date),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: profile.secondaryTextColor,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}', 
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: isTrash ? Colors.grey : (tx.type == 'sale' ? Colors.green : Colors.red))),
-                      Text(tx.paymentMode, style: TextStyle(fontSize: 9, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+                      Text(
+                        '${profile.currencySymbol}${tx.amount.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          color: isTrash
+                              ? Colors.grey
+                              : (tx.type == 'sale' ? Colors.green : Colors.red),
+                        ),
+                      ),
+                      Text(
+                        tx.paymentMode,
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: profile.secondaryTextColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -384,13 +592,25 @@ class _HistoryList extends StatelessWidget {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => Container(
-        decoration: BoxDecoration(color: profile.cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
+        decoration: BoxDecoration(
+          color: profile.cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2)))),
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -398,45 +618,113 @@ class _HistoryList extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Bill #${tx.id}${tx.token.isNotEmpty ? " | TOKEN: ${tx.token}" : ""}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: profile.themeColor)),
-                    Text(tx.type == 'sale' ? 'Sale Details' : 'Expense Details', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: profile.textColor)),
+                    Text(
+                      'Bill #${tx.id}${tx.token.isNotEmpty ? " | TOKEN: ${tx.token}" : ""}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: profile.themeColor,
+                      ),
+                    ),
+                    Text(
+                      tx.type == 'sale' ? 'Sale Details' : 'Expense Details',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: profile.textColor,
+                      ),
+                    ),
                   ],
                 ),
-                if (tx.parsedItems.isNotEmpty && tx.parsedItems.first['table_number'] != null)
+                if (tx.parsedItems.isNotEmpty &&
+                    tx.parsedItems.first['table_number'] != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-                    child: Text('TABLE ${tx.parsedItems.first['table_number']}', style: TextStyle(color: profile.themeColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: profile.themeColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'TABLE ${tx.parsedItems.first['table_number']}',
+                      style: TextStyle(
+                        color: profile.themeColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
               ],
             ),
             const SizedBox(height: 24),
-            Text('ITEMS LIST', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: profile.secondaryTextColor, letterSpacing: 1)),
-            const SizedBox(height: 12),
-            ...tx.parsedItems.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: 12.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${item['name']} (${item['variant']})', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
-                        Text('${item['qty']} x ${profile.currencySymbol}${item['price']}${ (double.tryParse(item['extra_qty'] ?? '0') ?? 0) > 0 ? " + Extra: ${item['extra_qty']}" : ""}', style: TextStyle(color: profile.secondaryTextColor, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: profile.themeColor.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(4)),
-                    child: Text(item['serving_method'] ?? 'Dine-in', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: profile.themeColor)),
-                  ),
-                ],
+            Text(
+              'ITEMS LIST',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+                color: profile.secondaryTextColor,
+                letterSpacing: 1,
               ),
-            )),
+            ),
+            const SizedBox(height: 12),
+            ...tx.parsedItems.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${item['name']} (${item['variant']})',
+                            style: TextStyle(
+                              color: profile.textColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            '${item['qty']} x ${profile.currencySymbol}${item['price']}${(double.tryParse(item['extra_qty'] ?? '0') ?? 0) > 0 ? " + Extra: ${item['extra_qty']}" : ""}',
+                            style: TextStyle(
+                              color: profile.secondaryTextColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: profile.themeColor.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        item['serving_method'] ?? 'Dine-in',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: profile.themeColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const Divider(height: 32),
-            _detailRow('Total Amount', '${profile.currencySymbol}${tx.amount}', profile, isBold: true),
+            _detailRow(
+              'Total Amount',
+              '${profile.currencySymbol}${tx.amount}',
+              profile,
+              isBold: true,
+            ),
             _detailRow('Payment Mode', tx.paymentMode, profile),
             const SizedBox(height: 32),
             Row(
@@ -445,11 +733,23 @@ class _HistoryList extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: () {
                       Navigator.pop(context);
-                      Navigator.push(context, MaterialPageRoute(builder: (c) => EntryScreen(transaction: tx)));
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (c) => EntryScreen(transaction: tx),
+                        ),
+                      );
                     },
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('EDIT'),
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.blue, side: const BorderSide(color: Colors.blue), padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                      side: const BorderSide(color: Colors.blue),
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -461,7 +761,15 @@ class _HistoryList extends StatelessWidget {
                     },
                     icon: const Icon(Icons.delete_outline),
                     label: const Text('DELETE'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade50,
+                      foregroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
                   ),
                 ),
               ],
@@ -473,14 +781,29 @@ class _HistoryList extends StatelessWidget {
     );
   }
 
-  Widget _detailRow(String label, String value, ProfileProvider profile, {bool isBold = false}) {
+  Widget _detailRow(
+    String label,
+    String value,
+    ProfileProvider profile, {
+    bool isBold = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: profile.secondaryTextColor, fontSize: 13)),
-          Text(value, style: TextStyle(fontWeight: isBold ? FontWeight.w900 : FontWeight.bold, color: profile.textColor, fontSize: 14)),
+          Text(
+            label,
+            style: TextStyle(color: profile.secondaryTextColor, fontSize: 13),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: isBold ? FontWeight.w900 : FontWeight.bold,
+              color: profile.textColor,
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );

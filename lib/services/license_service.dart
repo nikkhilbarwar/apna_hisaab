@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,12 +18,16 @@ class LicenseService {
   static Future<String> getDeviceId() async {
     var deviceInfo = DeviceInfoPlugin();
     if (Platform.isAndroid) return (await deviceInfo.androidInfo).id;
-    if (Platform.isIOS) return (await deviceInfo.iosInfo).identifierForVendor ?? "UNKNOWN_IOS";
+    if (Platform.isIOS)
+      return (await deviceInfo.iosInfo).identifierForVendor ?? "UNKNOWN_IOS";
     return "UNKNOWN_DEVICE";
   }
 
   // Admin Authentication Logic (Supports Email or Phone)
-  static Future<Map<String, dynamic>> loginAdmin(String identifier, String password) async {
+  static Future<Map<String, dynamic>> loginAdmin(
+    String identifier,
+    String password,
+  ) async {
     try {
       // Step 1: Ensure we have a Firebase Auth UID (Sign in anonymously if needed)
       if (FirebaseAuth.instance.currentUser == null) {
@@ -35,18 +38,24 @@ class LicenseService {
       // Step 2: Search for admin record by identifier (Email or Phone)
       var adminsRef = firestore.collection('admins');
       QuerySnapshot query;
-      
+
       // Try searching by phone first
-      query = await adminsRef.where('phone', isEqualTo: identifier).where('password', isEqualTo: password).get();
-      
+      query = await adminsRef
+          .where('phone', isEqualTo: identifier)
+          .where('password', isEqualTo: password)
+          .get();
+
       // If not found, try email
       if (query.docs.isEmpty) {
-        query = await adminsRef.where('email', isEqualTo: identifier).where('password', isEqualTo: password).get();
+        query = await adminsRef
+            .where('email', isEqualTo: identifier)
+            .where('password', isEqualTo: password)
+            .get();
       }
 
       if (query.docs.isNotEmpty) {
         final adminData = query.docs.first.data() as Map<String, dynamic>;
-        
+
         if (adminData['status'] == 'active') {
           // Step 3: LINK THE UID! This is the most important step for Security Rules
           // We create/update a document with the UID as the document ID
@@ -61,14 +70,17 @@ class LicenseService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('is_sys_admin', true);
           await prefs.setString('admin_id', identifier);
-          
+
           String role = adminData['role'] ?? 'staff';
           if (identifier.toLowerCase() == 'nikkhilbarwar@gmail.com') {
             role = 'super_admin';
           }
-          
+
           await prefs.setString('admin_role', role);
-          return {'success': true, 'data': {...adminData, 'role': role}};
+          return {
+            'success': true,
+            'data': {...adminData, 'role': role},
+          };
         }
         return {'success': false, 'message': 'Admin account disabled'};
       }
@@ -81,22 +93,33 @@ class LicenseService {
   static Future<Map<String, dynamic>> verifyLicense(String key) async {
     try {
       final doc = await firestore.collection('licenses').doc(key).get();
-      if (!doc.exists) return {'success': false, 'message': 'Invalid License Key'};
+      if (!doc.exists)
+        return {'success': false, 'message': 'Invalid License Key'};
 
       final data = doc.data()!;
       final deviceId = await getDeviceId();
-      
-      if (data['status'] != 'active') return {'success': false, 'message': 'License disabled'};
-      
-      if (data['activated'] == true && data['activeDeviceId'] != null && data['activeDeviceId'] != deviceId) {
-        return {'success': false, 'message': 'Key already registered on another device'};
+
+      if (data['status'] != 'active')
+        return {'success': false, 'message': 'License disabled'};
+
+      if (data['activated'] == true &&
+          data['activeDeviceId'] != null &&
+          data['activeDeviceId'] != deviceId) {
+        return {
+          'success': false,
+          'message': 'Key already registered on another device',
+        };
       }
 
       DateTime? expiry;
       if (data['isLifetime'] != true && data['validTill'] != null) {
         expiry = DateTime.tryParse(data['validTill']);
         if (expiry != null && expiry.isBefore(DateTime.now())) {
-          return {'success': false, 'message': 'License Expired', 'isExpired': true};
+          return {
+            'success': false,
+            'message': 'License Expired',
+            'isExpired': true,
+          };
         }
       }
 
@@ -117,10 +140,10 @@ class LicenseService {
         });
       }
       return {
-        'success': true, 
-        'isLifetime': data['isLifetime'] ?? false, 
+        'success': true,
+        'isLifetime': data['isLifetime'] ?? false,
         'expiryDate': expiry,
-        'message': 'Success'
+        'message': 'Success',
       };
     } catch (e) {
       return {'success': false, 'message': 'Error: $e'};
@@ -136,15 +159,26 @@ class LicenseService {
     }
   }
 
-  static Future<void> resetDevice(String licenseKey, String adminIdentifier) async {
+  static Future<void> resetDevice(
+    String licenseKey,
+    String adminIdentifier,
+  ) async {
     await firestore.collection('licenses').doc(licenseKey).update({
       'activated': false,
       'activeDeviceId': null,
     });
-    await logAdminAction(adminIdentifier, "RESET_DEVICE", "Reset device for $licenseKey");
+    await logAdminAction(
+      adminIdentifier,
+      "RESET_DEVICE",
+      "Reset device for $licenseKey",
+    );
   }
 
-  static Future<void> logAdminAction(String adminId, String action, String details) async {
+  static Future<void> logAdminAction(
+    String adminId,
+    String action,
+    String details,
+  ) async {
     await firestore.collection('admin_logs').add({
       'adminId': adminId,
       'action': action,
@@ -175,7 +209,7 @@ class LicenseService {
     await ensureAuth();
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final trimmedKey = licenseKey.trim();
-    
+
     if (trimmedKey.isEmpty) {
       debugPrint("Warning: Creating ticket with empty license key");
     }
@@ -202,20 +236,25 @@ class LicenseService {
   }) async {
     final now = DateTime.now();
     await firestore.collection('support_tickets').doc(ticketId).update({
-      'replies': FieldValue.arrayUnion([{
-        'id': now.millisecondsSinceEpoch.toString(),
-        'message': message,
-        'senderRole': senderRole,
-        'senderName': senderName,
-        'timestamp': now.toIso8601String(),
-      }]),
+      'replies': FieldValue.arrayUnion([
+        {
+          'id': now.millisecondsSinceEpoch.toString(),
+          'message': message,
+          'senderRole': senderRole,
+          'senderName': senderName,
+          'timestamp': now.toIso8601String(),
+        },
+      ]),
       'lastUpdate': FieldValue.serverTimestamp(),
       'status': senderRole == 'admin' ? 'answered' : 'open',
       'hasUnreadReply': senderRole == 'admin', // Add this flag
     });
 
     try {
-      final doc = await firestore.collection('support_tickets').doc(ticketId).get();
+      final doc = await firestore
+          .collection('support_tickets')
+          .doc(ticketId)
+          .get();
       if (!doc.exists) return;
       final data = doc.data()!;
 
@@ -223,7 +262,11 @@ class LicenseService {
         // --- NOTIFY USER ---
         final licenseKey = data['licenseKey'];
         if (licenseKey != null) {
-          final userQuery = await firestore.collection('users').where('license_key', isEqualTo: licenseKey).limit(1).get();
+          final userQuery = await firestore
+              .collection('users')
+              .where('license_key', isEqualTo: licenseKey)
+              .limit(1)
+              .get();
           if (userQuery.docs.isNotEmpty) {
             final fcmToken = userQuery.docs.first.data()['fcmToken'];
             if (fcmToken != null) {
@@ -292,12 +335,16 @@ class LicenseService {
 
   static Stream<QuerySnapshot> getTickets(String licenseKey) {
     if (licenseKey.trim().isEmpty) {
-      return firestore.collection('support_tickets').where('licenseKey', isEqualTo: 'NON_EXISTENT').snapshots();
+      return firestore
+          .collection('support_tickets')
+          .where('licenseKey', isEqualTo: 'NON_EXISTENT')
+          .snapshots();
     }
 
     // Query by licenseKey to ensure history is visible across device re-installs.
     // This works if your Security Rules allow reading by 'isSignedIn()'
-    return firestore.collection('support_tickets')
+    return firestore
+        .collection('support_tickets')
         .where('licenseKey', isEqualTo: licenseKey.trim())
         .snapshots();
   }
@@ -332,7 +379,10 @@ class LicenseService {
     await firestore.collection('admins').doc(id).delete();
   }
 
-  static Future<void> queueAnnouncementNotification(String title, String body) async {
+  static Future<void> queueAnnouncementNotification(
+    String title,
+    String body,
+  ) async {
     await firestore.collection('notifications_queue').add({
       'title': title,
       'body': body,
