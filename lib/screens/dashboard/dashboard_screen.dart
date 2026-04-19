@@ -1067,13 +1067,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (c) => CartDetailsScreen(
-                                cart: [],
-                                type: tx.type,
-                                selectedCategory: 'All',
-                                selectedDate: tx.date,
-                                existingTransaction: tx,
-                              ),
+                              builder: (c) => EntryScreen(transaction: tx),
                             ),
                           );
                         },

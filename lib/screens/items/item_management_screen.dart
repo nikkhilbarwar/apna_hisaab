@@ -910,194 +910,197 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                                 prefix: profileProvider.currencySymbol,
                               ),
                             ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: profileProvider.scaffoldColor,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: profileProvider.isDarkMode
-                                      ? Colors.white10
-                                      : Colors.grey.shade200,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: profileProvider.scaffoldColor,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: profileProvider.isDarkMode
+                                        ? Colors.white10
+                                        : Colors.grey.shade200,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Consumer<UnitProvider>(
+                                        builder: (context, unitProvider, child) {
+                                          final defaultUnits = [
+                                            'Plate',
+                                            "Pc's",
+                                            'Packet',
+                                            'kg',
+                                            'gm',
+                                            'liter',
+                                            'ml',
+                                          ];
+                                          final availableUnits = unitProvider
+                                              .units
+                                              .map((u) => u.name)
+                                              .toSet()
+                                              .toList();
+                                          final dropdownUnits =
+                                              availableUnits.isNotEmpty
+                                              ? availableUnits
+                                              : defaultUnits;
+
+                                          if (!dropdownUnits.contains(
+                                            selectedUnit,
+                                          )) {
+                                            selectedUnit = dropdownUnits.first;
+                                          }
+
+                                          return DropdownButtonHideUnderline(
+                                            child: DropdownButton<String>(
+                                              value: selectedUnit,
+                                              isExpanded: true,
+                                              hint: const Text("Unit"),
+                                              dropdownColor:
+                                                  profileProvider.cardColor,
+                                              style: TextStyle(
+                                                color:
+                                                    profileProvider.textColor,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                              items: dropdownUnits
+                                                  .map(
+                                                    (name) => DropdownMenuItem(
+                                                      value: name,
+                                                      child: Text(name),
+                                                    ),
+                                                  )
+                                                  .toList(),
+                                              onChanged: (val) {
+                                                if (val != null) {
+                                                  setDialogState(
+                                                    () => selectedUnit = val,
+                                                  );
+                                                }
+                                              },
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    GestureDetector(
+                                      onTap: () async {
+                                        final newUnit =
+                                            await _showAddUnitDialog(
+                                              context,
+                                              unitProvider,
+                                              profileProvider,
+                                            );
+                                        if (newUnit != null &&
+                                            newUnit.isNotEmpty) {
+                                          setDialogState(() {
+                                            selectedUnit = newUnit;
+                                          });
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: profileProvider.themeColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.add,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Consumer<UnitProvider>(
-                                      builder: (context, unitProvider, child) {
-                                        final defaultUnits = [
-                                          'Plate',
-                                          "Pc's",
-                                          'Packet',
-                                          'kg',
-                                          'gm',
-                                          'liter',
-                                          'ml',
-                                        ];
-                                        final availableUnits = unitProvider
-                                            .units
-                                            .map((u) => u.name)
-                                            .toSet()
-                                            .toList();
-                                        final dropdownUnits =
-                                            availableUnits.isNotEmpty
-                                            ? availableUnits
-                                            : defaultUnits;
-
-                                        if (!dropdownUnits.contains(
-                                          selectedUnit,
-                                        )) {
-                                          selectedUnit = dropdownUnits.first;
-                                        }
-
-                                        return DropdownButtonHideUnderline(
-                                          child: DropdownButton<String>(
-                                            value: selectedUnit,
-                                            isExpanded: true,
-                                            hint: const Text("Unit"),
-                                            dropdownColor:
-                                                profileProvider.cardColor,
-                                            style: TextStyle(
-                                              color: profileProvider.textColor,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            items: dropdownUnits
-                                                .map(
-                                                  (name) => DropdownMenuItem(
-                                                    value: name,
-                                                    child: Text(name),
-                                                  ),
-                                                )
-                                                .toList(),
-                                            onChanged: (val) {
-                                              if (val != null) {
-                                                setDialogState(
-                                                  () => selectedUnit = val,
-                                                );
-                                              }
-                                            },
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  GestureDetector(
-                                    onTap: () async {
-                                      final newUnit = await _showAddUnitDialog(
-                                        context,
-                                        unitProvider,
-                                        profileProvider,
-                                      );
-                                      if (newUnit != null &&
-                                          newUnit.isNotEmpty) {
-                                        setDialogState(() {
-                                          selectedUnit = newUnit;
-                                        });
-                                      }
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        color: profileProvider.themeColor,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.add,
-                                        color: Colors.white,
-                                        size: 18,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
                             ),
+                          ],
+                        ),
+
+                        if (selectedItemType == 'selling') ...[
+                          const SizedBox(height: 16),
+                          _buildField(
+                            fullQtyController,
+                            'Deduct Qty per Sale',
+                            Icons.inventory_outlined,
+                            profileProvider,
+                            isNumber: true,
                           ),
                         ],
-                      ),
 
-                      if (selectedItemType == 'selling') ...[
-                        const SizedBox(height: 16),
-                        _buildField(
-                          fullQtyController,
-                          'Deduct Qty per Sale',
-                          Icons.inventory_outlined,
-                          profileProvider,
-                          isNumber: true,
-                        ),
-                      ],
-
-                      if (!isSharedStock) ...[
-                        const SizedBox(height: 16),
-                        _buildField(
-                          minStockController,
-                          'Low Stock Alert Qty',
-                          Icons.notification_important_outlined,
-                          profileProvider,
-                          isNumber: true,
-                        ),
-                      ],
-
-                      if (selectedItemType == 'selling') ...[
-                        Container(
-                          margin: const EdgeInsets.symmetric(vertical: 16),
-                          decoration: BoxDecoration(
-                            color: themeColor.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: themeColor.withValues(alpha: 0.1),
-                            ),
+                        if (!isSharedStock) ...[
+                          const SizedBox(height: 16),
+                          _buildField(
+                            minStockController,
+                            'Low Stock Alert Qty',
+                            Icons.notification_important_outlined,
+                            profileProvider,
+                            isNumber: true,
                           ),
-                          child: SwitchListTile(
-                            title: Text(
-                              'Has Half Option?',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: profileProvider.textColor,
+                        ],
+
+                        if (selectedItemType == 'selling') ...[
+                          Container(
+                            margin: const EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              color: themeColor.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: themeColor.withValues(alpha: 0.1),
                               ),
                             ),
-                            value: hasHalfOption,
-                            onChanged: (val) =>
-                                setDialogState(() => hasHalfOption = val),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                            ),
-                            activeThumbColor: themeColor,
-                          ),
-                        ),
-
-                        if (hasHalfOption) ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildField(
-                                  halfPriceController,
-                                  'Half Price',
-                                  Icons.payments_outlined,
-                                  profileProvider,
-                                  isNumber: true,
-                                  prefix: profileProvider.currencySymbol,
+                            child: SwitchListTile(
+                              title: Text(
+                                'Has Half Option?',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: profileProvider.textColor,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildField(
-                                  halfQtyController,
-                                  'Half Qty',
-                                  Icons.inventory_outlined,
-                                  profileProvider,
-                                  isNumber: true,
-                                ),
+                              value: hasHalfOption,
+                              onChanged: (val) =>
+                                  setDialogState(() => hasHalfOption = val),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
                               ),
-                            ],
+                              activeThumbColor: themeColor,
+                            ),
                           ),
+
+                          if (hasHalfOption) ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildField(
+                                    halfPriceController,
+                                    'Half Price',
+                                    Icons.payments_outlined,
+                                    profileProvider,
+                                    isNumber: true,
+                                    prefix: profileProvider.currencySymbol,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildField(
+                                    halfQtyController,
+                                    'Half Qty',
+                                    Icons.inventory_outlined,
+                                    profileProvider,
+                                    isNumber: true,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ],
                     ],
