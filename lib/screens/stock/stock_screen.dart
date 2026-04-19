@@ -514,7 +514,8 @@ class _StockScreenState extends State<StockScreen> {
           _selectedCategory == null ||
           (_selectedCategory == 'Uncategorized'
               ? itemProvider.getItemsByCategory('Uncategorized').contains(item)
-              : item.category == _selectedCategory);
+              : item.category.trim().toLowerCase() ==
+                    _selectedCategory!.trim().toLowerCase());
 
       bool matchSearch =
           _searchQuery.isEmpty ||
@@ -731,7 +732,7 @@ class _StockScreenState extends State<StockScreen> {
                         ),
                         trailing: Switch(
                           value: allOn,
-                          activeColor: profile.themeColor,
+                          activeThumbColor: profile.themeColor,
                           onChanged: (val) async {
                             await itemProvider.toggleCategoryAlerts(
                               cat.name,
@@ -757,7 +758,7 @@ class _StockScreenState extends State<StockScreen> {
                                 ),
                                 trailing: Switch(
                                   value: item.lowStockAlert == 1,
-                                  activeColor: profile.themeColor,
+                                  activeThumbColor: profile.themeColor,
                                   onChanged: (val) async {
                                     await itemProvider.toggleLowStockAlert(
                                       item.id!,

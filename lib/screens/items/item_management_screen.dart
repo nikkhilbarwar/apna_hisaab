@@ -443,7 +443,7 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                   final category = catProvider.getCategoryByName(
                     widget.category,
                   );
-                  final type = category?.type?.isNotEmpty == true
+                  final type = category?.type.isNotEmpty == true
                       ? category!.type
                       : 'selling';
                   _showItemBottomSheet(context, itemProvider, type: type);
@@ -868,8 +868,7 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      if (selectedItemType == 'readymade' ||
-                          selectedItemType == 'purchase') ...[
+                      if (selectedItemType == 'readymade') ...[
                         Row(
                           children: [
                             Expanded(
@@ -897,21 +896,20 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                         ),
                         const SizedBox(height: 16),
                       ],
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: _buildField(
-                              priceController,
-                              selectedItemType == 'purchase'
-                                  ? 'Valuation Price'
-                                  : 'Selling Price',
-                              Icons.payments_outlined,
-                              profileProvider,
-                              isNumber: true,
-                              prefix: profileProvider.currencySymbol,
+                      if (selectedItemType != 'purchase') ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: _buildField(
+                                priceController,
+                                'Selling Price',
+                                Icons.payments_outlined,
+                                profileProvider,
+                                isNumber: true,
+                                prefix: profileProvider.currencySymbol,
+                              ),
                             ),
-                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Container(
@@ -1071,7 +1069,7 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
                             ),
-                            activeColor: themeColor,
+                            activeThumbColor: themeColor,
                           ),
                         ),
 
@@ -1138,8 +1136,9 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                   );
                   if (isEditing
                       ? await provider.updateItem(newItem)
-                      : await provider.addItem(newItem))
+                      : await provider.addItem(newItem)) {
                     Navigator.pop(context);
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: themeColor,
