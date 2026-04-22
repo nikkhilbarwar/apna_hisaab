@@ -9,6 +9,19 @@ import 'item_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
 import 'dart:convert';
+import '../models/category_model.dart';
+import '../models/staff_model.dart';
+import '../models/supplier_model.dart';
+import '../models/purchase_reminder_model.dart';
+import '../models/recipe_model.dart';
+import '../main.dart'; // To access navigatorKey
+import 'category_provider.dart';
+import 'staff_provider.dart';
+import 'supplier_provider.dart';
+import 'unit_provider.dart';
+import 'purchase_reminder_provider.dart';
+import 'profile_provider.dart';
+import 'package:provider/provider.dart';
 
 class TransactionProvider with ChangeNotifier {
   List<TransactionModel> _allTransactions = [];
@@ -16,8 +29,10 @@ class TransactionProvider with ChangeNotifier {
   Timer? _syncTimer;
   bool _syncRequired = false;
   bool _isSyncing = false;
+  DateTime? _lastSyncTime;
 
   bool get isSyncing => _isSyncing;
+  DateTime? get lastSyncTime => _lastSyncTime;
 
   String _normalizeStatus(String? status) {
     if (status == null || status.isEmpty) return 'completed';
@@ -45,99 +60,126 @@ class TransactionProvider with ChangeNotifier {
 
   Future<void> _initializeData() async {
     await fetchTransactions();
-    // Do not trigger masterRestoreFromCloud here anymore.
-    // AuthWrapper handles it globally now.
     await syncAllUnsynced();
   }
 
-  Future<void> masterRestoreFromCloud() async {
+  Future<bool> masterRestoreFromCloud() async {
     final connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult.any((result) => result != ConnectivityResult.none)) {
+      if (_isSyncing) return false; 
+      
       _isSyncing = true;
       notifyListeners();
+
       try {
-        debugPrint("🚀 STARTING MASTER RESTORE FROM CLOUD...");
+        debugPrint("🚀 STARTING FAST MASTER RESTORE...");
 
-        final cloudCategories = await _firebaseService.fetchAllCategories();
-        for (var cat in cloudCategories) {
-          final localCats = await DatabaseHelper.instance.getAllCategories();
-          if (!localCats.any((c) => c.id == cat.id || c.name == cat.name)) {
-            await DatabaseHelper.instance.insertCategory(cat);
-          }
-        }
+        final results = await Future.wait([
+          _firebaseService.fetchAllCategories(),
+          _firebaseService.fetchAllItems(),
+          _firebaseService.fetchAllTransactions(),
+          _firebaseService.fetchAllStaff(),
+          _firebaseService.fetchAllSuppliers(),
+          _firebaseService.fetchAllPurchaseReminders(),
+          _firebaseService.fetchAllUnits(),
+          _firebaseService.fetchAllRecipes(),
+        ]);
 
-        final cloudItems = await _firebaseService.fetchAllItems();
-        for (var item in cloudItems) {
-          final localItems = await DatabaseHelper.instance.getAllItems();
-          if (!localItems.any((i) => i.id == item.id || i.name == item.name)) {
-            item.isSynced = 1;
-            await DatabaseHelper.instance.insertItem(item);
-          }
-        }
+        final cloudCategories = results[0] as List<CategoryModel>;
+        final cloudItems = results[1] as List<ItemModel>;
+        final cloudTxs = results[2] as List<TransactionModel>;
+        final cloudStaff = results[3] as List<StaffModel>;
+        final cloudSuppliers = results[4] as List<SupplierModel>;
+        final cloudReminders = results[5] as List<PurchaseReminderModel>;
+        final cloudUnits = results[6] as List<Map<String, dynamic>>;
+        final cloudRecipes = results[7] as List<RecipeModel>;
 
-        final cloudTxs = await _firebaseService.fetchAllTransactions();
-        if (cloudTxs.isNotEmpty) {
-          final localTxs = await DatabaseHelper.instance.getAllTransactions();
-          for (var tx in cloudTxs) {
-            bool exists = localTxs.any(
-              (t) =>
-                  t.id == tx.id ||
-                  (t.date.isAtSameMomentAs(tx.date) && t.amount == tx.amount),
-            );
-            if (!exists) {
-              tx.isSynced = 1;
-              await DatabaseHelper.instance.insertTransaction(tx);
-            }
-          }
-        }
+        final db = DatabaseHelper.instance;
+        await db.clearAllData();
 
-        final cloudStaff = await _firebaseService.fetchAllStaff();
-        for (var s in cloudStaff) {
-          final localStaff = await DatabaseHelper.instance.getAllStaff();
-          if (!localStaff.any((ls) => ls.id == s.id)) {
-            s.isSynced = 1;
-            await DatabaseHelper.instance.insertStaff(s);
-          }
-        }
-
-        final cloudSuppliers = await _firebaseService.fetchAllSuppliers();
-        for (var sup in cloudSuppliers) {
-          final localSuppliers = await DatabaseHelper.instance
-              .getAllSuppliers();
-          if (!localSuppliers.any((ls) => ls.id == sup.id)) {
-            sup.isSynced = 1;
-            await DatabaseHelper.instance.insertSupplier(sup);
-          }
-        }
-
-        final cloudReminders = await _firebaseService
-            .fetchAllPurchaseReminders();
-        for (var rem in cloudReminders) {
-          rem.isSynced = 1;
-          await DatabaseHelper.instance.database.then(
-            (db) => db.insert(
-              'purchase_reminders',
-              rem.toMap(),
-              conflictAlgorithm: ConflictAlgorithm.replace,
-            ),
+        if (cloudCategories.isNotEmpty) {
+          await db.batchInsert(
+            'categories',
+            cloudCategories.map((c) => (c..isSynced = 1).toMap()).toList(),
           );
         }
 
-        final cloudUnits = await _firebaseService.fetchAllUnits();
-        for (var unitData in cloudUnits) {
-          String? name = unitData['name'];
-          if (name != null) await DatabaseHelper.instance.insertUnit(name);
+        if (cloudItems.isNotEmpty) {
+          await db.batchInsert(
+            'items',
+            cloudItems.map((i) => (i..isSynced = 1).toMap()).toList(),
+          );
+        }
+
+        if (cloudTxs.isNotEmpty) {
+          await db.batchInsert(
+            'transactions',
+            cloudTxs.map((t) => (t..isSynced = 1).toMap()).toList(),
+          );
+        }
+
+        if (cloudStaff.isNotEmpty) {
+          await db.batchInsert(
+            'staff',
+            cloudStaff.map((s) => (s..isSynced = 1).toMap()).toList(),
+          );
+        }
+        
+        if (cloudSuppliers.isNotEmpty) {
+          await db.batchInsert(
+            'suppliers',
+            cloudSuppliers.map((s) => (s..isSynced = 1).toMap()).toList(),
+          );
+        }
+
+        if (cloudReminders.isNotEmpty) {
+          await db.batchInsert(
+            'purchase_reminders',
+            cloudReminders.map((r) => (r..isSynced = 1).toMap()).toList(),
+          );
+        }
+
+        if (cloudUnits.isNotEmpty) {
+          for (var unitData in cloudUnits) {
+            String? name = unitData['name'];
+            if (name != null) await db.insertUnit(name, isSynced: 1);
+          }
+        }
+
+        if (cloudRecipes.isNotEmpty) {
+          await db.batchInsert(
+            'recipes',
+            cloudRecipes.map((r) => (r..isSynced = 1).toMap()).toList(),
+          );
+        }
+
+        // Refresh all providers after restore
+        if (navigatorKey.currentContext != null) {
+          final context = navigatorKey.currentContext!;
+          await Future.wait([
+            Provider.of<ItemProvider>(context, listen: false).refreshData(),
+            Provider.of<CategoryProvider>(context, listen: false).fetchCategories(),
+            Provider.of<StaffProvider>(context, listen: false).fetchStaff(),
+            Provider.of<SupplierProvider>(context, listen: false).fetchSuppliers(),
+            Provider.of<UnitProvider>(context, listen: false).fetchUnits(),
+            Provider.of<PurchaseReminderProvider>(context, listen: false).fetchReminders(),
+            Provider.of<ProfileProvider>(context, listen: false).loadProfile(),
+          ]);
         }
 
         await fetchTransactions();
-        debugPrint("✅ Master Restore Completed Successfully");
+        _lastSyncTime = DateTime.now();
+        debugPrint("✅ Fast Master Restore Completed!");
+        return true;
       } catch (e) {
         debugPrint("❌ Master Restore error: $e");
+        return false;
       } finally {
         _isSyncing = false;
         notifyListeners();
       }
     }
+    return false;
   }
 
   Future<void> restoreFromCloud() async => await masterRestoreFromCloud();
@@ -317,10 +359,8 @@ class TransactionProvider with ChangeNotifier {
     TransactionModel tx, {
     TransactionModel? oldTx,
   }) async {
-    // 0. DO NOT assign tokens to Salary or Expenses
     if (tx.category == 'Salary' || tx.type == 'expense') return;
 
-    // 1. If oldTx has token, preserve it
     if (oldTx != null) {
       String oldToken = _extractToken(oldTx.description);
       if (oldToken.isNotEmpty && !_extractToken(tx.description).isNotEmpty) {
@@ -329,7 +369,6 @@ class TransactionProvider with ChangeNotifier {
       }
     }
 
-    // 2. If tx doesn't have token, assign new one
     if (_extractToken(tx.description).isEmpty) {
       int token = await _getNextTokenNumber();
       _injectToken(tx, token.toString());
@@ -357,20 +396,16 @@ class TransactionProvider with ChangeNotifier {
           : _normalizeStatus(tx.status);
       tx.category = tx.category.trim();
 
-      // Assign Token
       await _ensureToken(tx);
 
-      // Insert in DB
       int id = await DatabaseHelper.instance.insertTransaction(tx);
       tx.id = id;
 
-      // Update in memory immediately for "Realtime" feel
       _allTransactions.insert(0, tx);
-      notifyListeners(); // UI updates instantly
+      notifyListeners(); 
 
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
 
-      // Sync in background - doesn't block UI
       _syncSingleTransaction(tx);
       return tx;
     } catch (e) {
@@ -391,28 +426,24 @@ class TransactionProvider with ChangeNotifier {
       tx.category = tx.category.trim();
       tx.isSynced = 0;
 
-      // Preserve or Assign Token
       await _ensureToken(tx, oldTx: oldTx);
 
       if (oldTx != null)
         await _applyStockEffect(oldTx, itemProvider, isAddingEffect: false);
       await DatabaseHelper.instance.updateTransaction(tx);
 
-      // Update in memory immediately for "Realtime" feel
       final index = _allTransactions.indexWhere((t) => t.id == tx.id);
       if (index != -1) {
         _allTransactions[index] = tx;
-        notifyListeners(); // Immediate UI Update
+        notifyListeners();
       }
 
-      // Stock and side effects
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
 
       if (tx.status == 'completed' && tx.id != null) {
         await NotificationService().cancelOrderReminders(tx.id!);
       }
 
-      // Background Sync
       _syncSingleTransaction(tx);
       return tx;
     } catch (e) {
@@ -443,11 +474,9 @@ class TransactionProvider with ChangeNotifier {
       final List<dynamic> items = jsonDecode(cleanJson);
       for (var item in items) {
         if (item is Map && item['name'] == itemName) {
-          // FIX: Also match quantity to handle half/full variants separately
           final double storedQty =
               double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
           if ((storedQty - itemQty).abs() < 0.01) {
-            // Quantities match (within tolerance for floating point)
             item['checked'] = isChecked;
             break;
           }
@@ -457,7 +486,6 @@ class TransactionProvider with ChangeNotifier {
       tx.description = jsonEncode(items) + metadata;
       tx.isSynced = 0;
 
-      // Update memory first
       _allTransactions[index] = tx;
       notifyListeners();
 
@@ -481,7 +509,6 @@ class TransactionProvider with ChangeNotifier {
 
       final originalTx = _allTransactions[index];
       final tx = TransactionModel.fromMap(originalTx.toMap());
-      // ... logic for qty ...
       bool isSale =
           tx.type.toLowerCase() == 'sale' || tx.type.toLowerCase() == 'income';
 
@@ -533,7 +560,6 @@ class TransactionProvider with ChangeNotifier {
         return;
       }
 
-      // Re-calculate raw items sum using accurate portion rules
       double newRawSum = 0;
       for (var it in itemsList) {
         double q = double.tryParse(it['qty'].toString()) ?? 0;
@@ -719,7 +745,6 @@ class TransactionProvider with ChangeNotifier {
 
       final tx = _allTransactions[index];
 
-      // Update memory immediately
       tx.isDeleted = 1;
       tx.deletedAt = DateTime.now();
       notifyListeners();
@@ -741,7 +766,6 @@ class TransactionProvider with ChangeNotifier {
 
       final tx = _allTransactions[index];
 
-      // Update memory immediately
       tx.isDeleted = 0;
       tx.deletedAt = null;
       notifyListeners();
@@ -772,51 +796,73 @@ class TransactionProvider with ChangeNotifier {
     required bool isAddingEffect,
   }) async {
     final items = tx.parsedItems;
+    bool isSaleType = tx.type == 'sale' || tx.type == 'income';
+    bool isPurchaseType = tx.type == 'purchase';
+
     for (var itemMap in items) {
       try {
-        final name = itemMap['name']!;
-        ItemModel? masterItem;
-        try {
-          masterItem = itemProvider.items.firstWhere((i) => i.name == name);
-        } catch (_) {}
+        final name = itemMap['name']!.toString().trim().toLowerCase();
+        
+        final masterItem = itemProvider.items.firstWhere(
+          (i) => i.name.trim().toLowerCase() == name,
+          orElse: () => ItemModel(name: 'Unknown', category: '', unit: '', minStock: 0, currentStock: 0)
+        );
 
-        if (masterItem != null && masterItem.id != null) {
-          final displayQty =
-              (double.tryParse(itemMap['qty']?.toString() ?? '0') ?? 0)
-                  .toDouble();
-          final extraQty =
-              (double.tryParse(itemMap['extra_qty']?.toString() ?? '0') ?? 0)
-                  .toDouble();
-          final totalDisplayQty = displayQty + extraQty;
+        if (masterItem.id == null) continue;
 
-          double piecesToAdjust = totalDisplayQty;
+        final displayQty = (double.tryParse(itemMap['qty']?.toString() ?? '0') ?? 0).toDouble();
+        final extraQty = (double.tryParse(itemMap['extra_qty']?.toString() ?? '0') ?? 0).toDouble();
 
-          // Ready-made items are handled 1:1, but selling items need their full_qty multiplier
-          if (masterItem.itemType == 'selling') {
-            piecesToAdjust = totalDisplayQty * (masterItem.fullQty ?? 1.0);
+        // Multiplier Logic for Packets/Plates to Pieces conversion
+        double multiplier = 1.0;
+        final variant = itemMap['variant']?.toString() ?? 'Full';
+        
+        if (variant.toLowerCase() == 'half' && isSaleType) {
+          multiplier = (masterItem.halfQty != null && masterItem.halfQty! > 0) 
+              ? masterItem.halfQty! 
+              : 0.5;
+        } else {
+          // For 'Full', 'None', or Purchases (treating Qty as Packet count)
+          multiplier = (masterItem.fullQty != null && masterItem.fullQty! > 0) 
+              ? masterItem.fullQty! 
+              : 1.0;
+        }
+
+        // Calculation: (Quantity entered * multiplier) + extra pieces
+        double piecesToAdjust = (displayQty * multiplier) + extraQty;
+
+        // 1. ADJUST MAIN ITEM STOCK
+        if (piecesToAdjust > 0) {
+          bool shouldIncrease = isPurchaseType ? isAddingEffect : !isAddingEffect;
+          await itemProvider.adjustStock(masterItem.id!, piecesToAdjust, shouldIncrease);
+        }
+
+        // 2. RECIPE CONSUMPTION
+        if ((masterItem.itemType == 'selling' || masterItem.itemType == 'readymade') && isSaleType) {
+          final recipe = itemProvider.getRecipe(masterItem.id!);
+          final masterStockKey = itemProvider.getStockKey(masterItem);
+
+          for (var component in recipe) {
+            final componentItem = itemProvider.items.firstWhere(
+              (i) => i.id == component.materialId,
+              orElse: () => ItemModel(name: 'Unknown', category: '', unit: '', minStock: 0, currentStock: 0)
+            );
+
+            if (componentItem.id == null) continue;
+
+            final String materialStockKey = itemProvider.getStockKey(componentItem);
+            if (materialStockKey == masterStockKey) {
+              continue;
+            }
+
+            // Recipe consumption is typically per "Serving Unit" (the unit sold).
+            // So if you sell 1 "Plate", you consume the recipe defined for 1 plate.
+            // We use displayQty + (extraQty / multiplier) to get the 'serving units' sold.
+            double servingUnitsSold = displayQty + (extraQty / multiplier);
+            final double materialQtyToAdjust = servingUnitsSold * component.quantity;
+
+            await itemProvider.adjustStock(component.materialId, materialQtyToAdjust, !isAddingEffect);
           }
-
-          if (piecesToAdjust == 0) continue;
-
-          bool shouldIncrease;
-          if (tx.type == 'sale' || tx.type == 'income') {
-            // Sales decrease stock. If we are removing the effect (undoing sale), increase it.
-            shouldIncrease = !isAddingEffect;
-          } else if (tx.type == 'purchase') {
-            // Purchases increase stock. If we are removing the effect, decrease it.
-            shouldIncrease = isAddingEffect;
-          } else {
-            // Regular expenses/others don't automatically adjust item stock
-            // unless they are explicitly marked as 'purchase' type.
-            continue;
-          }
-
-          // Centralized stock adjustment logic in ItemProvider
-          await itemProvider.adjustStock(
-            masterItem.id!,
-            piecesToAdjust,
-            shouldIncrease,
-          );
         }
       } catch (e) {
         debugPrint("Stock adjustment failed: $e");
@@ -1016,7 +1062,6 @@ class TransactionProvider with ChangeNotifier {
         metadata = tx.description.substring(tx.description.indexOf(' | '));
       }
 
-      // Convert snapshots back to Map for JSON
       final List<Map<String, dynamic>> jsonList = updatedSnapshots.map((s) {
         return {
           'id': s.id,
@@ -1042,12 +1087,10 @@ class TransactionProvider with ChangeNotifier {
       tx.description = jsonEncode(jsonList) + metadata;
       tx.isSynced = 0;
 
-      // Update in local DB and memory
       await DatabaseHelper.instance.updateTransaction(tx);
       _allTransactions[index] = tx;
       notifyListeners();
 
-      // Sync to cloud
       _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error updating transaction snapshots: $e");

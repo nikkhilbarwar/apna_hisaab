@@ -344,12 +344,15 @@ class _MainNavigationState extends State<MainNavigation>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            syncProvider.syncStatus,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: profile.textColor,
-                              fontSize: 13,
+                          Expanded(
+                            child: Text(
+                              syncProvider.syncStatus,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: profile.textColor,
+                                fontSize: 13,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           Text(
@@ -371,6 +374,19 @@ class _MainNavigationState extends State<MainNavigation>
                           backgroundColor: profile.themeColor.withValues(
                             alpha: 0.1,
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        onPressed: () => syncProvider.resetSync(),
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text(
+                          "RESET SYNC",
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          visualDensity: VisualDensity.compact,
                         ),
                       ),
                     ],

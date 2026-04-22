@@ -322,6 +322,19 @@ class TransactionModel {
     return 0.0;
   }
 
+  double get transportValue {
+    if (description.contains('| Transport: ₹')) {
+      final parts = description.split('| Transport: ₹');
+      if (parts.length > 1) {
+        return double.tryParse(
+              parts.last.split(' | ').first.replaceAll(RegExp(r'[^0-9.]'), ''),
+            ) ??
+            0.0;
+      }
+    }
+    return 0.0;
+  }
+
   Map<String, dynamic> toMap() {
     return {
       if (id != null) 'id': id,

@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:intl/intl.dart';
+import '../core/database/database_helper.dart';
 import '../models/item_model.dart';
 import '../models/category_model.dart';
-import '../core/database/database_helper.dart';
+import '../models/recipe_model.dart';
 import '../services/firebase_service.dart';
 
 class ItemProvider with ChangeNotifier {
   List<ItemModel> _items = [];
   List<CategoryModel> _categories = [];
+  Map<int, List<RecipeModel>> _recipes = {}; // productId -> List<RecipeModel>
   final FirebaseService _firebaseService = FirebaseService();
   bool _isSyncing = false;
 
@@ -18,7 +20,22 @@ class ItemProvider with ChangeNotifier {
   final Map<String, double> _lastAlertStockLevel =
       {}; // key -> stockLevelWhenAlerted
 
-  String _getAlertKey(ItemModel item) {
+  String getStockKey(ItemModel item) {
+    // 1. Linked Item priority (Take first one for the key)
+    if (item.linkedItemIds.isNotEmpty) return "ITEM_${item.linkedItemIds.first}";
+
+    // 2. Linked Category priority
+    if (item.linkedCategoryIds.isNotEmpty) {
+      try {
+        final cat =
+            _categories.firstWhere((c) => c.id == item.linkedCategoryIds.first);
+        return "CAT_${cat.name.trim().toLowerCase()}";
+      } catch (_) {
+        return "CAT_ID_${item.linkedCategoryIds.first}";
+      }
+    }
+
+    // 3. Own Category Shared Stock
     CategoryModel? cat;
     try {
       cat = _categories.firstWhere(
@@ -29,10 +46,29 @@ class ItemProvider with ChangeNotifier {
     if (cat != null && cat.useCategoryStock == 1) {
       return "CAT_${cat.name.trim().toLowerCase()}";
     }
+
+    // 4. Individual Item
     return "ITEM_${item.id}";
   }
 
   double _getAlertCurrentValue(ItemModel item) {
+    // 1. Linked Item takes highest priority for stock value
+    if (item.linkedItemIds.isNotEmpty) {
+      try {
+        return _items.firstWhere((i) => i.id == item.linkedItemIds.first).currentStock;
+      } catch (_) {}
+    }
+
+    // 2. Linked Category takes next priority
+    if (item.linkedCategoryIds.isNotEmpty) {
+      try {
+        return _categories
+            .firstWhere((c) => c.id == item.linkedCategoryIds.first)
+            .stockQty;
+      } catch (_) {}
+    }
+
+    // 3. Own Category Shared Stock
     CategoryModel? cat;
     try {
       cat = _categories.firstWhere(
@@ -91,7 +127,7 @@ class ItemProvider with ChangeNotifier {
     Map<String, ItemModel> alerts = {};
 
     for (var item in lowStockItems) {
-      String key = _getAlertKey(item);
+      String key = getStockKey(item);
       double currentVal = _getAlertCurrentValue(item);
 
       // 1. If stock level changed since last dismissal, show again
@@ -117,14 +153,14 @@ class ItemProvider with ChangeNotifier {
   }
 
   void dismissAlertForToday(ItemModel item) {
-    String key = _getAlertKey(item);
+    String key = getStockKey(item);
     _dismissedKeysToday[key] = DateFormat('yyyy-MM-dd').format(DateTime.now());
     _lastAlertStockLevel[key] = _getAlertCurrentValue(item);
     notifyListeners();
   }
 
   void snoozeAlert(ItemModel item, {int minutes = 60}) {
-    String key = _getAlertKey(item);
+    String key = getStockKey(item);
     _snoozedKeys[key] = DateTime.now().add(Duration(minutes: minutes));
     _lastAlertStockLevel[key] = _getAlertCurrentValue(item);
     notifyListeners();
@@ -174,10 +210,54 @@ class ItemProvider with ChangeNotifier {
   Future<void> fetchItems() async {
     try {
       _items = await DatabaseHelper.instance.getAllItems();
+      await _fetchRecipes();
       notifyListeners();
     } catch (e) {
       debugPrint("Error fetching items: $e");
     }
+  }
+
+  Future<void> _fetchRecipes() async {
+    _recipes.clear();
+    for (var item in _items) {
+      if (item.id != null &&
+          (item.itemType == 'selling' || item.itemType == 'readymade')) {
+        final recipeMaps =
+            await DatabaseHelper.instance.getRecipesByProduct(item.id!);
+        if (recipeMaps.isNotEmpty) {
+          _recipes[item.id!] =
+              recipeMaps.map((m) => RecipeModel.fromMap(m)).toList();
+        }
+      }
+    }
+  }
+
+  List<RecipeModel> getRecipe(int productId) => _recipes[productId] ?? [];
+
+  Future<void> saveRecipe(int productId, List<RecipeModel> recipe) async {
+    // 1. Delete from SQLite
+    await DatabaseHelper.instance.deleteRecipesByProduct(productId);
+    // 2. Delete from Firebase
+    await _firebaseService.deleteRecipesByProductId(productId);
+
+    for (var component in recipe) {
+      final id = await DatabaseHelper.instance.insertRecipe(
+        productId,
+        component.materialId,
+        component.quantity,
+      );
+      // Sync each recipe to Firebase immediately
+      final newRecipe = RecipeModel(
+        id: id,
+        productId: productId,
+        materialId: component.materialId,
+        quantity: component.quantity,
+      );
+      await _firebaseService.syncRecipe(newRecipe);
+      await DatabaseHelper.instance.updateSyncStatus('recipes', id, 1);
+    }
+    await _fetchRecipes();
+    notifyListeners();
   }
 
   Future<void> fetchCategories() async {
@@ -208,11 +288,12 @@ class ItemProvider with ChangeNotifier {
     }
   }
 
-  bool isItemExists(String name, {int? excludeId}) {
+  bool isItemExists(String name, {int? excludeId, String? itemType}) {
     return _items.any(
       (item) =>
           item.name.toLowerCase().trim() == name.toLowerCase().trim() &&
-          item.id != excludeId,
+          item.id != excludeId &&
+          (itemType == null || item.itemType == itemType),
     );
   }
 
@@ -220,22 +301,49 @@ class ItemProvider with ChangeNotifier {
     item.name = item.name.trim();
     item.category = item.category.trim();
 
-    if (isItemExists(item.name)) return false;
+    if (isItemExists(item.name, itemType: item.itemType)) return false;
 
     try {
       item.isSynced = 0;
 
-      // If item is in a shared stock category, force it to use category stock
-      CategoryModel? cat;
-      try {
-        cat = _categories.firstWhere(
-          (c) =>
-              c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
+      // Ensure the category exists in the categories table
+      bool catExists = _categories.any(
+        (c) => c.name.toLowerCase() == item.category.toLowerCase(),
+      );
+      if (!catExists && item.category.isNotEmpty) {
+        final newCat = CategoryModel(
+          name: item.category,
+          type: item.itemType == 'purchase' ? 'purchase' : 'selling',
+          iconName: item.itemType == 'purchase' ? 'inventory_2' : 'category',
+          displayOrder: _categories.length,
         );
-      } catch (_) {}
-      if (cat != null && cat.useCategoryStock == 1) {
-        item.currentStock = cat.stockQty;
-        item.lowStockAlert = 1; // Always on for shared
+        await DatabaseHelper.instance.insertCategory(newCat);
+        await fetchCategories(); // Refresh local category list
+      }
+
+      // Logic for Linked Stock or Shared Category Stock
+      if (item.linkedItemIds.isNotEmpty) {
+        try {
+          item.currentStock = _items.firstWhere((i) => i.id == item.linkedItemIds.first).currentStock;
+        } catch (_) {}
+      } else if (item.linkedCategoryIds.isNotEmpty) {
+        try {
+          item.currentStock = _categories.firstWhere((c) => c.id == item.linkedCategoryIds.first).stockQty;
+        } catch (_) {}
+      } else {
+        CategoryModel? cat;
+        try {
+          cat = _categories.firstWhere(
+            (c) =>
+                c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
+          );
+        } catch (_) {}
+        if (cat != null && cat.useCategoryStock == 1) {
+          item.currentStock = cat.stockQty;
+          // Item should inherit alert setting if category alert is on
+          item.lowStockAlert = 1;
+          item.minStock = cat.lowStockLimit;
+        }
       }
 
       int id = await DatabaseHelper.instance.insertItem(item);
@@ -263,21 +371,36 @@ class ItemProvider with ChangeNotifier {
     item.name = item.name.trim();
     item.category = item.category.trim();
 
-    if (isItemExists(item.name, excludeId: item.id)) return false;
+    if (isItemExists(item.name, excludeId: item.id, itemType: item.itemType)) return false;
 
     try {
       item.isSynced = 0;
 
-      // If item moved to/is in a shared stock category, sync its stock
-      CategoryModel? cat;
-      try {
-        cat = _categories.firstWhere(
-          (c) =>
-              c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
-        );
-      } catch (_) {}
-      if (cat != null && cat.useCategoryStock == 1) {
-        item.currentStock = cat.stockQty;
+      // Sync stock if linked
+      if (item.linkedItemIds.isNotEmpty) {
+        try {
+          item.currentStock = _items.firstWhere((i) => i.id == item.linkedItemIds.first).currentStock;
+        } catch (_) {}
+      } else if (item.linkedCategoryIds.isNotEmpty) {
+        try {
+          item.currentStock = _categories.firstWhere((c) => c.id == item.linkedCategoryIds.first).stockQty;
+        } catch (_) {}
+      } else {
+        // If item moved to/is in a shared stock category, sync its stock
+        CategoryModel? cat;
+        try {
+          cat = _categories.firstWhere(
+            (c) =>
+                c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
+          );
+        } catch (_) {}
+        if (cat != null && cat.useCategoryStock == 1) {
+          item.currentStock = cat.stockQty;
+          // Sync alert settings too if it's a shared stock category
+          if (cat.lowStockLimit != null) {
+            item.minStock = cat.lowStockLimit;
+          }
+        }
       }
 
       await DatabaseHelper.instance.updateItem(item);
@@ -361,11 +484,39 @@ class ItemProvider with ChangeNotifier {
   Future<void> permanentDeleteItem(int id) async {
     try {
       await DatabaseHelper.instance.permanentDeleteItem(id);
+      await DatabaseHelper.instance.deleteRecipesByProduct(id);
       await _firebaseService.deleteItem(id);
+      await _firebaseService.deleteRecipesByProductId(id);
       _items.removeWhere((i) => i.id == id);
+      _recipes.remove(id);
       notifyListeners();
     } catch (e) {
       debugPrint("Error permanent deleting item: $e");
+    }
+  }
+
+  Future<void> adjustStock(int itemId, double quantity, bool isAdding) async {
+    try {
+      final item = _items.firstWhere((i) => i.id == itemId);
+      
+      // If this item is a CHILD (e.g. Burger linked to Bun), 
+      // redirect the adjustment to the PARENT (Bun).
+      if (item.linkedItemIds.isNotEmpty) {
+        for (var parentId in item.linkedItemIds) {
+          await adjustStock(parentId, quantity, isAdding);
+        }
+        return;
+      }
+
+      // If this item is part of a LINKED CATEGORY, redirect adjustment to the category pool
+      // (This is handled inside updateStock, but we calculate based on category value here)
+      
+      double currentVal = _getAlertCurrentValue(item);
+      double newStock = isAdding ? currentVal + quantity : currentVal - quantity;
+
+      await updateStock(itemId, newStock);
+    } catch (e) {
+      debugPrint("Adjust Stock Error: $e");
     }
   }
 
@@ -373,69 +524,61 @@ class ItemProvider with ChangeNotifier {
     try {
       final item = _items.firstWhere((i) => i.id == id);
 
+      // 1. UPDATE PRIMARY SOURCE (The record that actually holds the stock value)
+      
       CategoryModel? cat;
       try {
         cat = _categories.firstWhere(
-          (c) =>
-              c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
+          (c) => c.name.trim().toLowerCase() == item.category.trim().toLowerCase(),
         );
       } catch (_) {}
 
       if (cat != null && cat.useCategoryStock == 1) {
-        // Shared Category Stock Logic:
-        // Use the newStock as the NEW absolute pool value
-        double newCatStock = newStock;
-
-        // 1. Update Category Stock in DB
-        await DatabaseHelper.instance.updateCategoryStock(cat.id!, newCatStock);
-
-        // 2. Update ALL items in this category to have the same stock level in DB
-        await DatabaseHelper.instance.updateCategoryItemsStock(
-          cat.name,
-          newCatStock,
-        );
-
-        // 3. Sync all affected items to Firebase before refreshing local state
-        // to ensure the local state reflects the synced status accurately if needed
-        final affectedItems = _items
-            .where(
-              (i) =>
-                  i.category.trim().toLowerCase() ==
-                  cat!.name.trim().toLowerCase(),
-            )
-            .toList();
-        for (var ai in affectedItems) {
-          _firebaseService.syncItem(ai).then((_) {
-            DatabaseHelper.instance.updateSyncStatus('items', ai.id!, 1);
-          });
+        // A. Shared Category Logic
+        await DatabaseHelper.instance.updateCategoryStock(cat.id!, newStock);
+        await DatabaseHelper.instance.updateCategoryItemsStock(cat.name, newStock);
+      } else if (item.linkedItemIds.isNotEmpty) {
+        // B. Linked Items (Parents) Logic
+        for (var parentId in item.linkedItemIds) {
+          await DatabaseHelper.instance.updateItemStock(parentId, newStock);
+          // If Parent belongs to a shared category, update that too
+          try {
+            final parent = _items.firstWhere((i) => i.id == parentId);
+            final pCat = _categories.firstWhere((c) => c.name.trim().toLowerCase() == parent.category.trim().toLowerCase());
+            if (pCat.useCategoryStock == 1) {
+              await DatabaseHelper.instance.updateCategoryStock(pCat.id!, newStock);
+              await DatabaseHelper.instance.updateCategoryItemsStock(pCat.name, newStock);
+            }
+          } catch (_) {}
         }
-
-        // 4. Refresh local state (this will re-fetch everything from DB)
-        await refreshData();
       } else {
-        // Normal individual stock update
+        // C. Individual Item Stock
         await DatabaseHelper.instance.updateItemStock(id, newStock);
-        await fetchItems();
-        final updatedItem = _items.firstWhere((i) => i.id == id);
-        _firebaseService.syncItem(updatedItem).then((_) {
-          DatabaseHelper.instance.updateSyncStatus('items', id, 1);
-        });
       }
-    } catch (e) {
-      debugPrint("Local Stock Update Error: $e");
-    }
-  }
 
-  Future<void> adjustStock(int itemId, double quantity, bool isAdding) async {
-    try {
-      final item = _items.firstWhere((i) => i.id == itemId);
-      double newStock = isAdding
-          ? item.currentStock + quantity
-          : item.currentStock - quantity;
+      // 2. PROPAGATION TO LINKED CATEGORIES (Explicit links)
+      if (item.linkedCategoryIds.isNotEmpty) {
+        for (var catId in item.linkedCategoryIds) {
+          await DatabaseHelper.instance.updateCategoryStock(catId, newStock);
+          try {
+            final lCat = _categories.firstWhere((c) => c.id == catId);
+            await DatabaseHelper.instance.updateCategoryItemsStock(lCat.name, newStock);
+          } catch (_) {}
+        }
+      }
 
-      await updateStock(itemId, newStock);
+      // 3. PROPAGATION TO CHILDREN (If this item is a Parent, update all its linked children)
+      for (var i in _items) {
+        if (i.linkedItemIds.contains(id)) {
+          await DatabaseHelper.instance.updateItemStock(i.id!, newStock);
+        }
+      }
+
+      // 4. SYNC UI & CLOUD
+      await refreshData();
+      syncAllPendingItems(); 
     } catch (e) {
-      debugPrint("Adjust Stock Error: $e");
+      debugPrint("Deep Stock Update Error: $e");
     }
   }
 }

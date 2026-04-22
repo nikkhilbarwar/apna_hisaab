@@ -623,26 +623,54 @@ class _StockScreenState extends State<StockScreen> {
                 ),
               ],
             ),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${item.currentStock % 1 == 0 ? item.currentStock.toInt() : item.currentStock}',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: isLow ? Colors.red : profile.textColor,
-                  ),
-                ),
-                Text(
-                  item.unit,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: profile.secondaryTextColor,
-                  ),
-                ),
-              ],
+            trailing: Builder(
+              builder: (context) {
+                double displayStock = item.currentStock;
+                String extraInfo = "";
+                
+                // Logic: If purchase item with multiplier, convert pieces back to units
+                if (item.itemType == 'purchase' && item.fullQty != null && item.fullQty! > 1) {
+                  displayStock = item.currentStock / item.fullQty!;
+                  extraInfo = "(${item.currentStock.toInt()} Pcs)";
+                }
+
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${displayStock % 1 == 0 ? displayStock.toInt() : displayStock.toStringAsFixed(1)}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isLow ? Colors.red : profile.textColor,
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (extraInfo.isNotEmpty) ...[
+                          Text(
+                            extraInfo,
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: profile.secondaryTextColor,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          item.unit,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: profile.secondaryTextColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
             onTap: () => _showItemActions(context, itemProvider, item, profile),
           ),

@@ -43,13 +43,34 @@ class DatabaseHelper {
 
     return await openDatabase(
       path, 
-      version: 28,
+      version: 33,
       onCreate: _createDB, 
-      onUpgrade: _onUpgrade
+      onUpgrade: (db, oldVersion, newVersion) async {
+        debugPrint("MIGRATION: Upgrading from $oldVersion to $newVersion");
+        await _onUpgrade(db, oldVersion, newVersion);
+      }
     );
   }
 
-  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    debugPrint("DEBUG: Running migration from $oldVersion to $newVersion");
+    
+    var tableInfo = await db.rawQuery('PRAGMA table_info(items)');
+    var columns = tableInfo.map((row) => row['name']).toList();
+    
+    if (!columns.contains('linked_item_id')) {
+      await db.execute('ALTER TABLE items ADD COLUMN linked_item_id INTEGER');
+    }
+    if (!columns.contains('linked_category_id')) {
+      await db.execute('ALTER TABLE items ADD COLUMN linked_category_id INTEGER');
+    }
+    if (!columns.contains('purchase_price')) {
+      await db.execute('ALTER TABLE items ADD COLUMN purchase_price REAL');
+    }
+    if (!columns.contains('transport_cost')) {
+      await db.execute('ALTER TABLE items ADD COLUMN transport_cost REAL');
+    }
+    
     if (oldVersion < 19) {
       try { await db.execute('ALTER TABLE categories ADD COLUMN display_order INTEGER DEFAULT 0'); } catch(_) {}
     }
@@ -129,10 +150,24 @@ class DatabaseHelper {
       try { await db.execute('ALTER TABLE items ADD COLUMN purchase_price REAL'); } catch(_) {}
       try { await db.execute('ALTER TABLE items ADD COLUMN transport_cost REAL'); } catch(_) {}
     }
+    if (oldVersion < 29) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS recipes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          product_id INTEGER,
+          material_id INTEGER,
+          quantity REAL,
+          is_synced INTEGER DEFAULT 0
+        )
+      ''');
+    }
+    if (oldVersion < 30) {
+      try { await db.execute('ALTER TABLE items ADD COLUMN linked_item_ids TEXT DEFAULT ""'); } catch(_) {}
+      try { await db.execute('ALTER TABLE items ADD COLUMN linked_category_ids TEXT DEFAULT ""'); } catch(_) {}
+    }
   }
 
   Future _createDB(Database db, int version) async {
-    // ... existing tables ...
     await db.execute('''
       CREATE TABLE transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,7 +213,9 @@ class DatabaseHelper {
         is_deleted INTEGER DEFAULT 0,
         deleted_at TEXT,
         purchase_price REAL,
-        transport_cost REAL
+        transport_cost REAL,
+        linked_item_ids TEXT,
+        linked_category_ids TEXT
       )
     ''');
 
@@ -270,6 +307,16 @@ class DatabaseHelper {
         is_synced INTEGER DEFAULT 0
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE recipes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER,
+        material_id INTEGER,
+        quantity REAL,
+        is_synced INTEGER DEFAULT 0
+      )
+    ''');
   }
 
   Future<void> clearAllData() async {
@@ -283,6 +330,19 @@ class DatabaseHelper {
     await db.delete('suppliers');
     await db.delete('units');
     await db.delete('purchase_reminders');
+    await db.delete('recipes');
+  }
+
+  Future<void> batchInsert(String table, List<Map<String, dynamic>> dataList) async {
+    if (dataList.isEmpty) return;
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+      for (var data in dataList) {
+        batch.insert(table, data, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+    });
   }
 
   Future<int> updateSyncStatus(String table, int id, int status) async {
@@ -298,6 +358,26 @@ class DatabaseHelper {
   Future<int> insertTransaction(TransactionModel tx) async {
     final db = await instance.database;
     return await db.insert('transactions', tx.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<int> insertRecipe(int productId, int materialId, double quantity, {int? isSynced}) async {
+    final db = await instance.database;
+    return await db.insert('recipes', {
+      'product_id': productId,
+      'material_id': materialId,
+      'quantity': quantity,
+      'is_synced': isSynced ?? 0,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getRecipesByProduct(int productId) async {
+    final db = await instance.database;
+    return await db.query('recipes', where: 'product_id = ?', whereArgs: [productId]);
+  }
+
+  Future<int> deleteRecipesByProduct(int productId) async {
+    final db = await instance.database;
+    return await db.delete('recipes', where: 'product_id = ?', whereArgs: [productId]);
   }
   Future<int> updateTransaction(TransactionModel tx) async {
     final db = await instance.database;
@@ -331,7 +411,39 @@ class DatabaseHelper {
 
   Future<int> insertItem(ItemModel item) async {
     final db = await instance.database;
-    return await db.insert('items', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    try {
+      debugPrint("DB: Inserting item: ${item.name} (ID: ${item.id})");
+      return await db.insert('items', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    } catch (e) {
+      debugPrint("DB ERROR: Failed to insert item ${item.name}: $e");
+      return -1;
+    }
+  }
+  
+  static String lastRestoreError = "";
+  static int lastRestoreSuccessCount = 0;
+  static int lastRestoreFailCount = 0;
+
+  Future<void> safeRestoreItems(List<Map<String, dynamic>> itemsFromFirebase) async {
+    lastRestoreError = "";
+    lastRestoreSuccessCount = 0;
+    lastRestoreFailCount = 0;
+
+    debugPrint("RESTORE: Starting restore for ${itemsFromFirebase.length} items");
+    
+    for (var itemMap in itemsFromFirebase) {
+      try {
+        final item = ItemModel.fromMap(itemMap);
+        await insertItem(item);
+        lastRestoreSuccessCount++;
+      } catch (e) {
+        lastRestoreFailCount++;
+        lastRestoreError = e.toString();
+        debugPrint("FAILED ITEM: $itemMap | ERROR: $e");
+      }
+    }
+    
+    debugPrint("RESTORE COMPLETE: Success: $lastRestoreSuccessCount, Fail: $lastRestoreFailCount");
   }
   Future<List<ItemModel>> getAllItems() async {
     final db = await instance.database;
@@ -422,7 +534,7 @@ class DatabaseHelper {
   }
   Future<int> permanentDeleteStaff(int id) async {
     final db = await instance.database;
-    return await db.delete('staff', where: 'id = ?', whereArgs: [id]);
+    return await db.delete('items', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> insertSupplier(SupplierModel supplier) async {
@@ -448,7 +560,7 @@ class DatabaseHelper {
     return await db.insert(
       'units', 
       {
-        if (id != null) 'id': id,
+        'id': id,
         'name': name, 
         'is_synced': isSynced
       }, 

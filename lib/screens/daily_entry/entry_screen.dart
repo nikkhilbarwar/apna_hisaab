@@ -175,7 +175,9 @@ class _EntryScreenState extends State<EntryScreen>
     setState(() {
       final p = price > 0
           ? price
-          : (variant == 'Half' ? (item.halfPrice ?? 0) : (item.price ?? 0));
+          : (!_isSellingType 
+              ? (item.purchasePrice ?? item.price ?? 0)
+              : (variant == 'Half' ? (item.halfPrice ?? 0) : (item.price ?? 0)));
       final unit = variant == 'Half'
           ? (item.halfUnit ?? 'Half')
           : (item.fullUnit ?? 'Full');
@@ -201,7 +203,7 @@ class _EntryScreenState extends State<EntryScreen>
             variant: variant,
             unit: unit,
             servingMethod: _isSellingType ? 'Dine-in' : 'N/A',
-            tableNumber: profile.totalTables > 0 ? '1' : '',
+            tableNumber: (_isSellingType && profile.totalTables > 0) ? '1' : '',
           ),
         );
       }
@@ -310,7 +312,9 @@ class _EntryScreenState extends State<EntryScreen>
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final qtyController = TextEditingController(text: '1');
     final priceController = TextEditingController(
-      text: (item.price ?? 0).toString(),
+      text: (item.purchasePrice != null && item.purchasePrice! > 0) 
+            ? item.purchasePrice.toString() 
+            : (item.price ?? 0).toString(),
     );
 
     AppBottomSheet.show(
@@ -1410,8 +1414,9 @@ class _EntryScreenState extends State<EntryScreen>
                         text: TextSpan(
                           children: [
                             TextSpan(
-                              text:
-                                  '${profile.currencySymbol}${item.price ?? 0}',
+                              text: _isSellingType 
+                                ? '${profile.currencySymbol}${item.price ?? 0}'
+                                : '${profile.currencySymbol}${item.purchasePrice ?? item.price ?? 0}',
                               style: TextStyle(
                                 color: themeColor,
                                 fontWeight: FontWeight.w900,

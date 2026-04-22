@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +22,7 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   bool _isCurrentlyRestoring = false;
   bool _hasCheckedRestore = false; // Flag to prevent infinite loop
+  bool _hasDoneInitialChecks = false; // Guard for heartbeat and other checks
 
   Future<void> _checkAndRestoreData(BuildContext context) async {
     // Only run if not already running and not already checked
@@ -33,37 +35,44 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
       final syncProvider = Provider.of<SyncProvider>(context, listen: false);
 
-      // Use a small delay to let the initial fetch finish
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Check if local database is essentially empty
       await txProvider.fetchTransactions();
 
       if (txProvider.transactions.isEmpty) {
-        if (mounted) {
-          setState(() => _isCurrentlyRestoring = true);
-          debugPrint("AuthWrapper: Local DB empty, starting cloud restore...");
+        debugPrint("AuthWrapper: Local DB empty, attempting 5s auto-restore...");
 
-          bool success = await syncProvider.fullRestoreFromServer(context);
+        if (mounted) setState(() => _isCurrentlyRestoring = true);
 
-          if (success) {
-            debugPrint("AuthWrapper: Restore Success. Refreshing UI...");
-            await txProvider.fetchTransactions();
-          }
-
+        // Try to restore with a 5 second timeout
+        bool success = false;
+        try {
+          success = await Future.any([
+            syncProvider.fullRestoreFromServer(context),
+            Future.delayed(const Duration(seconds: 5)).then((_) => throw TimeoutException("Restore too slow")),
+          ]);
+        } catch (e) {
+          debugPrint("AuthWrapper: Restore timeout or error: $e");
           if (mounted) {
-            setState(() {
-              _isCurrentlyRestoring = false;
-              _hasCheckedRestore =
-                  true; // Mark as done even if no data found on cloud
-            });
+            _showSlowRestoreDialog(context);
           }
         }
-      } else {
-        // If data is already there, no need to restore ever again in this session
+
+        if (success) {
+          debugPrint("AuthWrapper: Auto-Restore Success.");
+          await txProvider.fetchTransactions();
+          if (mounted) {
+            Provider.of<ProfileProvider>(context, listen: false).loadProfile();
+          }
+        }
+
         if (mounted) {
           setState(() {
+            _isCurrentlyRestoring = false;
             _hasCheckedRestore = true;
           });
         }
+      } else {
+        if (mounted) setState(() => _hasCheckedRestore = true);
       }
     } catch (e) {
       debugPrint("AuthWrapper Restore Check Error: $e");
@@ -74,6 +83,33 @@ class _AuthWrapperState extends State<AuthWrapper> {
         });
       }
     }
+  }
+
+  void _showSlowRestoreDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Restoring Backup"),
+        content: const Text(
+          "Your data is being restored from the cloud. This is taking longer than expected due to your internet speed or large backup size.\n\nYou can wait or continue to the app. Restoration will continue in the background.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("CONTINUE IN BACKGROUND"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // The _isCurrentlyRestoring state is already true, so the loading screen will stay
+              // unless we set it to false. If they want to "wait", they just stay on the loading screen.
+            },
+            child: const Text("WAIT"),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _checkAnnouncement(BuildContext context) async {
@@ -154,6 +190,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
         if (snapshot.hasData && snapshot.data != null) {
           final user = snapshot.data!;
 
+          // Trigger restore check immediately for ANY logged in user
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _checkAndRestoreData(context);
+          });
+
           // If we are in the middle of a restore, show the restore screen
           if (_isCurrentlyRestoring) {
             return Consumer<SyncProvider>(
@@ -177,8 +218,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
                   user.email == "missadvocate06@gmail.com";
 
               if (isAdmin || profile.isActivated) {
-                // Trigger checks ONCE after login
+                // Trigger additional checks ONCE after login
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  if (_hasDoneInitialChecks) return;
+                  _hasDoneInitialChecks = true;
+
                   if (isAdmin) {
                     final prefs = await SharedPreferences.getInstance();
                     await prefs.setString(
@@ -187,7 +231,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
                     );
                     await prefs.setBool('is_sys_admin', true);
                   }
-                  _checkAndRestoreData(context);
                   _checkAnnouncement(context);
                   _updateUserHeartbeat(profile);
                 });

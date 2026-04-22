@@ -132,6 +132,33 @@ class SupplierScreen extends StatelessWidget {
       context: context,
       profile: profile,
       title: supplier == null ? 'ADD NEW SUPPLIER' : 'EDIT SUPPLIER DETAILS',
+      footer: ElevatedButton(
+        onPressed: () {
+          if (nameController.text.isNotEmpty) {
+            final newSupplier = SupplierModel(
+              id: supplier?.id,
+              name: nameController.text,
+              contact: contactController.text,
+              itemsSupplied: itemsController.text,
+            );
+            if (supplier == null) {
+              provider.addSupplier(newSupplier);
+            } else {
+              provider.updateSupplier(newSupplier);
+            }
+            Navigator.pop(context);
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: themeColor,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 60),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          elevation: 0,
+        ),
+        child: Text(supplier == null ? 'SAVE SUPPLIER' : 'UPDATE DETAILS',
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 1)),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,34 +168,6 @@ class SupplierScreen extends StatelessWidget {
           _sheetTextField(contactController, 'Contact Number', Icons.phone_outlined, profile, isNumber: true),
           const SizedBox(height: 16),
           _sheetTextField(itemsController, 'Items Supplied', Icons.inventory_2_outlined, profile, maxLines: 2),
-          const SizedBox(height: 32),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty) {
-                final newSupplier = SupplierModel(
-                  id: supplier?.id,
-                  name: nameController.text,
-                  contact: contactController.text,
-                  itemsSupplied: itemsController.text,
-                );
-                if (supplier == null) {
-                  provider.addSupplier(newSupplier);
-                } else {
-                  provider.updateSupplier(newSupplier);
-                }
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: themeColor,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 60),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              elevation: 0,
-            ),
-            child: Text(supplier == null ? 'SAVE SUPPLIER' : 'UPDATE DETAILS',
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 1)),
-          ),
         ],
       ),
     );

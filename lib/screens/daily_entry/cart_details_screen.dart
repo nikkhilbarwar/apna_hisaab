@@ -42,6 +42,9 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   final TextEditingController _cashSplitController = TextEditingController();
   final TextEditingController _upiSplitController = TextEditingController();
   final TextEditingController _vendorNameController = TextEditingController();
+  final TextEditingController _transportController = TextEditingController(
+    text: '',
+  );
 
   String _paymentMode = 'Cash';
   bool _isLoading = false;
@@ -106,6 +109,8 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
 
       _discountController.text = widget.existingTransaction!.discountValue
           .toStringAsFixed(0);
+      _transportController.text = widget.existingTransaction!.transportValue
+          .toStringAsFixed(0);
       _paidAmountController.text = widget.existingTransaction!.paidAmount
           .toStringAsFixed(0);
       _cashSplitController.text = widget.existingTransaction!.cashAmount
@@ -134,6 +139,17 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
           widget.cart.first.tableNumber.isEmpty && profile.totalTables > 0
           ? '1'
           : widget.cart.first.tableNumber;
+      
+      // Calculate automated transport cost for new purchase
+      if (widget.type == 'purchase') {
+        double totalTransport = 0;
+        for (var item in widget.cart) {
+          totalTransport += (item.item.transportCost ?? 0) * item.quantity;
+        }
+        if (totalTransport > 0) {
+          _transportController.text = totalTransport.toStringAsFixed(0);
+        }
+      }
     } else {
       _selectedTable = profile.totalTables > 0 ? '1' : '';
     }
@@ -165,7 +181,8 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     double sub = _currentSubtotal;
     double tax = sub * (profile.taxPercentage / 100);
     double disc = double.tryParse(_discountController.text) ?? 0;
-    double total = sub + tax - disc;
+    double transport = double.tryParse(_transportController.text) ?? 0;
+    double total = sub + tax - disc + transport;
     return total < 0 ? 0 : total;
   }
 
@@ -412,6 +429,15 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
                     profileProvider,
                     onChanged: (_) => _syncPaidAmount(),
                   ),
+                  const SizedBox(height: 12),
+                  _entryField(
+                    _transportController,
+                    isPurchase ? 'Transport / Rent (₹)' : 'Delivery Charge (₹)',
+                    Icons.local_shipping_rounded,
+                    themeColor,
+                    profileProvider,
+                    onChanged: (_) => _syncPaidAmount(),
+                  ),
                   const SizedBox(height: 24),
 
                   Text(
@@ -494,9 +520,11 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   }
 
   Widget _buildSummaryCard(ProfileProvider profile) {
+    final isPurchase = widget.type == 'purchase';
     double sub = _currentSubtotal;
     double tax = sub * (profile.taxPercentage / 100);
     double disc = double.tryParse(_discountController.text) ?? 0;
+    double transport = double.tryParse(_transportController.text) ?? 0;
     double total = _currentGrandTotal;
     double paid = 0;
 
@@ -549,6 +577,15 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
               child: _summaryRow(
                 'Discount',
                 '- ${profile.currencySymbol}${disc.toStringAsFixed(0)}',
+                Colors.white.withValues(alpha: 0.9),
+              ),
+            ),
+          if (transport > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: _summaryRow(
+                isPurchase ? 'Transport / Rent' : 'Delivery Charge',
+                '${profile.currencySymbol}${transport.toStringAsFixed(0)}',
                 Colors.white.withValues(alpha: 0.9),
               ),
             ),
@@ -1442,9 +1479,14 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       double sub = _currentSubtotal;
       double taxAmt = sub * (profile.taxPercentage / 100);
       double discAmt = double.tryParse(_discountController.text) ?? 0;
+      double transportAmt = double.tryParse(_transportController.text) ?? 0;
 
       description +=
           " | Subtotal: ₹$sub | Tax: ₹${taxAmt.toStringAsFixed(0)} | Discount: ₹${discAmt.toStringAsFixed(0)}";
+
+      if (transportAmt > 0) {
+        description += " | Transport: ₹${transportAmt.toStringAsFixed(0)}";
+      }
 
       if (widget.type.toLowerCase() == 'purchase' &&
           _vendorNameController.text.isNotEmpty) {

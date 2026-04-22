@@ -436,6 +436,26 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen>
       context: context,
       profile: profile,
       title: 'Add New Unit',
+      footer: ElevatedButton(
+        onPressed: () {
+          if (controller.text.isNotEmpty) {
+            provider.addUnit(controller.text);
+            Navigator.pop(context);
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: profile.themeColor,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 56),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: const Text(
+          'ADD UNIT',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -451,27 +471,6 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen>
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                provider.addUnit(controller.text);
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: profile.themeColor,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 56),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'ADD UNIT',
-              style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -534,439 +533,391 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen>
       context: context,
       profile: profile,
       title: category == null ? 'ADD CATEGORY' : 'EDIT CATEGORY',
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.75,
-        child: StatefulBuilder(
-          builder: (context, setModalState) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextField(
-                        controller: nameController,
-                        style: TextStyle(color: profile.textColor),
-                        inputFormatters: [
-                          AppFormatter.capitalizeWordsFormatter,
-                        ],
-                        decoration: InputDecoration(
-                          labelText: 'Category Name',
-                          labelStyle: TextStyle(
-                            color: profile.secondaryTextColor,
-                          ),
-                          hintText: 'e.g. Raw Material, Cold Drinks',
-                          hintStyle: TextStyle(
-                            color: profile.secondaryTextColor.withValues(
-                              alpha: 0.5,
-                            ),
-                          ),
-                          prefixIcon: Icon(
-                            Icons.label_important_outline,
-                            color: themeColor,
-                          ),
-                          filled: true,
-                          fillColor: profile.scaffoldColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: themeColor, width: 2),
-                          ),
+      footer: StatefulBuilder(
+        builder: (context, setModalState) => ElevatedButton(
+          onPressed: () async {
+            if (nameController.text.isNotEmpty) {
+              final newCat = CategoryModel(
+                id: category?.id,
+                name: nameController.text,
+                iconName: selectedIcon,
+                type: selectedType,
+                displayOrder: category?.displayOrder ?? 0,
+                useCategoryStock: useCategoryStock ? 1 : 0,
+                stockQty: double.tryParse(stockController.text) ?? 0,
+                lowStockLimit: double.tryParse(limitController.text) ?? 10,
+              );
+
+              bool success;
+              if (category == null) {
+                success = await provider.addCategory(newCat);
+              } else {
+                success = await provider.updateCategory(newCat, category.name);
+              }
+
+              if (success) {
+                if (context.mounted) {
+                  Provider.of<ItemProvider>(context, listen: false)
+                      .refreshData();
+                }
+                Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Category with this name already exists!'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: themeColor,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 60),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            elevation: 0,
+          ),
+          child: Text(
+            category == null ? 'SAVE CATEGORY' : 'UPDATE CATEGORY',
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+      ),
+      child: StatefulBuilder(
+        builder: (context, setModalState) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: nameController,
+              style: TextStyle(color: profile.textColor),
+              inputFormatters: [AppFormatter.capitalizeWordsFormatter],
+              decoration: InputDecoration(
+                labelText: 'Category Name',
+                labelStyle: TextStyle(color: profile.secondaryTextColor),
+                hintText: 'e.g. Raw Material, Cold Drinks',
+                hintStyle: TextStyle(
+                  color: profile.secondaryTextColor.withValues(alpha: 0.5),
+                ),
+                prefixIcon: Icon(
+                  Icons.label_important_outline,
+                  color: themeColor,
+                ),
+                filled: true,
+                fillColor: profile.scaffoldColor,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: themeColor, width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'CATEGORY PURPOSE',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+                color: profile.secondaryTextColor,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setModalState(() => selectedType = 'selling'),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: selectedType == 'selling'
+                            ? Colors.green
+                            : profile.scaffoldColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: selectedType == 'selling'
+                              ? Colors.green
+                              : (profile.isDarkMode
+                                  ? Colors.white10
+                                  : Colors.grey.shade200),
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'CATEGORY PURPOSE',
+                      child: Text(
+                        'SELLING',
+                        textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                          color: profile.secondaryTextColor,
-                          letterSpacing: 1,
+                          color: selectedType == 'selling'
+                              ? Colors.white
+                              : profile.secondaryTextColor,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setModalState(() => selectedType = 'purchase'),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: selectedType == 'purchase'
+                            ? Colors.orange
+                            : profile.scaffoldColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: selectedType == 'purchase'
+                              ? Colors.orange
+                              : (profile.isDarkMode
+                                  ? Colors.white10
+                                  : Colors.grey.shade200),
+                        ),
+                      ),
+                      child: Text(
+                        'PURCHASE',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: selectedType == 'purchase'
+                              ? Colors.white
+                              : profile.secondaryTextColor,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () =>
+                        setModalState(() => selectedType = 'readymade'),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: selectedType == 'readymade'
+                            ? Colors.blue
+                            : profile.scaffoldColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: selectedType == 'readymade'
+                              ? Colors.blue
+                              : (profile.isDarkMode
+                                  ? Colors.white10
+                                  : Colors.grey.shade200),
+                        ),
+                      ),
+                      child: Text(
+                        'READYMADE',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: selectedType == 'readymade'
+                              ? Colors.white
+                              : profile.secondaryTextColor,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            if (selectedType == 'selling' || selectedType == 'readymade') ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: (selectedType == 'readymade'
+                          ? Colors.blue
+                          : Colors.green)
+                      .withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: (selectedType == 'readymade'
+                            ? Colors.blue
+                            : Colors.green)
+                        .withValues(alpha: 0.1),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.inventory_2_outlined,
+                              color: (selectedType == 'readymade'
+                                  ? Colors.blue
+                                  : Colors.green),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Category Wise Low Stock',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: profile.textColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Switch(
+                          value: useCategoryStock,
+                          activeColor: (selectedType == 'readymade'
+                              ? Colors.blue
+                              : Colors.green),
+                          onChanged: (val) => setModalState(
+                            () => useCategoryStock = val,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (useCategoryStock) ...[
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Expanded(
-                            child: GestureDetector(
-                              onTap: () =>
-                                  setModalState(() => selectedType = 'selling'),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: selectedType == 'selling'
-                                      ? Colors.green
-                                      : profile.scaffoldColor,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: selectedType == 'selling'
-                                        ? Colors.green
-                                        : (profile.isDarkMode
-                                              ? Colors.white10
-                                              : Colors.grey.shade200),
-                                  ),
-                                ),
-                                child: Text(
-                                  'SELLING',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: selectedType == 'selling'
-                                        ? Colors.white
-                                        : profile.secondaryTextColor,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 12,
-                                  ),
+                            child: TextField(
+                              controller: stockController,
+                              keyboardType: TextInputType.number,
+                              style: TextStyle(
+                                color: profile.textColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Shared Stock Qty',
+                                fillColor: profile.scaffoldColor,
+                                filled: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 12),
                           Expanded(
-                            child: GestureDetector(
-                              onTap: () => setModalState(
-                                () => selectedType = 'purchase',
+                            child: TextField(
+                              controller: limitController,
+                              keyboardType: TextInputType.number,
+                              style: TextStyle(
+                                color: profile.textColor,
+                                fontWeight: FontWeight.bold,
                               ),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: selectedType == 'purchase'
-                                      ? Colors.orange
-                                      : profile.scaffoldColor,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: selectedType == 'purchase'
-                                        ? Colors.orange
-                                        : (profile.isDarkMode
-                                              ? Colors.white10
-                                              : Colors.grey.shade200),
-                                  ),
-                                ),
-                                child: Text(
-                                  'PURCHASE',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: selectedType == 'purchase'
-                                        ? Colors.white
-                                        : profile.secondaryTextColor,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setModalState(
-                                () => selectedType = 'readymade',
-                              ),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: selectedType == 'readymade'
-                                      ? Colors.blue
-                                      : profile.scaffoldColor,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: selectedType == 'readymade'
-                                        ? Colors.blue
-                                        : (profile.isDarkMode
-                                              ? Colors.white10
-                                              : Colors.grey.shade200),
-                                  ),
-                                ),
-                                child: Text(
-                                  'READYMADE',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: selectedType == 'readymade'
-                                        ? Colors.white
-                                        : profile.secondaryTextColor,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 11,
-                                  ),
+                              decoration: InputDecoration(
+                                labelText: 'Low Stock Limit',
+                                fillColor: profile.scaffoldColor,
+                                filled: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
-
-                      if (selectedType == 'selling' ||
-                          selectedType == 'readymade') ...[
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color:
-                                (selectedType == 'readymade'
-                                        ? Colors.blue
-                                        : Colors.green)
-                                    .withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color:
-                                  (selectedType == 'readymade'
-                                          ? Colors.blue
-                                          : Colors.green)
-                                      .withValues(alpha: 0.1),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.inventory_2_outlined,
-                                        color: (selectedType == 'readymade'
-                                            ? Colors.blue
-                                            : Colors.green),
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        'Category Wise Low Stock',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                          color: profile.textColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Switch(
-                                    value: useCategoryStock,
-                                    activeColor: (selectedType == 'readymade'
-                                        ? Colors.blue
-                                        : Colors.green),
-                                    onChanged: (val) => setModalState(
-                                      () => useCategoryStock = val,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (useCategoryStock) ...[
-                                const SizedBox(height: 16),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: stockController,
-                                        keyboardType: TextInputType.number,
-                                        style: TextStyle(
-                                          color: profile.textColor,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        decoration: InputDecoration(
-                                          labelText: 'Shared Stock Qty',
-                                          fillColor: profile.scaffoldColor,
-                                          filled: true,
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: TextField(
-                                        controller: limitController,
-                                        keyboardType: TextInputType.number,
-                                        style: TextStyle(
-                                          color: profile.textColor,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        decoration: InputDecoration(
-                                          labelText: 'Low Stock Limit',
-                                          fillColor: profile.scaffoldColor,
-                                          filled: true,
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                const Text(
-                                  'Items in this category will share this stock pool and sync automatically.',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.blue,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-
-                      Text(
-                        'SELECT CATEGORY ICON',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                          color: profile.secondaryTextColor,
-                          letterSpacing: 1,
-                        ),
-                      ),
                       const SizedBox(height: 12),
-
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: profile.scaffoldColor,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: profile.isDarkMode
-                                ? Colors.white10
-                                : Colors.grey.shade200,
-                          ),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedIcon,
-                            isExpanded: true,
-                            icon: Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              color: themeColor,
-                            ),
-                            dropdownColor: profile.cardColor,
-                            borderRadius: BorderRadius.circular(16),
-                            items: availableIcons.map((item) {
-                              return DropdownMenuItem<String>(
-                                value: item['icon'],
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      _getIconData(item['icon']),
-                                      color: themeColor,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      item['name'],
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14,
-                                        color: profile.textColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null)
-                                setModalState(() => selectedIcon = val);
-                            },
-                          ),
+                      const Text(
+                        'Items in this category will share this stock pool and sync automatically.',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () async {
-                  if (nameController.text.isNotEmpty) {
-                    final newCat = CategoryModel(
-                      id: category?.id,
-                      name: nameController.text,
-                      iconName: selectedIcon,
-                      type: selectedType,
-                      displayOrder: category?.displayOrder ?? 0,
-                      useCategoryStock: useCategoryStock ? 1 : 0,
-                      stockQty: double.tryParse(stockController.text) ?? 0,
-                      lowStockLimit:
-                          double.tryParse(limitController.text) ?? 10,
-                    );
-
-                    bool success;
-                    if (category == null) {
-                      success = await provider.addCategory(newCat);
-                    } else {
-                      success = await provider.updateCategory(
-                        newCat,
-                        category.name,
-                      );
-                    }
-
-                    if (success) {
-                      if (context.mounted) {
-                        Provider.of<ItemProvider>(
-                          context,
-                          listen: false,
-                        ).refreshData();
-                      }
-                      Navigator.pop(context);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Category with this name already exists!',
-                          ),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: themeColor,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 60),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  category == null ? 'SAVE CATEGORY' : 'UPDATE CATEGORY',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
+              const SizedBox(height: 24),
             ],
-          ),
+            Text(
+              'SELECT CATEGORY ICON',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+                color: profile.secondaryTextColor,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: profile.scaffoldColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: profile.isDarkMode
+                      ? Colors.white10
+                      : Colors.grey.shade200,
+                ),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selectedIcon,
+                  isExpanded: true,
+                  icon: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: themeColor,
+                  ),
+                  dropdownColor: profile.cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  items: availableIcons.map((item) {
+                    return DropdownMenuItem<String>(
+                      value: item['icon'],
+                      child: Row(
+                        children: [
+                          Icon(
+                            _getIconData(item['icon']),
+                            color: themeColor,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            item['name'],
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: profile.textColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) setModalState(() => selectedIcon = val);
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

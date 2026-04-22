@@ -1,3 +1,4 @@
+
 class ItemModel {
   int? id;
   String name;
@@ -14,7 +15,9 @@ class ItemModel {
   double? fullQty; 
   double? halfQty; 
   String itemType; // 'selling' (prepared), 'purchase' (raw), 'readymade' (both)
-  int isSynced; 
+  List<int> linkedItemIds; // Links to specific selling items
+  List<int> linkedCategoryIds; // Links to selling categories (for Shared Stock)
+  int isSynced;
   int lowStockAlert; 
   String? icon; // Added for custom icon support
   int isDeleted;
@@ -36,6 +39,8 @@ class ItemModel {
     this.fullQty,
     this.halfQty,
     this.itemType = 'selling',
+    this.linkedItemIds = const [],
+    this.linkedCategoryIds = const [],
     this.isSynced = 0,
     this.lowStockAlert = 1,
     this.icon,
@@ -60,6 +65,8 @@ class ItemModel {
       'full_qty': fullQty,
       'half_qty': halfQty,
       'item_type': itemType,
+      'linked_item_ids': linkedItemIds.join(','),
+      'linked_category_ids': linkedCategoryIds.join(','),
       'is_synced': isSynced,
       'low_stock_alert': lowStockAlert,
       'icon': icon,
@@ -69,27 +76,38 @@ class ItemModel {
   }
 
   factory ItemModel.fromMap(Map<String, dynamic> map) {
-    return ItemModel(
-      id: (map['id'] as num?)?.toInt(),
-      name: map['name']?.toString() ?? '',
-      category: map['category']?.toString() ?? 'General',
-      unit: map['unit']?.toString() ?? 'pcs',
-      minStock: (map['min_stock'] as num? ?? 0).toDouble(),
-      currentStock: (map['current_stock'] as num? ?? 0).toDouble(),
-      price: map['price'] != null ? (map['price'] as num).toDouble() : null,
-      purchasePrice: map['purchase_price'] != null ? (map['purchase_price'] as num).toDouble() : null,
-      transportCost: map['transport_cost'] != null ? (map['transport_cost'] as num).toDouble() : null,
-      halfPrice: map['half_price'] != null ? (map['half_price'] as num).toDouble() : null,
-      fullUnit: map['full_unit']?.toString(),
-      halfUnit: map['half_unit']?.toString(),
-      fullQty: map['full_qty'] != null ? (map['full_qty'] as num).toDouble() : null,
-      halfQty: map['half_qty'] != null ? (map['half_qty'] as num).toDouble() : null,
-      itemType: map['item_type']?.toString() ?? 'selling',
-      isSynced: (map['is_synced'] as num? ?? 0).toInt(),
-      lowStockAlert: (map['low_stock_alert'] as num? ?? 1).toInt(),
-      icon: map['icon']?.toString(),
-      isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
-      deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
-    );
+    // Validate critical fields
+    if (map['name'] == null) {
+      throw Exception("Missing required field: 'name'. Data: $map");
+    }
+
+    try {
+      return ItemModel(
+        id: (map['id'] as num?)?.toInt(),
+        name: map['name'].toString(),
+        category: map['category']?.toString() ?? 'General',
+        unit: map['unit']?.toString() ?? 'pcs',
+        minStock: (map['min_stock'] as num? ?? 0).toDouble(),
+        currentStock: (map['current_stock'] as num? ?? 0).toDouble(),
+        price: (map['price'] as num?)?.toDouble(),
+        purchasePrice: (map['purchase_price'] as num?)?.toDouble(),
+        transportCost: (map['transport_cost'] as num?)?.toDouble(),
+        halfPrice: (map['half_price'] as num?)?.toDouble(),
+        fullUnit: map['full_unit']?.toString(),
+        halfUnit: map['half_unit']?.toString(),
+        fullQty: (map['full_qty'] as num?)?.toDouble(),
+        halfQty: (map['half_qty'] as num?)?.toDouble(),
+        itemType: map['item_type']?.toString() ?? 'selling',
+        linkedItemIds: (map['linked_item_ids']?.toString() ?? '').split(',').where((s) => s.isNotEmpty).map(int.parse).toList(),
+        linkedCategoryIds: (map['linked_category_ids']?.toString() ?? '').split(',').where((s) => s.isNotEmpty).map(int.parse).toList(),
+        isSynced: (map['is_synced'] as num? ?? 0).toInt(),
+        lowStockAlert: (map['low_stock_alert'] as num? ?? 1).toInt(),
+        icon: map['icon']?.toString(),
+        isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
+        deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
+      );
+    } catch (e) {
+      throw Exception("Parsing error: $e. Data: $map");
+    }
   }
 }

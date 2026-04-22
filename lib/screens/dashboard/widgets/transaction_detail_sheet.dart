@@ -29,9 +29,9 @@ class TransactionDetailSheet extends StatelessWidget {
     }
 
     double discount = tx.discountValue;
-    double subAfterDiscount = calculatedSubtotal - discount;
-    double taxAmount = tx.amount - subAfterDiscount;
-    if (taxAmount.abs() < 1.0) taxAmount = 0;
+    double transport = tx.transportValue;
+    double taxAmount = tx.taxValue;
+    double subtotal = tx.subtotalValue;
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
@@ -277,6 +277,12 @@ class TransactionDetailSheet extends StatelessWidget {
                       '- ${profile.currencySymbol}${discount.toStringAsFixed(0)}',
                       profile,
                       color: Colors.green,
+                    ),
+                  if (!isSalary && transport > 0)
+                    _detailRow(
+                      isSale ? 'Delivery Charge' : 'Transport / Rent',
+                      '${profile.currencySymbol}${transport.toStringAsFixed(0)}',
+                      profile,
                     ),
                   if (!isSalary && taxAmount > 0)
                     _detailRow(

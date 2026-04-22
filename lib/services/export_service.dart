@@ -769,8 +769,10 @@ class ExportService {
     }
 
     double discount = tx.discountValue;
-    double totalAfterDiscount = subtotal - discount;
-    double taxAmount = tx.amount - totalAfterDiscount;
+    double transport = tx.transportValue;
+    // Fix: Subtract transport from the difference to get actual tax
+    double totalAfterDiscountAndTransport = subtotal - discount + transport;
+    double taxAmount = tx.amount - totalAfterDiscountAndTransport;
     if (taxAmount.abs() < 0.1) taxAmount = 0;
 
     pdf.addPage(
@@ -892,6 +894,13 @@ class ExportService {
 
             _buildPdfBreakdownRow("Subtotal", subtotal.toStringAsFixed(0)),
             if (discount > 0) _buildPdfBreakdownRow("Discount", "-${discount.toStringAsFixed(0)}"),
+            if (tx.transportValue > 0) 
+              _buildPdfBreakdownRow(
+                (tx.type.toLowerCase() == 'sale' || tx.type.toLowerCase() == 'income') 
+                ? "Delivery Charge" 
+                : "Transport / Rent", 
+                tx.transportValue.toStringAsFixed(0)
+              ),
             if (taxAmount > 0) _buildPdfBreakdownRow("Tax", taxAmount.toStringAsFixed(0)),
 
             pw.SizedBox(height: 8),

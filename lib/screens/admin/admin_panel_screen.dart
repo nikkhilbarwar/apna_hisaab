@@ -2274,52 +2274,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     );
   }
 
-  void _showTicketChat(
-    String ticketId,
-    Map<String, dynamic> ticket,
-    ProfileProvider profile,
-  ) {
-    // Placeholder implementation - unused method
-  }
 
-  void _confirmDeleteReply(
-    String ticketId,
-    String replyId,
-    ProfileProvider profile,
-  ) {
-    if (replyId.isEmpty) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          "Delete Message?",
-          style: TextStyle(color: profile.textColor),
-        ),
-        content: Text(
-          "This will permanently delete this message for everyone.",
-          style: TextStyle(color: profile.secondaryTextColor),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("CANCEL"),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await LicenseService.deleteTicketReply(ticketId, replyId);
-            },
-            child: const Text(
-              "DELETE",
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _showSupportCenter(ProfileProvider profile) {
     showModalBottomSheet(
@@ -2868,11 +2823,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     } catch (e) {
       return "";
     }
-  }
-
-  Widget _buildSmallStatusBadge(String status) {
-    // Placeholder implementation - unused method
-    return Container();
   }
 
   Widget _buildPopupItem(

@@ -16,77 +16,26 @@ class LicenseService {
   static FirebaseFirestore get firestore => FirebaseFirestore.instance;
 
   static Future<String> getDeviceId() async {
-    var deviceInfo = DeviceInfoPlugin();
-    if (Platform.isAndroid) return (await deviceInfo.androidInfo).id;
-    if (Platform.isIOS)
-      return (await deviceInfo.iosInfo).identifierForVendor ?? "UNKNOWN_IOS";
-    return "UNKNOWN_DEVICE";
-  }
-
-  // Admin Authentication Logic (Supports Email or Phone)
-  static Future<Map<String, dynamic>> loginAdmin(
-    String identifier,
-    String password,
-  ) async {
     try {
-      // Step 1: Ensure we have a Firebase Auth UID (Sign in anonymously if needed)
-      if (FirebaseAuth.instance.currentUser == null) {
-        await FirebaseAuth.instance.signInAnonymously();
-      }
-      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final prefs = await SharedPreferences.getInstance();
+      String? storedId = prefs.getString('active_device_id');
+      if (storedId != null && storedId.isNotEmpty) return storedId;
 
-      // Step 2: Search for admin record by identifier (Email or Phone)
-      var adminsRef = firestore.collection('admins');
-      QuerySnapshot query;
-
-      // Try searching by phone first
-      query = await adminsRef
-          .where('phone', isEqualTo: identifier)
-          .where('password', isEqualTo: password)
-          .get();
-
-      // If not found, try email
-      if (query.docs.isEmpty) {
-        query = await adminsRef
-            .where('email', isEqualTo: identifier)
-            .where('password', isEqualTo: password)
-            .get();
+      var deviceInfo = DeviceInfoPlugin();
+      String id = "UNKNOWN_DEVICE";
+      if (Platform.isAndroid) {
+        id = (await deviceInfo.androidInfo).id;
+      } else if (Platform.isIOS) {
+        id = (await deviceInfo.iosInfo).identifierForVendor ?? "UNKNOWN_IOS";
       }
 
-      if (query.docs.isNotEmpty) {
-        final adminData = query.docs.first.data() as Map<String, dynamic>;
-
-        if (adminData['status'] == 'active') {
-          // Step 3: LINK THE UID! This is the most important step for Security Rules
-          // We create/update a document with the UID as the document ID
-          await firestore.collection('admins').doc(uid).set({
-            ...adminData,
-            'linkedAt': FieldValue.serverTimestamp(),
-            'authUid': uid,
-            'lastActive': FieldValue.serverTimestamp(),
-            'deviceInfo': await getDeviceId(),
-          }, SetOptions(merge: true));
-
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('is_sys_admin', true);
-          await prefs.setString('admin_id', identifier);
-
-          String role = adminData['role'] ?? 'staff';
-          if (identifier.toLowerCase() == 'nikkhilbarwar@gmail.com') {
-            role = 'super_admin';
-          }
-
-          await prefs.setString('admin_role', role);
-          return {
-            'success': true,
-            'data': {...adminData, 'role': role},
-          };
-        }
-        return {'success': false, 'message': 'Admin account disabled'};
+      if (id != "UNKNOWN_DEVICE") {
+        await prefs.setString('active_device_id', id);
       }
-      return {'success': false, 'message': 'Invalid Credentials'};
+      return id;
     } catch (e) {
-      return {'success': false, 'message': 'Access Denied: $e'};
+      debugPrint("Error getting device ID: $e");
+      return "UNKNOWN_DEVICE";
     }
   }
 
@@ -123,8 +72,8 @@ class LicenseService {
         }
       }
 
+      final version = await getAppVersion();
       if (data['activated'] != true) {
-        final version = await getAppVersion();
         await firestore.collection('licenses').doc(key).update({
           'activated': true,
           'activeDeviceId': deviceId,
@@ -133,12 +82,17 @@ class LicenseService {
           'appVersion': version,
         });
       } else {
-        final version = await getAppVersion();
         await firestore.collection('licenses').doc(key).update({
           'lastUsedAt': FieldValue.serverTimestamp(),
           'appVersion': version,
         });
       }
+
+      // Persist license key and device ID globally in SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('active_device_id', deviceId);
+      await prefs.setString('license_key', key);
+
       return {
         'success': true,
         'isLifetime': data['isLifetime'] ?? false,
@@ -390,5 +344,33 @@ class LicenseService {
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  static Future<Map<String, dynamic>> loginAdmin(String phone, String password) async {
+    try {
+      final snap = await firestore
+          .collection('admins')
+          .where('phone', isEqualTo: phone)
+          .where('password', isEqualTo: password)
+          .limit(1)
+          .get();
+
+      if (snap.docs.isEmpty) {
+        return {'success': false, 'message': 'Invalid Admin Credentials'};
+      }
+
+      final adminData = snap.docs.first.data();
+      if (adminData['status'] != 'active') {
+        return {'success': false, 'message': 'Account disabled by system'};
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('admin_session_id', snap.docs.first.id);
+      await prefs.setString('admin_role', adminData['role'] ?? 'staff');
+
+      return {'success': true, 'message': 'Login successful'};
+    } catch (e) {
+      return {'success': false, 'message': 'Login Error: $e'};
+    }
   }
 }

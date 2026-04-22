@@ -10,7 +10,6 @@ import '../../providers/item_provider.dart';
 import '../../providers/purchase_reminder_provider.dart';
 import '../../utils/app_strings.dart';
 import '../../utils/report_helper.dart';
-import '../daily_entry/cart_details_screen.dart';
 import '../daily_entry/entry_screen.dart';
 import '../purchase_reminders/purchase_reminder_screen.dart';
 import '../stock/stock_screen.dart';

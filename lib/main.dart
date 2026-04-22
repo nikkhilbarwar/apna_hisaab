@@ -28,6 +28,7 @@ import 'core/database/database_helper.dart';
 
 final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -212,7 +213,7 @@ void main() async {
     Workmanager().registerPeriodicTask(
       "cloud_sync",
       "syncTask",
-      frequency: const Duration(minutes: 15),
+      frequency: const Duration(minutes: 5),
       constraints: Constraints(networkType: NetworkType.connected),
       existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
     );
@@ -295,6 +296,7 @@ class MyApp extends StatelessWidget {
           title: 'Apna Hisaab',
           debugShowCheckedModeBanner: false,
           scaffoldMessengerKey: rootScaffoldMessengerKey,
+          navigatorKey: navigatorKey,
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: ColorScheme.fromSeed(

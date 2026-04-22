@@ -2031,16 +2031,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  Widget _receiptRow(
-    String label,
-    String value,
-    ProfileProvider profile, {
-    bool isBold = false,
-  }) {
-    // Placeholder implementation - unused method
-    return Container();
-  }
-
   Widget _buildDetailRow(
     String label,
     String value,

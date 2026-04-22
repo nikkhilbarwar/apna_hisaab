@@ -199,6 +199,7 @@ class PrintService {
     // Summary Section
     double subtotal = tx.itemSnapshots.fold(0, (sum, item) => sum + item.lineTotal);
     double discount = tx.discountValue;
+    double transport = tx.transportValue;
 
     bytes += generator.row([
       PosColumn(text: "Subtotal", width: 8),
@@ -209,6 +210,14 @@ class PrintService {
       bytes += generator.row([
         PosColumn(text: "Discount", width: 8),
         PosColumn(text: "-${discount.toStringAsFixed(0)}", width: 4, styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    }
+
+    if (transport > 0) {
+      final isSale = tx.type.toLowerCase() == 'sale' || tx.type.toLowerCase() == 'income';
+      bytes += generator.row([
+        PosColumn(text: isSale ? "Delivery Charge" : "Transport / Rent", width: 8),
+        PosColumn(text: transport.toStringAsFixed(0), width: 4, styles: const PosStyles(align: PosAlign.right)),
       ]);
     }
 
@@ -375,6 +384,24 @@ class PrintService {
     }
 
     bytes += generator.hr();
+
+    // Summary Section
+    double subtotal = tx.itemSnapshots.fold(0, (sum, item) => sum + item.lineTotal);
+    double transport = tx.transportValue;
+
+    bytes += generator.row([
+      PosColumn(text: "SUBTOTAL", width: 6, styles: const PosStyles(bold: true)),
+      PosColumn(text: "Rs. ${subtotal.toStringAsFixed(0)}", width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
+    ]);
+
+    if (transport > 0) {
+      bytes += generator.row([
+        PosColumn(text: "TRANSPORT / RENT", width: 8, styles: const PosStyles(bold: true)),
+        PosColumn(text: "Rs. ${transport.toStringAsFixed(0)}", width: 4, styles: const PosStyles(align: PosAlign.right, bold: true)),
+      ]);
+    }
+
+    bytes += generator.feed(1);
     bytes += generator.row([
       PosColumn(text: "TOTAL AMOUNT", width: 6, styles: const PosStyles(bold: true)),
       PosColumn(text: "Rs. ${tx.amount.toStringAsFixed(0)}", width: 6, styles: const PosStyles(align: PosAlign.right, bold: true, height: PosTextSize.size1)),

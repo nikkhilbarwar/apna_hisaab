@@ -75,7 +75,7 @@ class ProfileProvider with ChangeNotifier {
   bool get showAmount => _showAmount;
   bool get isAutoPrintEnabled => _isAutoPrintEnabled;
   bool get isKotEnabled => _isKotEnabled;
-  
+
   String get customPin => _customPin;
   bool get isPinEnabled => _isPinEnabled;
   bool get isBiometricEnabled => _isBiometricEnabled;
@@ -198,6 +198,10 @@ class ProfileProvider with ChangeNotifier {
       _isSysAdmin = prefs.getBool('is_sys_admin') ?? false;
       _adminRole = prefs.getString('admin_role') ?? 'user';
 
+      // Always try to recover license key and device id from persistent storage if missing for this UID
+      _licenseKey = prefs.getString('license_key_$uid') ?? prefs.getString('license_key') ?? '';
+      _isActivated = prefs.getBool('is_app_activated_$uid') ?? (_licenseKey.isNotEmpty);
+
       // Check if we have local data, if not try fetching from cloud
       final hasLocalData = prefs.containsKey('business_name_$uid');
       
@@ -231,8 +235,6 @@ class ProfileProvider with ChangeNotifier {
         _isPinEnabled = prefs.getBool('is_pin_enabled_$uid') ?? false;
         _isBiometricEnabled = prefs.getBool('is_biometric_enabled_$uid') ?? false;
 
-        _licenseKey = prefs.getString('license_key_$uid') ?? '';
-        _isActivated = prefs.getBool('is_app_activated_$uid') ?? false;
         _isLifetime = prefs.getBool('is_lifetime_$uid') ?? false;
         
         String? expiryStr = prefs.getString('expiry_date_$uid');

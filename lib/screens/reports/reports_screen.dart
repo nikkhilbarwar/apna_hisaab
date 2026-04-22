@@ -326,18 +326,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ],
             ),
           ),
-          // if (revenue > 0) ...[
-          //   const SizedBox(height: 8),
-          // ClipRRect(
-          //   borderRadius: BorderRadius.circular(10),
-          //   child: LinearProgressIndicator(
-          //     value: (revenue > 0) ? (revenue - expense).clamp(0, revenue) / revenue : 0,
-          //     backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-          //     valueColor: AlwaysStoppedAnimation<Color>(profit >= 0 ? profile.themeColor : Colors.redAccent),
-          //     minHeight: 4,
-          //   ),
-          // ),
-          // ],
           const SizedBox(height: 8),
           InkWell(
             onTap: () => _showStaffPayrollSheet(context, profile, pending),
@@ -359,7 +347,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         size: 14,
                         color: Colors.orange,
                       ),
-                      SizedBox(width: 6),
+                      const SizedBox(width: 6),
                       Text(
                         'UPCOMING SALARY',
                         style: TextStyle(
@@ -1640,6 +1628,8 @@ class _ReportList extends StatelessWidget {
         if (!catMatch || !itemMatch) continue;
 
         double val = s.lineTotal;
+        double cost = (s.purchasePrice + s.transportCost) * s.qty;
+        
         itemRevenue[name] = (itemRevenue[name] ?? 0) + val;
         catRevenue[cat] = (catRevenue[cat] ?? 0) + val;
 
@@ -1655,6 +1645,7 @@ class _ReportList extends StatelessWidget {
           'serving': s.servingMethod,
           'mode': tx.paymentMode,
           'total': s.lineTotal,
+          'cost': cost,
         };
 
         catAuditHistory[cat] ??= [];
@@ -2049,9 +2040,11 @@ class _ReportList extends StatelessWidget {
     double totalQty = 0;
     double halfQty = 0;
     double fullQty = 0;
+    double totalCost = 0;
 
     for (var sale in history) {
       double q = (sale['qty'] as num? ?? 1.0).toDouble();
+      totalCost += (sale['cost'] as num? ?? 0.0).toDouble();
 
       if (isExpense) {
         totalQty += q;
@@ -2119,6 +2112,18 @@ class _ReportList extends StatelessWidget {
               fontSize: 14,
             ),
           ),
+          if (!isExpense && totalCost > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Total Profit: ${profile.currencySymbol}${(total - totalCost).toStringAsFixed(0)} (${((total - totalCost) / total * 100).toStringAsFixed(1)}%)',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green,
+                  fontSize: 14,
+                ),
+              ),
+            ),
           const Divider(height: 24),
           // ALWAYS SHOW STATS IF HISTORY EXISTS
           Row(
@@ -2219,6 +2224,32 @@ class _ReportList extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (!isExpense &&
+                        sale['cost'] != null &&
+                        sale['cost'] > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Margin: ${profile.currencySymbol}${(sale['total'] - sale['cost']).toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '(${((sale['total'] - sale['cost']) / sale['total'] * 100).toStringAsFixed(0)}%)',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.green.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
                       child: Divider(height: 1, thickness: 0.5),
@@ -2234,24 +2265,29 @@ class _ReportList extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: profile.themeColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            sale['serving'].toString().toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 8,
-                              fontWeight: FontWeight.w900,
-                              color: profile.themeColor,
+                        if (sale['serving'] != 'N/A' &&
+                            sale['serving'] != 'Dine-in' &&
+                            sale['serving'] != 'Takeaway' &&
+                            sale['serving'].toString().isNotEmpty &&
+                            !isExpense)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: profile.themeColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              sale['serving'].toString().toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w900,
+                                color: profile.themeColor,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                     if (hasExtras)
@@ -2700,6 +2736,13 @@ class _ReportList extends StatelessWidget {
               '- ${profile.currencySymbol}${discount.toStringAsFixed(0)}',
               profile,
               color: Colors.green,
+            ),
+          if (tx.transportValue > 0)
+            _rowBreakdown(
+              'Transport / Rent',
+              '+ ${profile.currencySymbol}${tx.transportValue.toStringAsFixed(0)}',
+              profile,
+              color: Colors.orange,
             ),
           if (taxAmount > 0)
             _rowBreakdown(
@@ -4009,74 +4052,6 @@ class _DateRangePickerSheetState extends State<_DateRangePickerSheet> {
     );
   }
 
-  void _showStaffPayrollSheet(
-    BuildContext context,
-    ProfileProvider profile,
-    double pending,
-  ) {
-    AppBottomSheet.show(
-      context: context,
-      profile: profile,
-      title: 'STAFF PAYROLL',
-      child: Consumer<StaffProvider>(
-        builder: (context, staffProvider, child) {
-          final staffList = staffProvider.staffList;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: profile.themeColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Total Net Payable',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: profile.secondaryTextColor,
-                      ),
-                    ),
-                    Text(
-                      '${profile.currencySymbol}${pending.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: profile.themeColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Flexible(
-                child: staffList.isEmpty
-                    ? const Center(child: Text('No staff added yet'))
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: staffList.length,
-                        itemBuilder: (context, index) {
-                          return _StaffPayrollCard(
-                            staff: staffList[index],
-                            profile: profile,
-                            staffProvider: staffProvider,
-                          );
-                        },
-                      ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
 }
 
 class _StaffPayrollCard extends StatefulWidget {
