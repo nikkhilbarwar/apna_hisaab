@@ -22,6 +22,7 @@ class ItemModel {
   String? icon; // Added for custom icon support
   int isDeleted;
   DateTime? deletedAt;
+  DateTime? updatedAt;
 
   ItemModel({
     this.id,
@@ -46,6 +47,7 @@ class ItemModel {
     this.icon,
     this.isDeleted = 0,
     this.deletedAt,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -72,6 +74,7 @@ class ItemModel {
       'icon': icon,
       'is_deleted': isDeleted,
       'deleted_at': deletedAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 
@@ -105,6 +108,7 @@ class ItemModel {
         icon: map['icon']?.toString(),
         isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
         deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
+        updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
       );
     } catch (e) {
       throw Exception("Parsing error: $e. Data: $map");

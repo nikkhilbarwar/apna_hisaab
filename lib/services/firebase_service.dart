@@ -103,14 +103,22 @@ class FirebaseService {
   }
 
   // --- Fetch Methods for masterRestoreFromCloud ---
-  Future<List<CategoryModel>> fetchAllCategories() async {
-    final snap = await _collection('categories').get();
+  Future<List<CategoryModel>> fetchAllCategories({DateTime? since}) async {
+    Query query = _collection('categories');
+    if (since != null) {
+      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+    }
+    final snap = await query.get();
     return snap.docs.map((d) => CategoryModel.fromMap(d.data() as Map<String, dynamic>)).toList();
   }
 
-  Future<List<ItemModel>> fetchAllItems() async {
+  Future<List<ItemModel>> fetchAllItems({DateTime? since}) async {
     try {
-      final snap = await _collection('items').get();
+      Query query = _collection('items');
+      if (since != null) {
+        query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+      }
+      final snap = await query.get();
       List<ItemModel> items = [];
       for (var doc in snap.docs) {
         try {
@@ -126,33 +134,57 @@ class FirebaseService {
     }
   }
 
-  Future<List<TransactionModel>> fetchAllTransactions() async {
-    final snap = await _collection('transactions').get();
+  Future<List<TransactionModel>> fetchAllTransactions({DateTime? since}) async {
+    Query query = _collection('transactions');
+    if (since != null) {
+      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+    }
+    final snap = await query.get();
     return snap.docs.map((d) => TransactionModel.fromMap(d.data() as Map<String, dynamic>)).toList();
   }
 
-  Future<List<StaffModel>> fetchAllStaff() async {
-    final snap = await _collection('staff').get();
+  Future<List<StaffModel>> fetchAllStaff({DateTime? since}) async {
+    Query query = _collection('staff');
+    if (since != null) {
+      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+    }
+    final snap = await query.get();
     return snap.docs.map((d) => StaffModel.fromMap(d.data() as Map<String, dynamic>)).toList();
   }
 
-  Future<List<SupplierModel>> fetchAllSuppliers() async {
-    final snap = await _collection('suppliers').get();
+  Future<List<SupplierModel>> fetchAllSuppliers({DateTime? since}) async {
+    Query query = _collection('suppliers');
+    if (since != null) {
+      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+    }
+    final snap = await query.get();
     return snap.docs.map((d) => SupplierModel.fromMap(d.data() as Map<String, dynamic>)).toList();
   }
 
-  Future<List<PurchaseReminderModel>> fetchAllPurchaseReminders() async {
-    final snap = await _collection('purchase_reminders').get();
+  Future<List<PurchaseReminderModel>> fetchAllPurchaseReminders({DateTime? since}) async {
+    Query query = _collection('purchase_reminders');
+    if (since != null) {
+      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+    }
+    final snap = await query.get();
     return snap.docs.map((d) => PurchaseReminderModel.fromMap(d.data() as Map<String, dynamic>)).toList();
   }
 
-  Future<List<RecipeModel>> fetchAllRecipes() async {
-    final snap = await _collection('recipes').get();
+  Future<List<RecipeModel>> fetchAllRecipes({DateTime? since}) async {
+    Query query = _collection('recipes');
+    if (since != null) {
+      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+    }
+    final snap = await query.get();
     return snap.docs.map((d) => RecipeModel.fromMap(d.data() as Map<String, dynamic>)).toList();
   }
 
-  Future<List<Map<String, dynamic>>> fetchAllUnits() async {
-    final snap = await _collection('units').get();
+  Future<List<Map<String, dynamic>>> fetchAllUnits({DateTime? since}) async {
+    Query query = _collection('units');
+    if (since != null) {
+      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+    }
+    final snap = await query.get();
     return snap.docs.map((d) => d.data() as Map<String, dynamic>).toList();
   }
 
@@ -161,6 +193,24 @@ class FirebaseService {
   Future<void> syncCategory(CategoryModel category) async => await _collection('categories').doc(category.id?.toString()).set(category.toMap(), SetOptions(merge: true));
   Future<void> syncStaffAdvance(StaffAdvanceModel advance) async => await _collection('staff_advance').doc(advance.id?.toString()).set(advance.toMap(), SetOptions(merge: true));
   Future<void> syncStaffLeave(StaffLeaveModel leave) async => await _collection('staff_leave').doc(leave.id?.toString()).set(leave.toMap(), SetOptions(merge: true));
+
+  Future<List<StaffAdvanceModel>> fetchAllStaffAdvances({DateTime? since}) async {
+    Query query = _collection('staff_advance');
+    if (since != null) {
+      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+    }
+    final snap = await query.get();
+    return snap.docs.map((d) => StaffAdvanceModel.fromMap(d.data() as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<StaffLeaveModel>> fetchAllStaffLeaves({DateTime? since}) async {
+    Query query = _collection('staff_leave');
+    if (since != null) {
+      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+    }
+    final snap = await query.get();
+    return snap.docs.map((d) => StaffLeaveModel.fromMap(d.data() as Map<String, dynamic>)).toList();
+  }
   Future<void> syncSupplier(SupplierModel supplier) async => await _collection('suppliers').doc(supplier.id?.toString()).set(supplier.toMap(), SetOptions(merge: true));
   Future<void> syncPurchaseReminder(PurchaseReminderModel reminder) async => await _collection('purchase_reminders').doc(reminder.id?.toString()).set(reminder.toMap(), SetOptions(merge: true));
   Future<void> syncRecipe(RecipeModel recipe) async => await _collection('recipes').doc(recipe.id?.toString()).set(recipe.toMap(), SetOptions(merge: true));

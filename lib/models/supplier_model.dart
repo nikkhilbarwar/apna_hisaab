@@ -5,6 +5,7 @@ class SupplierModel {
   String itemsSupplied;
   String notes;
   int isSynced;
+  DateTime? updatedAt;
 
   SupplierModel({
     this.id,
@@ -13,16 +14,18 @@ class SupplierModel {
     this.itemsSupplied = '',
     this.notes = '',
     this.isSynced = 0,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      if (id != null) 'id': id,
       'name': name,
       'contact': contact,
       'items_supplied': itemsSupplied,
       'notes': notes,
       'is_synced': isSynced,
+      'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 
@@ -34,6 +37,7 @@ class SupplierModel {
       itemsSupplied: map['items_supplied'] ?? '',
       notes: map['notes'] ?? '',
       isSynced: map['is_synced'] ?? 0,
+      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );
   }
 }

@@ -20,6 +20,7 @@ class ProfileProvider with ChangeNotifier {
   String _qrPath = '';
   String _qrLabel = 'Scan for Payment/Review'; 
   bool _isCloudSyncEnabled = true;
+  String _syncMode = 'hybrid'; // 'offline', 'online', 'hybrid'
   String _currencySymbol = '₹';
   int _themeColorValue = 0xFF5E35B1;
   List<int> _customThemeColors = [0xFF5E35B1]; 
@@ -70,6 +71,7 @@ class ProfileProvider with ChangeNotifier {
   String get qrPath => _qrPath;
   String get qrLabel => _qrLabel;
   bool get isCloudSyncEnabled => _isCloudSyncEnabled;
+  String get syncMode => _syncMode;
   String get currencySymbol => _currencySymbol;
   int get totalTables => _totalTables;
   bool get showAmount => _showAmount;
@@ -216,6 +218,7 @@ class ProfileProvider with ChangeNotifier {
         _qrPath = prefs.getString('qr_path_$uid') ?? '';
         _qrLabel = prefs.getString('qr_label_$uid') ?? 'Scan for Payment/Review';
         _isCloudSyncEnabled = prefs.getBool('cloud_sync_$uid') ?? true;
+        _syncMode = prefs.getString('sync_mode_$uid') ?? 'hybrid';
         _currencySymbol = prefs.getString('currency_$uid') ?? '₹';
         _themeColorValue = prefs.getInt('theme_color_$uid') ?? 0xFF5E35B1;
         final colorStrings = prefs.getStringList('custom_theme_colors_$uid');
@@ -540,6 +543,13 @@ class ProfileProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _isCloudSyncEnabled = value;
     await prefs.setBool('cloud_sync_$uid', value);
+    if (!value) {
+      _syncMode = 'offline';
+      await prefs.setString('sync_mode_$uid', 'offline');
+    } else if (_syncMode == 'offline') {
+      _syncMode = 'hybrid';
+      await prefs.setString('sync_mode_$uid', 'hybrid');
+    }
     notifyListeners();
     if (value) {
       String? logoB64;
@@ -552,6 +562,24 @@ class ProfileProvider with ChangeNotifier {
       }
       await _syncToFirebase(overrideLogo: logoB64, overrideQR: qrB64);
     }
+  }
+
+  Future<void> updateSyncMode(String mode) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    final prefs = await SharedPreferences.getInstance();
+    _syncMode = mode;
+    await prefs.setString('sync_mode_$uid', mode);
+    
+    if (mode == 'offline') {
+      _isCloudSyncEnabled = false;
+      await prefs.setBool('cloud_sync_$uid', false);
+    } else {
+      _isCloudSyncEnabled = true;
+      await prefs.setBool('cloud_sync_$uid', true);
+    }
+    
+    notifyListeners();
+    if (_isCloudSyncEnabled) _syncToFirebase();
   }
 
   Future<void> updateProfile({String? businessName, String? ownerName, String? contact, String? address, String? logoPath, String? qrPath, String? qrLabel, bool? isCloudSyncEnabled, String? currencySymbol, double? taxPercentage, int? totalTables}) async {
@@ -600,6 +628,7 @@ class ProfileProvider with ChangeNotifier {
       'logo_path': _logoPath,
       'qr_path': _qrPath,
       'qr_label': _qrLabel,
+      'sync_mode': _syncMode,
       'currency': _currencySymbol,
       'theme_color': _themeColorValue,
       'custom_theme_colors': _customThemeColors,
@@ -642,6 +671,7 @@ class ProfileProvider with ChangeNotifier {
     if (map['logo_path'] != null) { _logoPath = map['logo_path']; await prefs.setString('logo_path_$uid', _logoPath); }
     if (map['qr_path'] != null) { _qrPath = map['qr_path']; await prefs.setString('qr_path_$uid', _qrPath); }
     if (map['qr_label'] != null) { _qrLabel = map['qr_label']; await prefs.setString('qr_label_$uid', _qrLabel); }
+    if (map['sync_mode'] != null) { _syncMode = map['sync_mode']; await prefs.setString('sync_mode_$uid', _syncMode); }
     if (map['currency'] != null) { _currencySymbol = map['currency']; await prefs.setString('currency_$uid', _currencySymbol); }
     
     // Theme color can be stored as 'theme_color' or 'themeColor' in older backups
@@ -705,8 +735,7 @@ class ProfileProvider with ChangeNotifier {
       }
 
       profileData['last_updated'] = FieldValue.serverTimestamp();
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('profile').doc('business_info').set(profileData, SetOptions(merge: true));
-    } catch (e) { debugPrint("Error syncing profile: $e"); }
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('profile').doc('business_info').set(profileData, SetOptions(merge: true));    } catch (e) { debugPrint("Error syncing profile: $e"); }
   }
 
   void _listenToSupportTickets() {

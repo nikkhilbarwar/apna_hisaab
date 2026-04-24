@@ -43,8 +43,7 @@ class _SplashScreenState extends State<SplashScreen> {
     // 3. Wait for 2 seconds to show the branding
     await Future.delayed(const Duration(seconds: 2));
     
-    if (mounted) {
-      Navigator.pushReplacement(
+    if (mounted) {      Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const AuthWrapper()),
       );

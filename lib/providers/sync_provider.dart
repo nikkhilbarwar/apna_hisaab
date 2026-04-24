@@ -1,5 +1,7 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/purchase_reminder_model.dart';
 import '../models/staff_model.dart'; // Added missing imports
@@ -31,13 +33,32 @@ class SyncProvider with ChangeNotifier {
   double _syncProgress = 0.0;
   String _syncStatus = "";
   Timer? _autoSyncTimer;
+  DateTime? _lastSyncTimestamp;
 
   bool get isSyncing => _isSyncing;
   double get syncProgress => _syncProgress;
   String get syncStatus => _syncStatus;
+  DateTime? get lastSyncTimestamp => _lastSyncTimestamp;
 
   SyncProvider() {
+    _loadLastSyncTime();
     _startAutoSync();
+  }
+
+  Future<void> _loadLastSyncTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    final timeStr = prefs.getString('last_sync_timestamp_$uid');
+    if (timeStr != null) {
+      _lastSyncTimestamp = DateTime.tryParse(timeStr);
+    }
+  }
+
+  Future<void> _saveLastSyncTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    _lastSyncTimestamp = DateTime.now();
+    await prefs.setString('last_sync_timestamp_$uid', _lastSyncTimestamp!.toIso8601String());
   }
 
   void _startAutoSync() {
@@ -45,7 +66,9 @@ class SyncProvider with ChangeNotifier {
     _autoSyncTimer = Timer.periodic(const Duration(minutes: 5), (timer) async {
       final connectivity = await Connectivity().checkConnectivity();
       if (connectivity.any((result) => result != ConnectivityResult.none)) {
+        // Run background delta push and pull
         await syncAllToCloudSilently();
+        await syncCloudToLocalSilently();
       }
     });
   }
@@ -68,35 +91,162 @@ class SyncProvider with ChangeNotifier {
     try {
       final db = DatabaseHelper.instance;
       
-      // Batch sync for efficiency
+      // 1. Items
       final unsyncedItems = await db.getUnsyncedData('items');
       if (unsyncedItems.isNotEmpty) {
         await _firebaseService.syncBatch('items', unsyncedItems);
-        for (var map in unsyncedItems) {
-          await db.updateSyncStatus('items', map['id'], 1);
-        }
+        for (var map in unsyncedItems) await db.updateSyncStatus('items', map['id'], 1);
       }
 
+      // 2. Categories
+      final unsyncedCats = await db.getUnsyncedData('categories');
+      if (unsyncedCats.isNotEmpty) {
+        await _firebaseService.syncBatch('categories', unsyncedCats);
+        for (var map in unsyncedCats) await db.updateSyncStatus('categories', map['id'], 1);
+      }
+
+      // 3. Recipes
       final unsyncedRecipes = await db.getUnsyncedData('recipes');
       if (unsyncedRecipes.isNotEmpty) {
         await _firebaseService.syncBatch('recipes', unsyncedRecipes);
-        for (var map in unsyncedRecipes) {
-          await db.updateSyncStatus('recipes', map['id'], 1);
+        for (var map in unsyncedRecipes) await db.updateSyncStatus('recipes', map['id'], 1);
+      }
+
+      // 4. Staff
+      final unsyncedStaff = await db.getUnsyncedData('staff');
+      if (unsyncedStaff.isNotEmpty) {
+        await _firebaseService.syncBatch('staff', unsyncedStaff);
+        for (var map in unsyncedStaff) await db.updateSyncStatus('staff', map['id'], 1);
+      }
+
+      // 5. Staff Advances & Leaves
+      final unsyncedAdvances = await db.getUnsyncedData('staff_advance');
+      if (unsyncedAdvances.isNotEmpty) {
+        await _firebaseService.syncBatch('staff_advance', unsyncedAdvances);
+        for (var map in unsyncedAdvances) await db.updateSyncStatus('staff_advance', map['id'], 1);
+      }
+
+      final unsyncedLeaves = await db.getUnsyncedData('staff_leave');
+      if (unsyncedLeaves.isNotEmpty) {
+        await _firebaseService.syncBatch('staff_leave', unsyncedLeaves);
+        for (var map in unsyncedLeaves) await db.updateSyncStatus('staff_leave', map['id'], 1);
+      }
+
+      // 6. Transactions
+      final unsyncedTxs = await db.getUnsyncedTransactions();
+      if (unsyncedTxs.isNotEmpty) {
+        // Individual sync for transactions to handle larger objects and safety
+        for (var tx in unsyncedTxs) {
+          final success = await _firebaseService.syncTransaction(tx);
+          if (success) await db.updateTransactionSyncStatus(tx.id!, 1);
         }
       }
 
-      final unsyncedTxs = await db.getUnsyncedTransactions();
-      if (unsyncedTxs.isNotEmpty) {
-        for (var tx in unsyncedTxs) {
-          await _firebaseService.syncTransaction(tx);
-          await db.updateTransactionSyncStatus(tx.id!, 1);
-        }
+      // 7. Suppliers & Reminders
+      final unsyncedSuppliers = await db.getUnsyncedData('suppliers');
+      if (unsyncedSuppliers.isNotEmpty) {
+        await _firebaseService.syncBatch('suppliers', unsyncedSuppliers);
+        for (var map in unsyncedSuppliers) await db.updateSyncStatus('suppliers', map['id'], 1);
+      }
+
+      final unsyncedReminders = await db.getUnsyncedData('purchase_reminders');
+      if (unsyncedReminders.isNotEmpty) {
+        await _firebaseService.syncBatch('purchase_reminders', unsyncedReminders);
+        for (var map in unsyncedReminders) await db.updateSyncStatus('purchase_reminders', map['id'], 1);
       }
       
-      debugPrint("Auto-sync completed at ${DateTime.now()}");
+      debugPrint("Auto-sync (Push) completed at ${DateTime.now()}");
     } catch (e) {
-      debugPrint("Silent Sync Error: $e");
+      debugPrint("Silent Sync Push Error: $e");
     }
+  }
+
+  Future<void> syncCloudToLocalSilently({BuildContext? context}) async {
+    if (_isSyncing) return;
+    try {
+      final db = DatabaseHelper.instance;
+      bool hasUpdates = false;
+      
+      // 1. Items
+      final cloudItems = await _firebaseService.fetchAllItems(since: _lastSyncTimestamp);
+      if (cloudItems.isNotEmpty) {
+        await db.smartMerge('items', cloudItems.map((i) => (i..isSynced = 1).toMap()).toList());
+        hasUpdates = true;
+      }
+
+      // 2. Transactions
+      final cloudTxs = await _firebaseService.fetchAllTransactions(since: _lastSyncTimestamp);
+      if (cloudTxs.isNotEmpty) {
+        await db.smartMerge('transactions', cloudTxs.map((t) => (t..isSynced = 1).toMap()).toList());
+        hasUpdates = true;
+      }
+
+      // 3. Categories
+      final cloudCats = await _firebaseService.fetchAllCategories(since: _lastSyncTimestamp);
+      if (cloudCats.isNotEmpty) {
+        await db.smartMerge('categories', cloudCats.map((c) => (c..isSynced = 1).toMap()).toList());
+        hasUpdates = true;
+      }
+
+      // 4. Staff & Related
+      final cloudStaff = await _firebaseService.fetchAllStaff(since: _lastSyncTimestamp);
+      if (cloudStaff.isNotEmpty) {
+        await db.smartMerge('staff', cloudStaff.map((s) => (s..isSynced = 1).toMap()).toList());
+        hasUpdates = true;
+      }
+
+      final cloudAdvances = await _firebaseService.fetchAllStaffAdvances(since: _lastSyncTimestamp);
+      if (cloudAdvances.isNotEmpty) {
+        await db.smartMerge('staff_advance', cloudAdvances.map((a) => (a..isSynced = 1).toMap()).toList());
+        hasUpdates = true;
+      }
+
+      final cloudLeaves = await _firebaseService.fetchAllStaffLeaves(since: _lastSyncTimestamp);
+      if (cloudLeaves.isNotEmpty) {
+        await db.smartMerge('staff_leave', cloudLeaves.map((l) => (l..isSynced = 1).toMap()).toList());
+        hasUpdates = true;
+      }
+
+      // 5. Recipes
+      final cloudRecipes = await _firebaseService.fetchAllRecipes(since: _lastSyncTimestamp);
+      if (cloudRecipes.isNotEmpty) {
+        await db.smartMerge('recipes', cloudRecipes.map((r) => (r..isSynced = 1).toMap()).toList());
+        hasUpdates = true;
+      }
+
+      // 6. Suppliers & Reminders
+      final cloudSuppliers = await _firebaseService.fetchAllSuppliers(since: _lastSyncTimestamp);
+      if (cloudSuppliers.isNotEmpty) {
+        await db.smartMerge('suppliers', cloudSuppliers.map((s) => (s..isSynced = 1).toMap()).toList());
+        hasUpdates = true;
+      }
+
+      final cloudReminders = await _firebaseService.fetchAllPurchaseReminders(since: _lastSyncTimestamp);
+      if (cloudReminders.isNotEmpty) {
+        await db.smartMerge('purchase_reminders', cloudReminders.map((r) => (r..isSynced = 1).toMap()).toList());
+        hasUpdates = true;
+      }
+
+      if (hasUpdates && context != null && context.mounted) {
+        _refreshProviders(context);
+      }
+
+      await _saveLastSyncTime();
+      debugPrint("Cloud-to-Local delta sync (Pull) completed at ${DateTime.now()}");
+    } catch (e) {
+      debugPrint("Delta Sync Pull Error: $e");
+    }
+  }
+
+  void _refreshProviders(BuildContext context) {
+    Provider.of<ItemProvider>(context, listen: false).refreshData();
+    Provider.of<CategoryProvider>(context, listen: false).fetchCategories();
+    Provider.of<TransactionProvider>(context, listen: false).fetchTransactions();
+    Provider.of<StaffProvider>(context, listen: false).fetchStaff();
+    Provider.of<SupplierProvider>(context, listen: false).fetchSuppliers();
+    Provider.of<UnitProvider>(context, listen: false).fetchUnits();
+    Provider.of<PurchaseReminderProvider>(context, listen: false).fetchReminders();
+    Provider.of<ProfileProvider>(context, listen: false).loadProfile();
   }
 
   Future<bool> manualSyncToCloud(BuildContext context) async {
@@ -164,6 +314,7 @@ class SyncProvider with ChangeNotifier {
       }
 
       _progress(1.0, "All data synced successfully!");
+      await _saveLastSyncTime(); // Update timestamp on manual sync success
       return true;
     } catch (e) {
       _progress(0.0, "Sync Error: $e");

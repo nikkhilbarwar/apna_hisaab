@@ -10,6 +10,7 @@ class PurchaseReminderModel {
   DateTime dueDate;
   String status; // pending, bought, skipped
   int isSynced;
+  DateTime? updatedAt;
 
   PurchaseReminderModel({
     this.id,
@@ -23,6 +24,7 @@ class PurchaseReminderModel {
     required this.dueDate,
     this.status = 'pending',
     this.isSynced = 0,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -38,6 +40,7 @@ class PurchaseReminderModel {
       'due_date': dueDate.toIso8601String(),
       'status': status,
       'is_synced': isSynced,
+      'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 
@@ -54,6 +57,7 @@ class PurchaseReminderModel {
       dueDate: map['due_date'] != null ? DateTime.parse(map['due_date']) : DateTime.now(),
       status: map['status'] ?? 'pending',
       isSynced: map['is_synced'] ?? 0,
+      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );
   }
 }

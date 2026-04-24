@@ -216,7 +216,7 @@ class ExportService {
 
     // Header Branding
     final title = "CASH MEMO";
-    final businessName = "THE GRILLER ZONE";
+    final businessName = "APNA HISAAB";
     final tagline = "Professional Digital Solutions";
     final contactInfo = "PH: +91 9992256959 | Email: dev.grillerzone@gmail.com";
 
@@ -346,7 +346,7 @@ class ExportService {
                     children: [
                       pw.SizedBox(height: 20),
                       pw.Text("Authorized Signatory", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                      pw.Text("The Griller Zone (Digital)", style: const pw.TextStyle(fontSize: 8)),
+                      pw.Text("Apna Hisaab (Digital)", style: const pw.TextStyle(fontSize: 8)),
                     ],
                   ),
                 ],
@@ -959,7 +959,7 @@ class ExportService {
             pw.SizedBox(height: 4),
 
             pw.Divider(thickness: 0.5),
-            pw.Center(child: pw.Text("POWERED BY: The Griller Zone", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800))),
+            pw.Center(child: pw.Text("POWERED BY: APNA HISAAB", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800))),
             pw.Center(child: pw.Text("Developer: Nikkhil | +91 9992256959", style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700))),
             pw.Center(child: pw.Text("Terms: This is a computer generated invoice.", style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700))),
             pw.SizedBox(height: 5),

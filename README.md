@@ -1,4 +1,4 @@
-# Apna Hisaab (The Griller Zone) 📊
+# Apna Hisaab 📊
 
 **Apna Hisaab** is a professional Point of Sale (POS) and Business Management application built with Flutter. Specifically designed for restaurants and small businesses to manage their daily sales, inventory, staff, and financial reports seamlessly.
 

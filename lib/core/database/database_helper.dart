@@ -43,7 +43,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path, 
-      version: 33,
+      version: 34,
       onCreate: _createDB, 
       onUpgrade: (db, oldVersion, newVersion) async {
         debugPrint("MIGRATION: Upgrading from $oldVersion to $newVersion");
@@ -165,6 +165,31 @@ class DatabaseHelper {
       try { await db.execute('ALTER TABLE items ADD COLUMN linked_item_ids TEXT DEFAULT ""'); } catch(_) {}
       try { await db.execute('ALTER TABLE items ADD COLUMN linked_category_ids TEXT DEFAULT ""'); } catch(_) {}
     }
+    if (oldVersion < 34) {
+      final tablesToUpdate = [
+        {'name': 'transactions', 'timeCol': 'date'},
+        {'name': 'items', 'timeCol': null},
+        {'name': 'categories', 'timeCol': null},
+        {'name': 'staff', 'timeCol': 'join_date'},
+        {'name': 'staff_advance', 'timeCol': 'date'},
+        {'name': 'staff_leave', 'timeCol': 'date'},
+        {'name': 'recipes', 'timeCol': null},
+        {'name': 'suppliers', 'timeCol': null},
+        {'name': 'units', 'timeCol': null},
+        {'name': 'purchase_reminders', 'timeCol': 'due_date'},
+      ];
+
+      for (var table in tablesToUpdate) {
+        try {
+          await db.execute('ALTER TABLE ${table['name']} ADD COLUMN updated_at TEXT');
+          if (table['timeCol'] != null) {
+            await db.execute('UPDATE ${table['name']} SET updated_at = ${table['timeCol']}');
+          } else {
+            await db.execute('UPDATE ${table['name']} SET updated_at = "${DateTime.now().toIso8601String()}"');
+          }
+        } catch (_) {}
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -188,7 +213,8 @@ class DatabaseHelper {
         is_deleted INTEGER DEFAULT 0,
         deleted_at TEXT,
         customer_contact TEXT DEFAULT "",
-        status TEXT DEFAULT "completed"
+        status TEXT DEFAULT "completed",
+        updated_at TEXT
       )
     ''');
 
@@ -215,7 +241,8 @@ class DatabaseHelper {
         purchase_price REAL,
         transport_cost REAL,
         linked_item_ids TEXT,
-        linked_category_ids TEXT
+        linked_category_ids TEXT,
+        updated_at TEXT
       )
     ''');
 
@@ -226,7 +253,8 @@ class DatabaseHelper {
         contact TEXT,
         items_supplied TEXT,
         notes TEXT,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        updated_at TEXT
       )
     ''');
 
@@ -244,7 +272,8 @@ class DatabaseHelper {
         image_url TEXT,
         is_synced INTEGER DEFAULT 0,
         is_deleted INTEGER DEFAULT 0,
-        deleted_at TEXT
+        deleted_at TEXT,
+        updated_at TEXT
       )
     ''');
 
@@ -254,7 +283,8 @@ class DatabaseHelper {
         staff_id INTEGER,
         amount REAL,
         date TEXT,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        updated_at TEXT
       )
     ''');
 
@@ -264,7 +294,8 @@ class DatabaseHelper {
         staff_id INTEGER,
         date TEXT,
         type REAL,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        updated_at TEXT
       )
     ''');
 
@@ -280,7 +311,8 @@ class DatabaseHelper {
         stock_qty REAL DEFAULT 0,
         low_stock_limit REAL DEFAULT 10,
         is_deleted INTEGER DEFAULT 0,
-        deleted_at TEXT
+        deleted_at TEXT,
+        updated_at TEXT
       )
     ''');
 
@@ -288,7 +320,8 @@ class DatabaseHelper {
       CREATE TABLE units (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        updated_at TEXT
       )
     ''');
 
@@ -304,7 +337,8 @@ class DatabaseHelper {
         priority TEXT,
         due_date TEXT,
         status TEXT,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        updated_at TEXT
       )
     ''');
 
@@ -314,7 +348,8 @@ class DatabaseHelper {
         product_id INTEGER,
         material_id INTEGER,
         quantity REAL,
-        is_synced INTEGER DEFAULT 0
+        is_synced INTEGER DEFAULT 0,
+        updated_at TEXT
       )
     ''');
   }
@@ -345,6 +380,52 @@ class DatabaseHelper {
     });
   }
 
+  /// Implementation of "Last Write Wins" (LWW) for Delta Sync.
+  /// Overwrites local data ONLY if cloud's updated_at is newer.
+  Future<void> smartMerge(String table, List<Map<String, dynamic>> dataList) async {
+    if (dataList.isEmpty) return;
+    final db = await instance.database;
+    
+    await db.transaction((txn) async {
+      for (var cloudMap in dataList) {
+        final id = cloudMap['id'];
+        if (id == null) continue;
+
+        final localRecords = await txn.query(table, where: 'id = ?', whereArgs: [id], limit: 1);
+        
+        if (localRecords.isEmpty) {
+          // New record from cloud
+          await txn.insert(table, cloudMap, conflictAlgorithm: ConflictAlgorithm.replace);
+        } else {
+          final localMap = localRecords.first;
+          final cloudUpdatedAtStr = cloudMap['updated_at']?.toString();
+          final localUpdatedAtStr = localMap['updated_at']?.toString();
+
+          if (cloudUpdatedAtStr != null && localUpdatedAtStr != null) {
+            final cloudTime = DateTime.tryParse(cloudUpdatedAtStr);
+            final localTime = DateTime.tryParse(localUpdatedAtStr);
+
+            if (cloudTime != null && localTime != null) {
+              if (cloudTime.isAfter(localTime)) {
+                // Cloud is newer -> Update local
+                await txn.update(table, cloudMap, where: 'id = ?', whereArgs: [id]);
+              } else if (cloudTime.isAtSameMomentAs(localTime)) {
+                // Same time, just ensure synced flag is correct if it came from cloud
+                if (localMap['is_synced'] == 0) {
+                   await txn.update(table, {'is_synced': 1}, where: 'id = ?', whereArgs: [id]);
+                }
+              }
+              // If local is newer, we do nothing; the local change will be pushed to cloud in the next push cycle.
+            }
+          } else {
+            // Fallback: if no timestamps, cloud wins (assuming it's the backup)
+            await txn.update(table, cloudMap, where: 'id = ?', whereArgs: [id]);
+          }
+        }
+      }
+    });
+  }
+
   Future<int> updateSyncStatus(String table, int id, int status) async {
     final db = await instance.database;
     return await db.update(table, {'is_synced': status}, where: 'id = ?', whereArgs: [id]);
@@ -357,6 +438,7 @@ class DatabaseHelper {
 
   Future<int> insertTransaction(TransactionModel tx) async {
     final db = await instance.database;
+    tx.updatedAt = DateTime.now();
     return await db.insert('transactions', tx.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -381,15 +463,19 @@ class DatabaseHelper {
   }
   Future<int> updateTransaction(TransactionModel tx) async {
     final db = await instance.database;
+    tx.updatedAt = DateTime.now();
+    tx.isSynced = 0;
     return await db.update('transactions', tx.toMap(), where: 'id = ?', whereArgs: [tx.id]);
   }
   Future<int> softDeleteTransaction(int id) async {
     final db = await instance.database;
-    return await db.update('transactions', {'is_deleted': 1, 'deleted_at': DateTime.now().toIso8601String(), 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+    final now = DateTime.now().toIso8601String();
+    return await db.update('transactions', {'is_deleted': 1, 'deleted_at': now, 'updated_at': now, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
   }
   Future<int> restoreTransaction(int id) async {
     final db = await instance.database;
-    return await db.update('transactions', {'is_deleted': 0, 'deleted_at': null, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+    final now = DateTime.now().toIso8601String();
+    return await db.update('transactions', {'is_deleted': 0, 'deleted_at': null, 'updated_at': now, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
   }
   Future<int> permanentDeleteTransaction(int id) async {
     final db = await instance.database;
@@ -413,6 +499,7 @@ class DatabaseHelper {
     final db = await instance.database;
     try {
       debugPrint("DB: Inserting item: ${item.name} (ID: ${item.id})");
+      item.updatedAt = DateTime.now();
       return await db.insert('items', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
     } catch (e) {
       debugPrint("DB ERROR: Failed to insert item ${item.name}: $e");
@@ -452,29 +539,35 @@ class DatabaseHelper {
   }
   Future<int> updateItem(ItemModel item) async {
     final db = await instance.database;
+    item.updatedAt = DateTime.now();
+    item.isSynced = 0;
     return await db.update('items', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
   }
   Future<int> updateItemStock(int id, double newStock) async {
     final db = await instance.database;
-    return await db.update('items', {'current_stock': newStock, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+    final now = DateTime.now().toIso8601String();
+    return await db.update('items', {'current_stock': newStock, 'updated_at': now, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> updateCategoryItemsStock(String categoryName, double newStock) async {
     final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
     return await db.update(
       'items',
-      {'current_stock': newStock, 'is_synced': 0},
+      {'current_stock': newStock, 'updated_at': now, 'is_synced': 0},
       where: 'category = ?',
       whereArgs: [categoryName],
     );
   }
   Future<int> softDeleteItem(int id) async {
     final db = await instance.database;
-    return await db.update('items', {'is_deleted': 1, 'deleted_at': DateTime.now().toIso8601String(), 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+    final now = DateTime.now().toIso8601String();
+    return await db.update('items', {'is_deleted': 1, 'deleted_at': now, 'updated_at': now, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
   }
   Future<int> restoreItem(int id) async {
     final db = await instance.database;
-    return await db.update('items', {'is_deleted': 0, 'deleted_at': null, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+    final now = DateTime.now().toIso8601String();
+    return await db.update('items', {'is_deleted': 0, 'deleted_at': null, 'updated_at': now, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
   }
   Future<int> permanentDeleteItem(int id) async {
     final db = await instance.database;

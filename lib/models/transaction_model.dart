@@ -185,6 +185,7 @@ class TransactionModel {
   DateTime? deletedAt;
   String customerContact;
   String status;
+  DateTime? updatedAt;
 
   TransactionModel({
     this.id,
@@ -206,6 +207,7 @@ class TransactionModel {
     this.deletedAt,
     this.customerContact = '',
     this.status = 'completed',
+    this.updatedAt,
     List<TransactionItemSnapshot>? itemSnapshots,
   }) : _manualSnapshots = itemSnapshots;
 
@@ -356,6 +358,7 @@ class TransactionModel {
       'deleted_at': deletedAt?.toIso8601String(),
       'customer_contact': customerContact,
       'status': status,
+      'updated_at': updatedAt?.toIso8601String() ?? date.toIso8601String(),
     };
   }
 
@@ -392,6 +395,9 @@ class TransactionModel {
           : null,
       customerContact: map['customer_contact']?.toString() ?? '',
       status: map['status']?.toString() ?? 'completed',
+      updatedAt: map['updated_at'] != null
+          ? DateTime.tryParse(map['updated_at'].toString())
+          : parsedDate,
     );
   }
 }

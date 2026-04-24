@@ -13,6 +13,7 @@ class StaffModel {
   double runtimeDeduction = 0.0; // Transient field for accurate calculation
   int isDeleted;
   DateTime? deletedAt;
+  DateTime? updatedAt;
 
   StaffModel({
     this.id,
@@ -28,6 +29,7 @@ class StaffModel {
     this.advance = 0,
     this.isDeleted = 0,
     this.deletedAt,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -44,6 +46,7 @@ class StaffModel {
       'is_synced': isSynced,
       'is_deleted': isDeleted,
       'deleted_at': deletedAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 
@@ -64,6 +67,7 @@ class StaffModel {
       advance: 0,
       isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
       deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
+      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );
   }
 
@@ -82,6 +86,7 @@ class StaffAdvanceModel {
   double amount;
   DateTime date;
   int isSynced;
+  DateTime? updatedAt;
 
   StaffAdvanceModel({
     this.id,
@@ -89,6 +94,7 @@ class StaffAdvanceModel {
     required this.amount,
     required this.date,
     this.isSynced = 0,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -98,6 +104,7 @@ class StaffAdvanceModel {
       'amount': amount,
       'date': date.toIso8601String(),
       'is_synced': isSynced,
+      'updated_at': updatedAt?.toIso8601String() ?? date.toIso8601String(),
     };
   }
 
@@ -110,6 +117,7 @@ class StaffAdvanceModel {
           ? DateTime.tryParse(map['date'].toString()) ?? DateTime.now() 
           : DateTime.now(),
       isSynced: (map['is_synced'] as num? ?? 0).toInt(),
+      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );
   }
 }
@@ -120,6 +128,7 @@ class StaffLeaveModel {
   DateTime date;
   double type; // 1.0 for full, 0.5 for half
   int isSynced;
+  DateTime? updatedAt;
 
   StaffLeaveModel({
     this.id,
@@ -127,6 +136,7 @@ class StaffLeaveModel {
     required this.date,
     required this.type,
     this.isSynced = 0,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -136,6 +146,7 @@ class StaffLeaveModel {
       'date': DateTime(date.year, date.month, date.day).toIso8601String(),
       'type': type,
       'is_synced': isSynced,
+      'updated_at': updatedAt?.toIso8601String() ?? date.toIso8601String(),
     };
   }
 
@@ -148,6 +159,7 @@ class StaffLeaveModel {
           : DateTime.now(),
       type: (map['type'] as num? ?? 0).toDouble(),
       isSynced: (map['is_synced'] as num? ?? 0).toInt(),
+      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );
   }
 }

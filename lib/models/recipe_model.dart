@@ -4,6 +4,7 @@ class RecipeModel {
   final int materialId; // Raw material being consumed
   final double quantity; // Quantity of material per unit of product
   int isSynced;
+  DateTime? updatedAt;
 
   RecipeModel({
     this.id,
@@ -11,6 +12,7 @@ class RecipeModel {
     required this.materialId,
     required this.quantity,
     this.isSynced = 0,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -20,6 +22,7 @@ class RecipeModel {
       'material_id': materialId,
       'quantity': quantity,
       'is_synced': isSynced,
+      'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 
@@ -30,6 +33,7 @@ class RecipeModel {
       materialId: map['material_id'] as int,
       quantity: (map['quantity'] as num).toDouble(),
       isSynced: map['is_synced'] as int? ?? 0,
+      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );
   }
 }

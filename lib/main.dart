@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
@@ -102,8 +104,12 @@ void callbackDispatcher() {
       try {
         final db = DatabaseHelper.instance;
         final firebaseService = FirebaseService();
+        final prefs = await SharedPreferences.getInstance();
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        
+        if (uid == null) return Future.value(true);
 
-        // Basic silent sync logic
+        // 1. PUSH (Local to Cloud)
         final unsyncedCats = await db.getUnsyncedData('categories');
         for (var map in unsyncedCats) {
           final cat = CategoryModel.fromMap(map);
@@ -125,27 +131,38 @@ void callbackDispatcher() {
           await db.updateSyncStatus('staff', staff.id!, 1);
         }
 
-        final unsyncedAdvances = await db.getUnsyncedData('staff_advance');
-        for (var map in unsyncedAdvances) {
-          final adv = StaffAdvanceModel.fromMap(map);
-          await firebaseService.syncStaffAdvance(adv);
-          await db.updateSyncStatus('staff_advance', adv.id!, 1);
-        }
-
-        final unsyncedLeaves = await db.getUnsyncedData('staff_leave');
-        for (var map in unsyncedLeaves) {
-          final leave = StaffLeaveModel.fromMap(map);
-          await firebaseService.syncStaffLeave(leave);
-          await db.updateSyncStatus('staff_leave', leave.id!, 1);
-        }
-
         final unsyncedTxs = await db.getUnsyncedTransactions();
         for (var tx in unsyncedTxs) {
           await firebaseService.syncTransaction(tx);
           await db.updateTransactionSyncStatus(tx.id!, 1);
         }
+
+        // 2. PULL (Cloud to Local - Delta Sync)
+        final lastSyncStr = prefs.getString('last_sync_timestamp_$uid');
+        final lastSync = lastSyncStr != null ? DateTime.tryParse(lastSyncStr) : null;
+
+        // Fetch delta changes
+        final cloudCats = await firebaseService.fetchAllCategories(since: lastSync);
+        if (cloudCats.isNotEmpty) {
+          await db.batchInsert('categories', cloudCats.map((c) => (c..isSynced = 1).toMap()).toList());
+        }
+
+        final cloudItems = await firebaseService.fetchAllItems(since: lastSync);
+        if (cloudItems.isNotEmpty) {
+          await db.batchInsert('items', cloudItems.map((i) => (i..isSynced = 1).toMap()).toList());
+        }
+
+        final cloudTxs = await firebaseService.fetchAllTransactions(since: lastSync);
+        if (cloudTxs.isNotEmpty) {
+          await db.batchInsert('transactions', cloudTxs.map((t) => (t..isSynced = 1).toMap()).toList());
+        }
+
+        // Update timestamp after successful delta pull
+        await prefs.setString('last_sync_timestamp_$uid', DateTime.now().toIso8601String());
+
         return Future.value(true);
       } catch (e) {
+        debugPrint("Workmanager Sync Error: $e");
         return Future.value(false);
       }
     }

@@ -10,6 +10,7 @@ class CategoryModel {
   int isSynced;
   int isDeleted;
   DateTime? deletedAt;
+  DateTime? updatedAt;
 
   CategoryModel({
     this.id,
@@ -23,6 +24,7 @@ class CategoryModel {
     this.isSynced = 0,
     this.isDeleted = 0,
     this.deletedAt,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -38,6 +40,7 @@ class CategoryModel {
       'is_synced': isSynced,
       'is_deleted': isDeleted,
       'deleted_at': deletedAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 
@@ -54,6 +57,7 @@ class CategoryModel {
       isSynced: (map['is_synced'] as num? ?? 0).toInt(),
       isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
       deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
+      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );
   }
 
@@ -69,6 +73,7 @@ class CategoryModel {
     int? isSynced,
     int? isDeleted,
     DateTime? deletedAt,
+    DateTime? updatedAt,
   }) {
     return CategoryModel(
       id: id ?? this.id,
@@ -82,6 +87,7 @@ class CategoryModel {
       isSynced: isSynced ?? this.isSynced,
       isDeleted: isDeleted ?? this.isDeleted,
       deletedAt: deletedAt ?? this.deletedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

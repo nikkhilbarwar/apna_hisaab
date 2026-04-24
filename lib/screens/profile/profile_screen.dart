@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../providers/sync_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/purchase_reminder_provider.dart';
 import '../../providers/supplier_provider.dart';
@@ -123,40 +124,78 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (path != null) {
         showDialog(
           context: context,
-          builder: (ctx) => AlertDialog(
+          builder: (ctx) => Dialog(
             backgroundColor: profile.cardColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            title: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green),
-                SizedBox(width: 12),
-                Text(
-                  'Backup Success',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            content: Text(
-              'Full backup created successfully!\n\nLocation: $path\n\nThis file will stay in your Documents folder even if you uninstall the app.',
-              style: TextStyle(color: profile.secondaryTextColor, fontSize: 13),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('OK'),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 48),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Backup Successful",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: profile.textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    "Your data is safe! The backup file is stored in your Documents folder and will persist even if you uninstall the app.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: profile.secondaryTextColor,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: profile.scaffoldColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      path,
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        color: profile.themeColor,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: profile.themeColor,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: const Text("GREAT", style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Failed to create backup. Please check storage permissions.',
-            ),
-          ),
+          const SnackBar(content: Text('Failed to create backup. Check storage permissions.')),
         );
       }
     }
@@ -173,45 +212,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final file = File(result.files.single.path!);
 
         if (mounted) {
-          bool confirm =
-              await showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: profile.cardColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  title: const Text(
-                    'Restore Data?',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  content: const Text(
-                    'Warning: This will replace all current app data and settings with the data from backup file. This cannot be undone.',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('CANCEL'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text(
-                        'PROCEED',
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
+          bool confirm = await showDialog(
+            context: context,
+            builder: (ctx) => Dialog(
+              backgroundColor: profile.cardColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
                       ),
+                      child: const Icon(Icons.warning_rounded, color: Colors.red, size: 48),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      "Restore Data?",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: profile.textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      "Warning: This will permanently replace all current app data and settings with the backup file. This cannot be undone.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 13,
+                        height: 1.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: Text(
+                              "CANCEL",
+                              style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 50),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              elevation: 0,
+                            ),
+                            child: const Text("PROCEED", style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ) ??
-              false;
+              ),
+            ),
+          ) ?? false;
 
           if (confirm && mounted) {
             setState(() => _isBackingUp = true);
             bool success = await _exportService.restoreFromBackup(file);
+            // ... (rest of the restore logic remains same)
 
             if (success) {
               await profile.loadProfile();
@@ -674,6 +750,831 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _showAppearanceSettings(ProfileProvider profile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Consumer<ProfileProvider>(
+        builder: (context, profile, child) => Container(
+          height: MediaQuery.of(ctx).size.height * 0.7, // Restricted to 70%
+          decoration: BoxDecoration(
+            color: profile.cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          child: Column(
+            children: [
+              // Header Drag Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: profile.secondaryTextColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Text(
+                      "App Appearance",
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: profile.textColor,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: Icon(Icons.close, color: profile.secondaryTextColor),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Section: Dark Mode
+                      _buildSectionHeader("VISUAL MODE", profile),
+                      const SizedBox(height: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: profile.scaffoldColor,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: profile.secondaryTextColor.withValues(alpha: 0.05),
+                          ),
+                        ),
+                        child: SwitchListTile(
+                          title: Text(
+                            "Dark Mode",
+                            style: TextStyle(
+                              color: profile.textColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            "Reduce eye strain in low light",
+                            style: TextStyle(
+                              color: profile.secondaryTextColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                          secondary: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: profile.themeColor.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              profile.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+                              color: profile.themeColor,
+                              size: 20,
+                            ),
+                          ),
+                          value: profile.isDarkMode,
+                          activeColor: profile.themeColor,
+                          onChanged: (val) => profile.toggleDarkMode(val),
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // Section: Theme Color
+                      _buildSectionHeader("THEME COLOR", profile),
+                      const SizedBox(height: 16),
+                      
+                      // Custom Picker Trigger
+                      InkWell(
+                        onTap: () => _showCustomColorPicker(profile),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: profile.scaffoldColor,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: profile.themeColor.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: profile.themeColor,
+                                child: const Icon(Icons.colorize, size: 16, color: Colors.white),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Custom Color Picker",
+                                      style: TextStyle(
+                                        color: profile.textColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    Text(
+                                      "Create your unique branding",
+                                      style: TextStyle(
+                                        color: profile.secondaryTextColor,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.arrow_forward_ios_rounded, size: 14, color: profile.secondaryTextColor),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 20),
+
+                      // Grid of Presets (Compact)
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 6,
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 16,
+                        ),
+                        itemCount: Colors.primaries.length,
+                        itemBuilder: (context, index) {
+                          final color = Colors.primaries[index];
+                          final isSelected = profile.themeColor.toARGB32() == color.toARGB32();
+                          return GestureDetector(
+                            onTap: () => profile.savePresetTheme(color),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected ? profile.textColor : Colors.transparent,
+                                  width: 3,
+                                ),
+                                boxShadow: [
+                                  if (isSelected)
+                                    BoxShadow(
+                                      color: color.withValues(alpha: 0.4),
+                                      blurRadius: 10,
+                                      spreadRadius: 2,
+                                    ),
+                                ],
+                              ),
+                              child: isSelected
+                                  ? const Icon(Icons.check, color: Colors.white, size: 16)
+                                  : null,
+                            ),
+                          );
+                        },
+                      ),
+
+                      if (profile.customThemeColors.isNotEmpty) ...[
+                        const SizedBox(height: 32),
+                        _buildSectionHeader("SAVED COLORS", profile),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 50,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: profile.customThemeColors.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 12),
+                            itemBuilder: (context, index) {
+                              final colorVal = profile.customThemeColors[index];
+                              final color = Color(colorVal);
+                              final isSelected = profile.themeColorValue == colorVal;
+                              return GestureDetector(
+                                onTap: () => profile.savePresetTheme(color),
+                                onLongPress: () => profile.removeCustomColor(colorVal),
+                                child: Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isSelected ? profile.textColor : Colors.transparent,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              // Bottom Action Button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: profile.themeColor,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 56),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    "SAVE CHANGES",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDataManagement(ProfileProvider profile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Consumer<ProfileProvider>(
+        builder: (context, profile, child) => Container(
+          height: MediaQuery.of(ctx).size.height * 0.7,
+          decoration: BoxDecoration(
+            color: profile.cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          child: Column(
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: profile.secondaryTextColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Text(
+                      "Data Management",
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: profile.textColor,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: Icon(Icons.close, color: profile.secondaryTextColor),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionHeader("STORAGE & BACKUP", profile),
+                      const SizedBox(height: 12),
+                      
+                      // Last Sync Indicator
+                      _buildLastSyncCard(profile),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Smart Sync Selection
+                      _buildSyncSelectionCard(profile),
+                      
+                      const SizedBox(height: 24),
+
+                      // Backup Option
+                      _buildDataActionCard(
+                        title: "Manual Backup",
+                        subtitle: "Export all data to a secure local file.",
+                        icon: Icons.cloud_upload_rounded,
+                        iconColor: Colors.blue,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _handleBackup(profile);
+                        },
+                        profile: profile,
+                      ),
+                      
+                      const SizedBox(height: 16),
+
+                      // Restore Option
+                      _buildDataActionCard(
+                        title: "Restore Data",
+                        subtitle: "Import your data from a previously saved backup file.",
+                        icon: Icons.settings_backup_restore_rounded,
+                        iconColor: Colors.orange,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _handleRestore(profile);
+                        },
+                        profile: profile,
+                      ),
+
+                      const SizedBox(height: 32),
+                      _buildSectionHeader("PRIVACY", profile),
+                      const SizedBox(height: 16),
+
+                      _buildDataActionCard(
+                        title: "Data & Security",
+                        subtitle: "Manage your privacy settings and view security protocols.",
+                        icon: Icons.security_rounded,
+                        iconColor: Colors.green,
+                        onTap: () => _showDataSecurityPopup(profile),
+                        profile: profile,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDataActionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required VoidCallback onTap,
+    required ProfileProvider profile,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: profile.scaffoldColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: profile.secondaryTextColor.withValues(alpha: 0.05)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconColor, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: profile.secondaryTextColor, fontSize: 12, height: 1.3),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: profile.secondaryTextColor),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSyncSelectionCard(ProfileProvider profile) {
+    final syncProvider = Provider.of<SyncProvider>(context);
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: profile.scaffoldColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: profile.themeColor.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded, color: profile.themeColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                "SMART SYNC ENGINE",
+                style: TextStyle(
+                  color: profile.themeColor,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 11,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const Spacer(),
+              if (syncProvider.isSyncing)
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(profile.themeColor),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _buildSyncOption(
+                mode: 'offline',
+                icon: Icons.cloud_off_rounded,
+                label: "Local",
+                currentMode: profile.syncMode,
+                profile: profile,
+              ),
+              const SizedBox(width: 8),
+              _buildSyncOption(
+                mode: 'online',
+                icon: Icons.cloud_done_rounded,
+                label: "Cloud",
+                currentMode: profile.syncMode,
+                profile: profile,
+              ),
+              const SizedBox(width: 8),
+              _buildSyncOption(
+                mode: 'hybrid',
+                icon: Icons.offline_pin_rounded,
+                label: "Smart",
+                currentMode: profile.syncMode,
+                profile: profile,
+              ),
+            ],
+          ),
+          if (syncProvider.isSyncing) ...[
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: syncProvider.syncProgress,
+                backgroundColor: profile.themeColor.withValues(alpha: 0.1),
+                valueColor: AlwaysStoppedAnimation<Color>(profile.themeColor),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              syncProvider.syncStatus,
+              style: TextStyle(
+                color: profile.themeColor,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Text(
+              profile.syncMode == 'hybrid'
+                  ? "Recommended: Fast local access with real-time cloud backup."
+                  : profile.syncMode == 'online'
+                      ? "Strict Cloud: Requires active internet for all operations."
+                      : "Strict Local: All data stays on this device only.",
+              style: TextStyle(color: profile.secondaryTextColor, fontSize: 11, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLastSyncCard(ProfileProvider profile) {
+    final syncProvider = Provider.of<SyncProvider>(context);
+    final String lastSync = syncProvider.lastSyncTimestamp != null
+        ? DateFormat('dd MMM, hh:mm a').format(syncProvider.lastSyncTimestamp!)
+        : "Never Synced";
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: profile.themeColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: profile.themeColor.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.history_rounded, color: profile.themeColor, size: 20),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Last Cloud Sync",
+                style: TextStyle(
+                  color: profile.secondaryTextColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                lastSync,
+                style: TextStyle(
+                  color: profile.textColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: syncProvider.isSyncing 
+              ? null 
+              : () => syncProvider.manualSyncToCloud(context),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              "SYNC NOW",
+              style: TextStyle(
+                color: profile.themeColor,
+                fontWeight: FontWeight.w900,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncOption({
+    required String mode,
+    required IconData icon,
+    required String label,
+    required String currentMode,
+    required ProfileProvider profile,
+  }) {
+    final bool isSelected = currentMode == mode;
+    return Expanded(
+      child: InkWell(
+        onTap: () => profile.updateSyncMode(mode),
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? profile.themeColor : profile.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? profile.themeColor : profile.secondaryTextColor.withValues(alpha: 0.1),
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: isSelected ? Colors.white : profile.secondaryTextColor, size: 20),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : profile.textColor,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, ProfileProvider profile) {
+    return Text(
+      title,
+      style: TextStyle(
+        color: profile.secondaryTextColor,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 1.5,
+        fontSize: 11,
+      ),
+    );
+  }
+
+  void _showCustomColorPicker(ProfileProvider profile) {
+    Color pickedColor = profile.themeColor;
+    final hexController = TextEditingController(
+      text: pickedColor.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase(),
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: profile.cardColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.brush_rounded, color: pickedColor, size: 28),
+                      const SizedBox(width: 12),
+                      Text(
+                        "Custom Theme",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: profile.textColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Modern Color Picker
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: ColorPicker(
+                      pickerColor: pickedColor,
+                      onColorChanged: (color) {
+                        pickedColor = color;
+                        final newHex = color.value
+                            .toRadixString(16)
+                            .padLeft(8, '0')
+                            .substring(2)
+                            .toUpperCase();
+                        if (hexController.text.toUpperCase() != newHex) {
+                          hexController.text = newHex;
+                        }
+                        setDialogState(() {});
+                      },
+                      enableAlpha: false,
+                      displayThumbColor: true,
+                      pickerAreaHeightPercent: 0.7,
+                      hexInputBar: false,
+                      labelTypes: const [], // Cleaner UI
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Hex Input Box
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: profile.scaffoldColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: pickedColor.withValues(alpha: 0.3),
+                        width: 2,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          "#",
+                          style: TextStyle(
+                            color: pickedColor,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: hexController,
+                            maxLength: 6,
+                            style: TextStyle(
+                              color: profile.textColor,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 3,
+                              fontSize: 18,
+                            ),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              counterText: "",
+                              hintText: "FFFFFF",
+                            ),
+                            onChanged: (val) {
+                              if (val.length == 6) {
+                                try {
+                                  final color = Color(int.parse("FF$val", radix: 16));
+                                  setDialogState(() {
+                                    pickedColor = color;
+                                  });
+                                } catch (_) {}
+                              }
+                            },
+                          ),
+                        ),
+                        // Small Preview Circle
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: pickedColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: pickedColor.withValues(alpha: 0.3),
+                                blurRadius: 4,
+                              )
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: Text(
+                            "CANCEL",
+                            style: TextStyle(
+                              color: profile.secondaryTextColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            profile.updateThemeColor(pickedColor);
+                            Navigator.pop(ctx);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: pickedColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            "APPLY THEME",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showSecuritySettings(ProfileProvider profile) {
     showModalBottomSheet(
       context: context,
@@ -886,67 +1787,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            // Cloud Sync Toggle
-            Container(
-              decoration: BoxDecoration(
-                color: profile.scaffoldColor,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: SwitchListTile(
-                title: Text(
-                  "Cloud Backup & Sync",
-                  style: TextStyle(
-                    color: profile.textColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                subtitle: const Text(
-                  "Sync business info across devices",
-                  style: TextStyle(fontSize: 11),
-                ),
-                value: profile.isCloudSyncEnabled,
-                activeThumbColor: profile.themeColor,
-                onChanged: (val) => profile.toggleCloudSync(val),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Manual Sync Button
-            OutlinedButton.icon(
-              onPressed: () async {
-                final scaffoldMessenger = ScaffoldMessenger.of(context);
-                bool success = await profile.fetchProfileFromCloud();
-                scaffoldMessenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      success
-                          ? "Profile synced from cloud"
-                          : "Failed to sync or no cloud data",
-                    ),
-                    backgroundColor: success ? Colors.green : Colors.red,
-                  ),
-                );
-              },
-              icon: Icon(Icons.sync, size: 18, color: profile.themeColor),
-              label: Text(
-                "SYNC PROFILE NOW",
-                style: TextStyle(
-                  color: profile.themeColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 45),
-                side: BorderSide(
-                  color: profile.themeColor.withValues(alpha: 0.5),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
             const SizedBox(height: 24),
             Expanded(
               child: SingleChildScrollView(
@@ -967,7 +1807,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       textAlign: TextAlign.justify,
                     ),
                     if (!_isSysAdmin) ...[
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 24),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: InkWell(
@@ -981,8 +1821,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: Colors.red.withValues(
                                 alpha: 0.2,
                               ), // Very faded
-                              fontSize: 10,
-                              decoration: TextDecoration.underline,
+                              fontSize: 12,
                             ),
                           ),
                         ),
@@ -2449,368 +3288,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     profile: profile,
                   ),
                   ProfileActionCard(
-                    title: "Theme Color",
-                    subtitle: "Personalize your app look",
+                    title: "App Appearance",
+                    subtitle: "Dark Mode and Theme Colors",
                     icon: Icons.palette_outlined,
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          backgroundColor: profile.cardColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          title: Text(
-                            "Select Theme Color",
-                            style: TextStyle(color: profile.textColor),
-                          ),
-                          content: SizedBox(
-                            width: MediaQuery.of(context).size.width * 0.9,
-                            child: SingleChildScrollView(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (profile.customThemeColors.isNotEmpty) ...[
-                                    Text(
-                                      "Saved Custom Colors",
-                                      style: TextStyle(
-                                        color: profile.secondaryTextColor,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    SizedBox(
-                                      height: 50,
-                                      child: ListView.separated(
-                                        scrollDirection: Axis.horizontal,
-                                        itemCount:
-                                            profile.customThemeColors.length,
-                                        separatorBuilder: (_, __) =>
-                                            const SizedBox(width: 12),
-                                        itemBuilder: (context, index) {
-                                          final colorVal =
-                                              profile.customThemeColors[index];
-                                          final color = Color(colorVal);
-                                          final isSelected =
-                                              profile.themeColorValue ==
-                                              colorVal;
-                                          return GestureDetector(
-                                            onTap: () {
-                                              profile.savePresetTheme(color);
-                                              Navigator.pop(ctx);
-                                            },
-                                            onLongPress: () {
-                                              profile.removeCustomColor(
-                                                colorVal,
-                                              );
-                                            },
-                                            child: Container(
-                                              width: 50,
-                                              height: 50,
-                                              decoration: BoxDecoration(
-                                                color: color,
-                                                shape: BoxShape.circle,
-                                                border: Border.all(
-                                                  color: isSelected
-                                                      ? profile.textColor
-                                                      : Colors.transparent,
-                                                  width: 2,
-                                                ),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: color.withValues(
-                                                      alpha: 0.3,
-                                                    ),
-                                                    blurRadius: 8,
-                                                    offset: const Offset(0, 4),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: isSelected
-                                                  ? const Icon(
-                                                      Icons.check,
-                                                      color: Colors.white,
-                                                      size: 20,
-                                                    )
-                                                  : null,
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(height: 20),
-                                    const Divider(),
-                                    const SizedBox(height: 12),
-                                  ],
-                                  Text(
-                                    "Presets",
-                                    style: TextStyle(
-                                      color: profile.secondaryTextColor,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  BlockPicker(
-                                    pickerColor: themeColor,
-                                    onColorChanged: (color) {
-                                      profile.savePresetTheme(color);
-                                      Navigator.pop(ctx);
-                                    },
-                                  ),
-                                  const Divider(),
-                                  const SizedBox(height: 8),
-                                  ListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    leading: CircleAvatar(
-                                      backgroundColor: profile.themeColor
-                                          .withValues(alpha: 0.1),
-                                      child: Icon(
-                                        Icons.colorize,
-                                        color: themeColor,
-                                      ),
-                                    ),
-                                    title: Text(
-                                      "Choose New Custom Color",
-                                      style: TextStyle(
-                                        color: profile.textColor,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    onTap: () {
-                                      Navigator.pop(ctx);
-                                      Color pickedColor = themeColor;
-                                      final hexController =
-                                          TextEditingController(
-                                            text: pickedColor
-                                                .toARGB32()
-                                                .toRadixString(16)
-                                                .padLeft(8, '0')
-                                                .substring(2)
-                                                .toUpperCase(),
-                                          );
-
-                                      showDialog(
-                                        context: context,
-                                        builder: (ctx) => StatefulBuilder(
-                                          builder: (context, setDialogState) => AlertDialog(
-                                            backgroundColor: profile.cardColor,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(24),
-                                            ),
-                                            title: Text(
-                                              "Custom Theme Color",
-                                              style: TextStyle(
-                                                color: profile.textColor,
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            content: SingleChildScrollView(
-                                              child: Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  ColorPicker(
-                                                    pickerColor: pickedColor,
-                                                    onColorChanged: (color) {
-                                                      pickedColor = color;
-                                                      final newHex = color
-                                                          .toARGB32()
-                                                          .toRadixString(16)
-                                                          .padLeft(8, '0')
-                                                          .substring(2)
-                                                          .toUpperCase();
-                                                      if (hexController.text
-                                                              .toUpperCase() !=
-                                                          newHex) {
-                                                        hexController.text =
-                                                            newHex;
-                                                      }
-                                                      setDialogState(() {});
-                                                    },
-                                                    enableAlpha: false,
-                                                    displayThumbColor: true,
-                                                    pickerAreaHeightPercent:
-                                                        0.7,
-                                                    hexInputBar: false,
-                                                  ),
-                                                  const SizedBox(height: 20),
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 16,
-                                                          vertical: 4,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color:
-                                                          profile.scaffoldColor,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            16,
-                                                          ),
-                                                      border: Border.all(
-                                                        color: profile
-                                                            .secondaryTextColor
-                                                            .withValues(
-                                                              alpha: 0.1,
-                                                            ),
-                                                      ),
-                                                    ),
-                                                    child: Row(
-                                                      children: [
-                                                        Text(
-                                                          "#",
-                                                          style: TextStyle(
-                                                            color: profile
-                                                                .secondaryTextColor,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                            fontSize: 18,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 12,
-                                                        ),
-                                                        Expanded(
-                                                          child: TextField(
-                                                            controller:
-                                                                hexController,
-                                                            style: TextStyle(
-                                                              color: profile
-                                                                  .textColor,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                              letterSpacing:
-                                                                  1.5,
-                                                            ),
-                                                            decoration:
-                                                                const InputDecoration(
-                                                                  border:
-                                                                      InputBorder
-                                                                          .none,
-                                                                  hintText:
-                                                                      "RRGGBB",
-                                                                  counterText:
-                                                                      "",
-                                                                ),
-                                                            maxLength: 6,
-                                                            onChanged: (val) {
-                                                              if (val.length ==
-                                                                  6) {
-                                                                try {
-                                                                  final color = Color(
-                                                                    int.parse(
-                                                                      "FF$val",
-                                                                      radix: 16,
-                                                                    ),
-                                                                  );
-                                                                  setDialogState(
-                                                                    () {
-                                                                      pickedColor =
-                                                                          color;
-                                                                    },
-                                                                  );
-                                                                } catch (_) {}
-                                                              }
-                                                            },
-                                                          ),
-                                                        ),
-                                                        Container(
-                                                          width: 30,
-                                                          height: 30,
-                                                          decoration: BoxDecoration(
-                                                            color: pickedColor,
-                                                            shape:
-                                                                BoxShape.circle,
-                                                            border: Border.all(
-                                                              color:
-                                                                  Colors.white,
-                                                              width: 2,
-                                                            ),
-                                                            boxShadow: [
-                                                              BoxShadow(
-                                                                color: pickedColor
-                                                                    .withValues(
-                                                                      alpha:
-                                                                          0.3,
-                                                                    ),
-                                                                blurRadius: 4,
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(ctx),
-                                                child: Text(
-                                                  "CANCEL",
-                                                  style: TextStyle(
-                                                    color: profile
-                                                        .secondaryTextColor,
-                                                  ),
-                                                ),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () {
-                                                  profile.updateThemeColor(
-                                                    pickedColor,
-                                                  );
-                                                  Navigator.pop(ctx);
-                                                },
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: pickedColor,
-                                                  foregroundColor: Colors.white,
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          15,
-                                                        ),
-                                                  ),
-                                                  elevation: 0,
-                                                ),
-                                                child: const Text(
-                                                  "SAVE & APPLY THEME",
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                    profile: profile,
-                  ),
-                  ProfileActionCard(
-                    title: "Dark Mode",
-                    subtitle: "Easier on your eyes",
-                    icon: Icons.dark_mode_outlined,
-                    trailing: Switch(
-                      value: profile.isDarkMode,
-                      activeThumbColor: themeColor,
-                      onChanged: (val) => profile.toggleDarkMode(val),
-                    ),
-                    onTap: () => profile.toggleDarkMode(!profile.isDarkMode),
+                    onTap: () => _showAppearanceSettings(profile),
                     profile: profile,
                   ),
                   const SizedBox(height: 24),
@@ -2848,26 +3329,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       profile: profile,
                     ),
                   ProfileActionCard(
-                    title: "Backup & Sync",
-                    subtitle: _isBackingUp
-                        ? "Backing up..."
-                        : "Secure your data offline",
-                    icon: Icons.cloud_upload_outlined,
-                    onTap: () => _handleBackup(profile),
-                    profile: profile,
-                  ),
-                  ProfileActionCard(
-                    title: "Restore Data",
-                    subtitle: "Import from local backup",
-                    icon: Icons.restore_rounded,
-                    onTap: () => _handleRestore(profile),
-                    profile: profile,
-                  ),
-                  ProfileActionCard(
-                    title: "Data & Security",
-                    subtitle: "Privacy policy and security settings",
-                    icon: Icons.security_outlined,
-                    onTap: () => _showDataSecurityPopup(profile),
+                    title: "Data Management",
+                    subtitle: "Backup, Restore and Privacy",
+                    icon: Icons.storage_rounded,
+                    onTap: () => _showDataManagement(profile),
                     profile: profile,
                   ),
                   ProfileActionCard(
@@ -2919,7 +3384,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         );
                       },
                     ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   Center(
                     child: Column(
                       children: [
@@ -2937,7 +3402,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 16),
                 ],
               ),
             ),
