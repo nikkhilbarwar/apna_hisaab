@@ -85,6 +85,7 @@ class StaffAdvanceModel {
   int staffId; // Using staffId (CamelCase)
   double amount;
   DateTime date;
+  String status; // 'pending' or 'settled'
   int isSynced;
   DateTime? updatedAt;
 
@@ -93,6 +94,7 @@ class StaffAdvanceModel {
     required this.staffId,
     required this.amount,
     required this.date,
+    this.status = 'pending',
     this.isSynced = 0,
     this.updatedAt,
   });
@@ -103,6 +105,7 @@ class StaffAdvanceModel {
       'staff_id': staffId, // Map to staff_id in DB
       'amount': amount,
       'date': date.toIso8601String(),
+      'status': status,
       'is_synced': isSynced,
       'updated_at': updatedAt?.toIso8601String() ?? date.toIso8601String(),
     };
@@ -116,6 +119,7 @@ class StaffAdvanceModel {
       date: map['date'] != null 
           ? DateTime.tryParse(map['date'].toString()) ?? DateTime.now() 
           : DateTime.now(),
+      status: map['status']?.toString() ?? 'pending',
       isSynced: (map['is_synced'] as num? ?? 0).toInt(),
       updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );

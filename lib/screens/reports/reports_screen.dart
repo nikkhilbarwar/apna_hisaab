@@ -31,12 +31,23 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   int _currentIndex = 0;
   DateTimeRange _selectedRange = DateTimeRange(
-    start: DateTime.now().subtract(const Duration(days: 30)),
+    start: DateTime(DateTime.now().year, DateTime.now().month, 1),
     end: DateTime.now(),
   );
   List<String> _selectedCategories = ['All'];
   List<String> _selectedItems = ['All'];
   String _selectedPaymentMode = 'All';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Provider.of<StaffProvider>(context, listen: false)
+            .setSelectedMonth(_selectedRange.end);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -292,6 +303,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
     double pending,
     ProfileProvider profile,
   ) {
+    final now = DateTime.now();
+    final bool isCurrentMonth =
+        _selectedRange.end.year == now.year &&
+        _selectedRange.end.month == now.month;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       decoration: BoxDecoration(
@@ -340,17 +356,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.pending_actions_rounded,
                         size: 14,
                         color: Colors.orange,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'UPCOMING SALARY',
-                        style: TextStyle(
+                        isCurrentMonth ? 'UPCOMING SALARY' : 'SALARY LIABILITY',
+                        style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w900,
                           color: Colors.orange,
@@ -438,7 +454,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       profile.themeColor,
                       lastDate: DateTime.now(),
                     );
-                    if (range != null) setState(() => _selectedRange = range);
+                    if (range != null) {
+                      setState(() => _selectedRange = range);
+                      if (mounted) {
+                        Provider.of<StaffProvider>(context, listen: false)
+                            .setSelectedMonth(range.end);
+                      }
+                    }
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -1013,6 +1035,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             staff: staffList[index],
                             profile: profile,
                             staffProvider: staffProvider,
+                            selectedRange: _selectedRange,
                           );
                         },
                       ),
@@ -2928,75 +2951,6 @@ class _ReportList extends StatelessWidget {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
-
-  void _showStaffPayrollSheet(
-    BuildContext context,
-    ProfileProvider profile,
-    double pending,
-  ) {
-    AppBottomSheet.show(
-      context: context,
-      profile: profile,
-      title: 'STAFF PAYROLL',
-      child: Consumer<StaffProvider>(
-        builder: (context, staffProvider, child) {
-          final staffList = staffProvider.staffList;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: profile.themeColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Total Net Payable',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: profile.secondaryTextColor,
-                      ),
-                    ),
-                    Text(
-                      '${profile.currencySymbol}${pending.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: profile.themeColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Flexible(
-                child: staffList.isEmpty
-                    ? const Center(child: Text('No staff added yet'))
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: staffList.length,
-                        itemBuilder: (context, index) {
-                          return _StaffPayrollCard(
-                            staff: staffList[index],
-                            profile: profile,
-                            staffProvider: staffProvider,
-                          );
-                        },
-                      ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
 }
 
 class _TrashList extends StatefulWidget {
@@ -4058,11 +4012,13 @@ class _StaffPayrollCard extends StatefulWidget {
   final StaffModel staff;
   final ProfileProvider profile;
   final StaffProvider staffProvider;
+  final DateTimeRange selectedRange;
 
   const _StaffPayrollCard({
     required this.staff,
     required this.profile,
     required this.staffProvider,
+    required this.selectedRange,
   });
 
   @override
@@ -4080,10 +4036,22 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
     setState(() => _isLoadingHistory = true);
     final adv = await widget.staffProvider.getStaffAdvances(widget.staff.id!);
     final lv = await widget.staffProvider.getStaffLeaves(widget.staff.id!);
+    
+    // Filter history based on selected month
+    final filteredAdv = adv.where((a) => 
+      a.date.year == widget.selectedRange.end.year && 
+      a.date.month == widget.selectedRange.end.month
+    ).toList();
+    
+    final filteredLv = lv.where((l) => 
+      l.date.year == widget.selectedRange.end.year && 
+      l.date.month == widget.selectedRange.end.month
+    ).toList();
+
     if (mounted) {
       setState(() {
-        _advances = adv;
-        _leaves = lv;
+        _advances = filteredAdv;
+        _leaves = filteredLv;
         _isLoadingHistory = false;
       });
     }
@@ -4517,9 +4485,10 @@ class _StaffPayrollCardState extends State<_StaffPayrollCard> {
     );
     await txProvider.addTransaction(expenseTx, itemProvider);
 
-    // 2. Clear Staff Advances & Leaves
-    await widget.staffProvider.clearStaffAdvances(widget.staff.id!);
-    await widget.staffProvider.clearStaffLeaves(widget.staff.id!);
+    // 2. Clear Staff Advances & Leaves (Only for the month being paid)
+    // In a production app, we would mark them as 'settled' for this specific month.
+    // Since current logic clears all, we'll keep it simple but ideally it should be month-specific.
+    await widget.staffProvider.settleMonth(widget.staff.id!, widget.selectedRange.end, amount);
 
     if (mounted) {
       Navigator.pop(context); // Close sheet

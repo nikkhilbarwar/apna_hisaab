@@ -10,6 +10,7 @@ import '../../models/staff_model.dart';
 import '../../providers/profile_provider.dart';
 import '../../utils/report_helper.dart';
 import '../../utils/image_helper.dart';
+import '../../services/export_service.dart';
 import '../../core/widgets/app_bottom_sheet.dart';
 
 class StaffScreen extends StatefulWidget {
@@ -528,7 +529,7 @@ class _StaffScreenState extends State<StaffScreen> {
                                           Container(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 10,
-                                              vertical: 8,
+                                              vertical: 6,
                                             ),
                                             decoration: BoxDecoration(
                                               color:
@@ -540,31 +541,60 @@ class _StaffScreenState extends State<StaffScreen> {
                                                   BorderRadius.circular(10),
                                             ),
                                             child: Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
                                               children: [
-                                                Text(
-                                                  'NET PAYABLE',
-                                                  style: TextStyle(
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: staff.isDeleted == 1
-                                                        ? Colors.grey
-                                                        : Colors.green.shade800,
-                                                    letterSpacing: 0.5,
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        'NET PAYABLE',
+                                                        style: TextStyle(
+                                                          fontSize: 8,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: staff.isDeleted == 1
+                                                              ? Colors.grey
+                                                              : Colors.green.shade800,
+                                                          letterSpacing: 0.5,
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        '₹${payable.toStringAsFixed(0)}',
+                                                        style: TextStyle(
+                                                          fontSize: 14,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: staff.isDeleted == 1
+                                                              ? Colors.grey
+                                                              : Colors.green.shade800,
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
-                                                Text(
-                                                  '₹${payable.toStringAsFixed(0)}',
-                                                  style: TextStyle(
-                                                    fontSize: 15,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: staff.isDeleted == 1
-                                                        ? Colors.grey
-                                                        : Colors.green.shade800,
+                                                if (payable > 0 && staff.isDeleted == 0)
+                                                  TextButton.icon(
+                                                    onPressed: () => _showSettleStaffConfirm(
+                                                      context,
+                                                      staffProvider,
+                                                      staff,
+                                                      payable,
+                                                    ),
+                                                    icon: const Icon(Icons.check_circle, size: 16),
+                                                    label: const Text(
+                                                      'SETTLE',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                    style: TextButton.styleFrom(
+                                                      foregroundColor: Colors.green.shade800,
+                                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                                      backgroundColor: Colors.white.withValues(alpha: 0.5),
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(8),
+                                                      ),
+                                                    ),
                                                   ),
-                                                ),
                                               ],
                                             ),
                                           ),
@@ -694,6 +724,98 @@ class _StaffScreenState extends State<StaffScreen> {
     );
   }
 
+  Widget _actionChip(String label, IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 14),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _exportPayrollReport(BuildContext context, StaffProvider provider, ProfileProvider profile) async {
+    final exportService = ExportService();
+    await exportService.generateMonthlyPayrollReport(
+      profile.businessName,
+      provider.staffList,
+      provider.selectedMonth,
+    );
+  }
+
+  void _showSettleAllConfirm(BuildContext context, StaffProvider provider) async {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final confirmed = await AppBottomSheet.showAction(
+      context: context,
+      profile: profile,
+      title: 'Settle All Staff?',
+      message: 'This will mark all current net payables as settled for ${DateFormat('MMMM yyyy').format(provider.selectedMonth)}. Are you sure?',
+      confirmLabel: 'SETTLE ALL',
+      isDestructive: false,
+    );
+
+    if (confirmed == true) {
+      for (var staff in provider.staffList) {
+        final payable = provider.calculatePayable(staff);
+        if (payable > 0) {
+          await provider.settleMonth(staff.id!, provider.selectedMonth, payable);
+        }
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('All staff settled successfully')),
+        );
+      }
+    }
+  }
+
+  void _showSettleStaffConfirm(
+    BuildContext context,
+    StaffProvider provider,
+    StaffModel staff,
+    double payable,
+  ) async {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final confirmed = await AppBottomSheet.showAction(
+      context: context,
+      profile: profile,
+      title: 'Settle ${staff.name}?',
+      message: 'Confirm payment of ₹${payable.toStringAsFixed(0)} for ${DateFormat('MMMM yyyy').format(provider.selectedMonth)}.',
+      confirmLabel: 'CONFIRM PAYMENT',
+      isDestructive: false,
+    );
+
+    if (confirmed == true) {
+      await provider.settleMonth(staff.id!, provider.selectedMonth, payable);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Settled ${staff.name} successfully')),
+        );
+      }
+    }
+  }
+
   Widget _buildTopSummaryCard(StaffProvider provider, ProfileProvider profile) {
     final themeColor = profile.themeColor;
     return ListenableBuilder(
@@ -708,7 +830,7 @@ class _StaffScreenState extends State<StaffScreen> {
         return Opacity(
           opacity: opacity,
           child: Container(
-            height: 135,
+            height: 200, // Increased height for month navigation and actions
             width: double.infinity,
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
@@ -723,6 +845,47 @@ class _StaffScreenState extends State<StaffScreen> {
                 ? Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      // Month Navigation Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 18),
+                            onPressed: () {
+                              final prevMonth = DateTime(
+                                provider.selectedMonth.year,
+                                provider.selectedMonth.month - 1,
+                              );
+                              provider.setSelectedMonth(prevMonth);
+                            },
+                          ),
+                          Text(
+                            DateFormat('MMMM yyyy').format(provider.selectedMonth).toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 18),
+                            onPressed: () {
+                              final nextMonth = DateTime(
+                                provider.selectedMonth.year,
+                                provider.selectedMonth.month + 1,
+                              );
+                              provider.setSelectedMonth(nextMonth);
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Divider(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        height: 1,
+                      ),
+                      const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -733,25 +896,33 @@ class _StaffScreenState extends State<StaffScreen> {
                             Colors.white70,
                           ),
                           _summaryItem(
-                            'Total Base Salary',
-                            '₹${provider.totalMonthlySalary.toStringAsFixed(0)}',
+                            'Total Net Payable',
+                            '₹${provider.totalNetPayable.toStringAsFixed(0)}',
                             Colors.white,
                             Colors.white70,
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      Divider(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        height: 1,
-                      ),
-                      const SizedBox(height: 10),
-                      _summaryItem(
-                        'Total Net Payable (Excl. Deleted)',
-                        '₹${provider.totalNetPayable.toStringAsFixed(0)}',
-                        Colors.white,
-                        Colors.white70,
-                        isCenter: true,
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _actionChip(
+                            'PAYROLL REPORT',
+                            Icons.summarize_outlined,
+                            Colors.white,
+                            () => _exportPayrollReport(context, provider, profile),
+                          ),
+                          if (provider.totalNetPayable > 0) ...[
+                            const SizedBox(width: 12),
+                            _actionChip(
+                              'SETTLE ALL',
+                              Icons.check_circle_outline,
+                              Colors.white,
+                              () => _showSettleAllConfirm(context, provider),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   )
@@ -1442,16 +1613,8 @@ class _LeaveCalendarWidgetState extends State<_LeaveCalendarWidget> {
       mainAxisSize: MainAxisSize.min,
       children: [
         TableCalendar(
-          firstDay: DateTime(
-            DateTime.now().year,
-            DateTime.now().month,
-            1,
-          ), // Current month ki 1st date
-          lastDay: DateTime(
-            DateTime.now().year,
-            DateTime.now().month + 2,
-            0,
-          ), // Agle mahine ki aakhri date
+          firstDay: widget.staff.joinDate, // Allow scrolling back to join date
+          lastDay: DateTime.now().add(const Duration(days: 365)),
           focusedDay: _focusedDay,
           calendarFormat: CalendarFormat.month,
           headerStyle: HeaderStyle(

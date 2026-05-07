@@ -165,30 +165,11 @@ class DatabaseHelper {
       try { await db.execute('ALTER TABLE items ADD COLUMN linked_item_ids TEXT DEFAULT ""'); } catch(_) {}
       try { await db.execute('ALTER TABLE items ADD COLUMN linked_category_ids TEXT DEFAULT ""'); } catch(_) {}
     }
-    if (oldVersion < 34) {
-      final tablesToUpdate = [
-        {'name': 'transactions', 'timeCol': 'date'},
-        {'name': 'items', 'timeCol': null},
-        {'name': 'categories', 'timeCol': null},
-        {'name': 'staff', 'timeCol': 'join_date'},
-        {'name': 'staff_advance', 'timeCol': 'date'},
-        {'name': 'staff_leave', 'timeCol': 'date'},
-        {'name': 'recipes', 'timeCol': null},
-        {'name': 'suppliers', 'timeCol': null},
-        {'name': 'units', 'timeCol': null},
-        {'name': 'purchase_reminders', 'timeCol': 'due_date'},
-      ];
-
-      for (var table in tablesToUpdate) {
-        try {
-          await db.execute('ALTER TABLE ${table['name']} ADD COLUMN updated_at TEXT');
-          if (table['timeCol'] != null) {
-            await db.execute('UPDATE ${table['name']} SET updated_at = ${table['timeCol']}');
-          } else {
-            await db.execute('UPDATE ${table['name']} SET updated_at = "${DateTime.now().toIso8601String()}"');
-          }
-        } catch (_) {}
-      }
+    if (oldVersion < 35) {
+      try { await db.execute('ALTER TABLE staff_advance ADD COLUMN status TEXT DEFAULT "pending"'); } catch(_) {}
+    }
+    if (oldVersion < 35) {
+      try { await db.execute('ALTER TABLE staff_advance ADD COLUMN status TEXT DEFAULT "pending"'); } catch(_) {}
     }
   }
 
@@ -283,6 +264,7 @@ class DatabaseHelper {
         staff_id INTEGER,
         amount REAL,
         date TEXT,
+        status TEXT DEFAULT "pending",
         is_synced INTEGER DEFAULT 0,
         updated_at TEXT
       )

@@ -1587,6 +1587,112 @@ class ExportService {
     await Share.shareXFiles([XFile(file.path)], text: 'Staff Detailed Payroll Report');
   }
 
+  /// Generate a concise monthly payroll report for all staff
+  Future<void> generateMonthlyPayrollReport(String bizName, List<StaffModel> staffList, DateTime selectedMonth) async {
+    final pdf = pw.Document();
+    final monthStr = DateFormat('MMMM yyyy').format(selectedMonth);
+    
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (context) => [
+          // Header
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(bizName.toUpperCase(), style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                  pw.Text("Monthly Payroll Report", style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                ],
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(monthStr.toUpperCase(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                  pw.Text("Generated: ${DateFormat('dd/MM/yy HH:mm').format(DateTime.now())}",
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+          pw.Divider(thickness: 1, color: PdfColors.blue900),
+          pw.SizedBox(height: 20),
+
+          // Summary Section
+          pw.Row(
+            children: [
+              _buildSummaryBox("TOTAL STAFF", staffList.length.toDouble(), PdfColors.blueGrey800),
+              pw.SizedBox(width: 15),
+              _buildSummaryBox("TOTAL PAYROLL", staffList.fold(0.0, (sum, s) => sum + s.monthlySalary), PdfColors.blue700),
+              pw.SizedBox(width: 15),
+              _buildSummaryBox("TOTAL ADVANCES", staffList.fold(0.0, (sum, s) => sum + s.advance), PdfColors.red700),
+              pw.SizedBox(width: 15),
+              _buildSummaryBox("NET DISBURSEMENT", staffList.fold(0.0, (sum, s) => sum + s.calculateCurrentPayable(s.runtimeDeduction)), PdfColors.green700),
+            ],
+          ),
+          pw.SizedBox(height: 30),
+
+          // Detailed Table
+          pw.Table.fromTextArray(
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
+            cellHeight: 30,
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            cellAlignments: {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerLeft,
+              2: pw.Alignment.centerRight,
+              3: pw.Alignment.centerRight,
+              4: pw.Alignment.centerRight,
+              5: pw.Alignment.centerRight,
+            },
+            headers: ['STAFF NAME', 'ROLE', 'BASE SALARY', 'LEAVES', 'ADVANCE', 'NET PAYABLE'],
+            data: staffList.map((s) {
+              return [
+                s.name.toUpperCase(),
+                s.role,
+                s.monthlySalary.toStringAsFixed(0),
+                s.totalLeaves.toString(),
+                s.advance.toStringAsFixed(0),
+                s.calculateCurrentPayable(s.runtimeDeduction).toStringAsFixed(0),
+              ];
+            }).toList(),
+          ),
+
+          pw.Spacer(),
+          pw.Divider(thickness: 0.5),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text("Apna Hisaab - Staff Management System", style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+              pw.Text("Authorized Signature: __________________", style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    try {
+      final pdfBytes = await pdf.save();
+      final dir = await _getReportDirectory();
+      final fileName = "Payroll_${monthStr.replaceAll(' ', '_')}_${DateFormat('ddMMM_HHmm').format(DateTime.now())}.pdf";
+      final path = "${dir.path}/$fileName";
+      await File(path).writeAsBytes(pdfBytes);
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdfBytes,
+        name: "Payroll_$monthStr",
+      );
+    } catch (e) {
+      debugPrint("Monthly Payroll Export Error: $e");
+    }
+  }
+
+
   Future<void> exportSingleStaffReport(String bizName, StaffModel staff, StaffProvider staffProvider, DateTimeRange range) async {
     final pdf = pw.Document();
 

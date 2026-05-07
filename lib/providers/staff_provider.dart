@@ -10,11 +10,18 @@ class StaffProvider with ChangeNotifier {
   List<StaffModel> _staffList = [];
   final FirebaseService _firebaseService = FirebaseService();
   bool _isSyncing = false;
+  DateTime _selectedMonth = DateTime.now();
 
   List<StaffModel> get staffList => _staffList.where((s) => s.isDeleted == 0).toList();
   List<StaffModel> get deletedStaff => _staffList.where((s) => s.isDeleted == 1).toList();
   List<StaffModel> get allStaff => _staffList;
   bool get isSyncing => _isSyncing;
+  DateTime get selectedMonth => _selectedMonth;
+
+  void setSelectedMonth(DateTime month) {
+    _selectedMonth = month;
+    fetchStaff();
+  }
 
   StaffProvider() {
     fetchStaff();
@@ -32,22 +39,25 @@ class StaffProvider with ChangeNotifier {
   Future<void> fetchStaff() async {
     try {
       _staffList = await DatabaseHelper.instance.getAllStaff();
-      DateTime now = DateTime.now();
       
       for (var staff in _staffList) {
         final advances = await getStaffAdvances(staff.id!);
-        staff.advance = advances.fold(0.0, (sum, item) => sum + item.amount);
+        // Sum ALL advances for the selected month (both pending and settled)
+        // This ensures historical reports show correct totals and Net Payable resets to 0 when settled.
+        final monthlyAdvances = advances.where((a) => 
+          a.date.year == _selectedMonth.year && a.date.month == _selectedMonth.month
+        ).toList();
+        staff.advance = monthlyAdvances.fold(0.0, (sum, item) => sum + item.amount);
         
         final leaves = await getStaffLeaves(staff.id!);
         
-        // Accurate Deduction: Based on actual days in the month of the leave
+        // Accurate Deduction: Based on actual days in the selected month
         double totalDeduction = 0;
         double totalLeavesCount = 0;
         
         for (var leave in leaves) {
-          // Only deduct for leaves up to the end of current month (or whatever the payroll period is)
-          // For now, let's say we only calculate payable for leaves in the past/current month.
-          if (leave.date.year < now.year || (leave.date.year == now.year && leave.date.month <= now.month)) {
+          // Only deduct for leaves in the selected month
+          if (leave.date.year == _selectedMonth.year && leave.date.month == _selectedMonth.month) {
             int daysInMonth = DateUtils.getDaysInMonth(leave.date.year, leave.date.month);
             double perDaySalary = staff.monthlySalary / daysInMonth;
             totalDeduction += leave.type * perDaySalary;
@@ -56,9 +66,6 @@ class StaffProvider with ChangeNotifier {
         }
         
         staff.totalLeaves = totalLeavesCount;
-        // We will store the calculated deduction in a way we can use it in calculatePayable
-        // Since StaffModel doesn't have a field for this, we'll calculate it on the fly or add a transient field.
-        // For now, let's pass it to the model function.
         staff.runtimeDeduction = totalDeduction; 
       }
       notifyListeners();
@@ -422,6 +429,45 @@ class StaffProvider with ChangeNotifier {
       await fetchStaff();
     } catch (e) {
       debugPrint("Error clearing leaves: $e");
+    }
+  }
+
+  Future<void> settleMonth(int staffId, DateTime month, double netPayable) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final monthStart = DateTime(month.year, month.month, 1).toIso8601String();
+      final monthEnd = DateTime(month.year, month.month + 1, 0, 23, 59, 59).toIso8601String();
+
+      // 1. Mark existing pending advances as 'settled' for this month
+      await db.update(
+        'staff_advance',
+        {'status': 'settled', 'is_synced': 0, 'updated_at': DateTime.now().toIso8601String()},
+        where: 'staff_id = ? AND status = ? AND date >= ? AND date <= ?',
+        whereArgs: [staffId, 'pending', monthStart, monthEnd]
+      );
+
+      // 2. Add the remaining Net Payable as a 'settled' entry to close the month
+      if (netPayable > 0) {
+        final finalPayment = StaffAdvanceModel(
+          staffId: staffId,
+          amount: netPayable,
+          date: DateTime.now(),
+          status: 'settled',
+        );
+        int id = await db.insert('staff_advance', finalPayment.toMap());
+        finalPayment.id = id;
+        try {
+          await _firebaseService.syncStaffAdvance(finalPayment);
+          await DatabaseHelper.instance.updateSyncStatus('staff_advance', id, 1);
+        } catch (e) {
+          debugPrint("Final Payment Sync Error: $e");
+        }
+      }
+      
+      await fetchStaff();
+      await syncAllPendingStaff();
+    } catch (e) {
+      debugPrint("Error settling month: $e");
     }
   }
 
