@@ -1156,66 +1156,95 @@ class _StaffScreenState extends State<StaffScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              SizedBox(
-                height: 300,
+              const Text(
+                'RECENT HISTORY',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.grey,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
                 child: Consumer<StaffProvider>(
                   builder: (context, provider, _) {
                     return FutureBuilder<List<StaffAdvanceModel>>(
                       future: provider.getStaffAdvances(staff.id!),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
+                        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                          return const Center(child: CircularProgressIndicator());
                         }
+                        
                         final advances = snapshot.data ?? [];
                         if (advances.isEmpty) {
                           return Center(
-                            child: Text(
-                              'No history found',
-                              style: TextStyle(
-                                color: profileProvider.secondaryTextColor,
-                              ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.history, size: 48, color: profileProvider.secondaryTextColor.withValues(alpha: 0.2)),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'No history found',
+                                  style: TextStyle(color: profileProvider.secondaryTextColor),
+                                ),
+                              ],
                             ),
                           );
                         }
                         return ListView.builder(
                           itemCount: advances.length,
+                          padding: EdgeInsets.zero,
                           itemBuilder: (context, index) {
                             final adv = advances[index];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.red.withValues(
-                                  alpha: 0.1,
-                                ),
-                                child: const Icon(
-                                  Icons.arrow_downward,
-                                  color: Colors.red,
-                                  size: 16,
-                                ),
-                              ),
-                              title: Text(
-                                '₹${adv.amount.toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
+                            final isSettled = adv.status == 'settled';
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: profileProvider.cardColor,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSettled ? Colors.green.withValues(alpha: 0.1) : Colors.transparent,
                                 ),
                               ),
-                              subtitle: Text(
-                                DateFormat(
-                                  'dd MMM yyyy, hh:mm a',
-                                ).format(adv.date),
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.red,
-                                  size: 20,
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: (isSettled ? Colors.green : Colors.red).withValues(alpha: 0.1),
+                                  child: Icon(
+                                    isSettled ? Icons.check_circle_outline : Icons.arrow_downward,
+                                    color: isSettled ? Colors.green : Colors.red,
+                                    size: 16,
+                                  ),
                                 ),
-                                onPressed: () => _confirmDeleteAdvance(
-                                  context,
-                                  provider,
-                                  adv,
+                                title: Text(
+                                  '${profileProvider.currencySymbol}${adv.amount.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isSettled ? Colors.green : profileProvider.textColor,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  DateFormat('dd MMM yyyy, hh:mm a').format(adv.date),
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (isSettled)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text('SETTLED', style: TextStyle(fontSize: 9, color: Colors.green, fontWeight: FontWeight.bold)),
+                                      ),
+                                    if (!isSettled)
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                        onPressed: () => _confirmDeleteAdvance(context, provider, adv),
+                                      ),
+                                  ],
                                 ),
                               ),
                             );
@@ -1228,6 +1257,7 @@ class _StaffScreenState extends State<StaffScreen> {
               ),
             ],
           ),
+
         ),
       ),
     );

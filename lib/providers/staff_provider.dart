@@ -144,7 +144,9 @@ class StaffProvider with ChangeNotifier {
       final advance = StaffAdvanceModel(
         staffId: staffId,
         amount: amount,
-        date: DateTime.now(),
+        date: _selectedMonth.year == DateTime.now().year && _selectedMonth.month == DateTime.now().month
+            ? DateTime.now()
+            : DateTime(_selectedMonth.year, _selectedMonth.month, 1, 12, 0),
       );
       
       final db = await DatabaseHelper.instance.database;
