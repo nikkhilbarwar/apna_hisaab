@@ -502,6 +502,35 @@ class StaffProvider with ChangeNotifier {
     return nextMonth;
   }
 
+  Future<void> updateStaffLoginDetails(int staffId, bool enabled, String code, String pin, String permissions) async {
+    try {
+      final index = _staffList.indexWhere((s) => s.id == staffId);
+      if (index != -1) {
+        final staff = _staffList[index];
+        staff.isLoginEnabled = enabled;
+        staff.staffCode = code;
+        staff.loginPin = pin;
+        staff.permissions = permissions;
+        staff.isSynced = 0;
+        
+        await DatabaseHelper.instance.updateStaff(staff);
+        await _firebaseService.syncStaff(staff);
+        await DatabaseHelper.instance.updateSyncStatus('staff', staffId, 1);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error updating staff login details: $e");
+    }
+  }
+
+  StaffModel? getStaffByCode(String code) {
+    try {
+      return _staffList.firstWhere((s) => s.staffCode == code && s.isLoginEnabled && s.isDeleted == 0);
+    } catch (_) {
+      return null;
+    }
+  }
+
   double get totalMonthlySalary => _staffList.where((s) => s.isDeleted == 0).fold(0, (sum, s) => sum + s.monthlySalary);
   double get totalAdvanceGiven => _staffList.where((s) => s.isDeleted == 0).fold(0, (sum, s) => sum + s.advance);
   double get totalNetPayable => _staffList.where((s) => s.isDeleted == 0).fold(0, (sum, s) => sum + s.calculateCurrentPayable(s.runtimeDeduction));

@@ -168,8 +168,11 @@ class DatabaseHelper {
     if (oldVersion < 35) {
       try { await db.execute('ALTER TABLE staff_advance ADD COLUMN status TEXT DEFAULT "pending"'); } catch(_) {}
     }
-    if (oldVersion < 35) {
-      try { await db.execute('ALTER TABLE staff_advance ADD COLUMN status TEXT DEFAULT "pending"'); } catch(_) {}
+    if (oldVersion < 36) {
+      try { await db.execute('ALTER TABLE staff ADD COLUMN is_login_enabled INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE staff ADD COLUMN staff_code TEXT DEFAULT ""'); } catch(_) {}
+      try { await db.execute('ALTER TABLE staff ADD COLUMN login_pin TEXT DEFAULT ""'); } catch(_) {}
+      try { await db.execute('ALTER TABLE staff ADD COLUMN permissions TEXT DEFAULT "{\\"can_sale\\":true,\\"can_stock\\":false,\\"can_reports\\":false}"'); } catch(_) {}
     }
   }
 

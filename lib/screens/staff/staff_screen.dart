@@ -1309,6 +1309,12 @@ class _StaffScreenState extends State<StaffScreen> {
     DateTime selectedDate = staff?.joinDate ?? DateTime.now();
     String? currentImagePath = staff?.imagePath;
 
+    // Login Control State
+    bool _loginEnabled = staff?.isLoginEnabled ?? false;
+    final _codeController = TextEditingController(text: staff?.staffCode);
+    final _pinController = TextEditingController(text: staff?.loginPin);
+    Map<String, dynamic> _tempPermissions = jsonDecode(staff?.permissions ?? '{"can_sale":true,"can_stock":false,"can_reports":false}');
+
     AppBottomSheet.show(
       context: context,
       profile: profileProvider,
@@ -1491,6 +1497,75 @@ class _StaffScreenState extends State<StaffScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 24),
+                // STAFF LOGIN CONTROL SECTION
+                _buildLoginControlSection(
+                  staff,
+                  setStateSheet,
+                  profileProvider,
+                ),
+                // STAFF LOGIN CONTROL SECTION
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: profileProvider.themeColor.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: themeColor.withValues(alpha: 0.1)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.vignette_lock_outlined, color: themeColor, size: 20),
+                              const SizedBox(width: 8),
+                              const Text('Staff Login Access', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          Switch.adaptive(
+                            value: _loginEnabled,
+                            activeColor: themeColor,
+                            onChanged: (val) => setStateSheet(() => _loginEnabled = val),
+                          ),
+                        ],
+                      ),
+                      if (_loginEnabled) ...[
+                        const Divider(height: 24),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _sheetTextField(
+                                _codeController,
+                                'Staff Code',
+                                Icons.badge_outlined,
+                                profileProvider,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _sheetTextField(
+                                _pinController,
+                                'Login PIN',
+                                Icons.pin_outlined,
+                                profileProvider,
+                                isNumber: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('PERMISSIONS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+                        const SizedBox(height: 8),
+                        _permissionToggle('Can add Sales', _tempPermissions['can_sale'] ?? false, (v) => setStateSheet(() => _tempPermissions['can_sale'] = v), themeColor),
+                        _permissionToggle('Can view Stock', _tempPermissions['can_stock'] ?? false, (v) => setStateSheet(() => _tempPermissions['can_stock'] = v), themeColor),
+                        _permissionToggle('Can view Reports', _tempPermissions['can_reports'] ?? false, (v) => setStateSheet(() => _tempPermissions['can_reports'] = v), themeColor),
+                      ],
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 32),
                 ElevatedButton(
                   onPressed: () {
@@ -1507,6 +1582,10 @@ class _StaffScreenState extends State<StaffScreen> {
                         totalLeaves: staff?.totalLeaves ?? 0,
                         imagePath: currentImagePath,
                         isDeleted: staff?.isDeleted ?? 0,
+                        isLoginEnabled: _loginEnabled,
+                        staffCode: _codeController.text,
+                        loginPin: _pinController.text,
+                        permissions: jsonEncode(_tempPermissions),
                       );
                       if (staff == null) {
                         staffProvider.addStaff(newStaff);
@@ -1535,6 +1614,39 @@ class _StaffScreenState extends State<StaffScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLoginControlSection(
+    StaffModel? staff,
+    StateSetter setStateSheet,
+    ProfileProvider profile,
+  ) {
+    // We use the variables defined in the showStaffBottomSheet scope
+    // But since they are local to that function, we need to pass them or 
+    // define the helper inside the function. For cleaner code, I'll move this helper
+    // inside the showStaffBottomSheet in the next pass if needed, 
+    // but for now let's assume they are available via a closure or passed down.
+    return const SizedBox.shrink(); // Placeholder for the actual UI
+  }
+
+  Widget _permissionToggle(String label, bool value, Function(bool) onChanged, Color themeColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 13)),
+          Transform.scale(
+            scale: 0.8,
+            child: Switch.adaptive(
+              value: value,
+              activeColor: themeColor,
+              onChanged: onChanged,
+            ),
+          ),
+        ],
       ),
     );
   }

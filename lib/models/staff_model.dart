@@ -15,10 +15,16 @@ class StaffModel {
   DateTime? deletedAt;
   DateTime? updatedAt;
 
+  // New Staff Mode Fields
+  bool isLoginEnabled;
+  String staffCode;
+  String loginPin;
+  String permissions; // JSON string of permissions
+
   StaffModel({
     this.id,
     required this.name,
-    this.role = 'Staff', // Default role
+    this.role = 'Staff',
     required this.monthlySalary,
     required this.joinDate,
     this.contact = '',
@@ -30,6 +36,10 @@ class StaffModel {
     this.isDeleted = 0,
     this.deletedAt,
     this.updatedAt,
+    this.isLoginEnabled = false,
+    this.staffCode = '',
+    this.loginPin = '',
+    this.permissions = '{"can_sale":true,"can_stock":false,"can_reports":false}',
   });
 
   Map<String, dynamic> toMap() {
@@ -47,6 +57,10 @@ class StaffModel {
       'is_deleted': isDeleted,
       'deleted_at': deletedAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'is_login_enabled': isLoginEnabled ? 1 : 0,
+      'staff_code': staffCode,
+      'login_pin': loginPin,
+      'permissions': permissions,
     };
   }
 
@@ -68,6 +82,10 @@ class StaffModel {
       isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
       deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
       updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
+      isLoginEnabled: (map['is_login_enabled'] as num? ?? 0) == 1,
+      staffCode: map['staff_code']?.toString() ?? '',
+      loginPin: map['login_pin']?.toString() ?? '',
+      permissions: map['permissions']?.toString() ?? '{"can_sale":true,"can_stock":false,"can_reports":false}',
     );
   }
 
