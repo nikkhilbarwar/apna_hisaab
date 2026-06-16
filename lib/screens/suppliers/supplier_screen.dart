@@ -118,7 +118,7 @@ class SupplierScreen extends StatelessWidget {
     );
 
     if (confirm == true) {
-      provider.deleteSupplier(supplier.id!);
+      provider.softDeleteSupplier(supplier.id!);
     }
   }
 

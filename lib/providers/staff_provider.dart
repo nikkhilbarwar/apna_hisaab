@@ -523,9 +523,13 @@ class StaffProvider with ChangeNotifier {
     }
   }
 
-  StaffModel? getStaffByCode(String code) {
+  Future<StaffModel?> getStaffByCode(String code) async {
     try {
-      return _staffList.firstWhere((s) => s.staffCode == code && s.isLoginEnabled && s.isDeleted == 0);
+      // Ensure we have fresh data
+      await fetchStaff();
+      return _staffList.firstWhere(
+        (s) => s.staffCode.toUpperCase() == code.toUpperCase() && s.isLoginEnabled && s.isDeleted == 0,
+      );
     } catch (_) {
       return null;
     }

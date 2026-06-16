@@ -18,11 +18,47 @@ class PurchaseReminderScreen extends StatefulWidget {
 class PurchaseReminderScreenState extends State<PurchaseReminderScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final List<String> _tabs = ['Today', 'Upcoming', 'Overdue', 'Completed'];
+  final Set<int> _selectedIds = {};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
+  }
+
+  void _toggleSelection(int id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _showBulkDeleteConfirm(BuildContext context) {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final provider = Provider.of<PurchaseReminderProvider>(context, listen: false);
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: profile.cardColor,
+        title: Text('Delete ${_selectedIds.length} items?'),
+        content: const Text('Are you sure you want to delete all selected items permanently?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          TextButton(
+            onPressed: () {
+              provider.deleteMultipleReminders(_selectedIds.toList());
+              setState(() => _selectedIds.clear());
+              Navigator.pop(ctx);
+            },
+            child: const Text('DELETE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -35,11 +71,24 @@ class PurchaseReminderScreenState extends State<PurchaseReminderScreen> with Sin
   Widget build(BuildContext context) {
     final profile = Provider.of<ProfileProvider>(context);
     final themeColor = profile.themeColor;
+    final bool isSelectionMode = _selectedIds.isNotEmpty;
 
     return Scaffold(
       backgroundColor: profile.scaffoldColor,
       appBar: AppBar(
-        title: const Text('PURCHASE LIST', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1, color: Colors.white)),
+        leading: isSelectionMode 
+          ? IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => setState(() => _selectedIds.clear()))
+          : null,
+        title: isSelectionMode 
+          ? Text('${_selectedIds.length} SELECTED', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.white))
+          : const Text('PURCHASE LIST', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1, color: Colors.white)),
+        actions: [
+          if (isSelectionMode)
+            IconButton(
+              icon: const Icon(Icons.delete_sweep_rounded, color: Colors.white),
+              onPressed: () => _showBulkDeleteConfirm(context),
+            ),
+        ],
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [themeColor.withValues(alpha: 0.8), themeColor]),
@@ -57,9 +106,13 @@ class PurchaseReminderScreenState extends State<PurchaseReminderScreen> with Sin
       ),
       body: TabBarView(
         controller: _tabController,
-        children: _tabs.map((t) => _ReminderList(filter: t)).toList(),
+        children: _tabs.map((t) => _ReminderList(
+          filter: t,
+          selectedIds: _selectedIds,
+          onToggle: _toggleSelection,
+        )).toList(),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: isSelectionMode ? null : FloatingActionButton.extended(
         onPressed: () => showReminderDialog(context),
         backgroundColor: themeColor,
         icon: const Icon(Icons.add_task_rounded, color: Colors.white),
@@ -249,7 +302,14 @@ class PurchaseReminderScreenState extends State<PurchaseReminderScreen> with Sin
 
 class _ReminderList extends StatelessWidget {
   final String filter;
-  const _ReminderList({required this.filter});
+  final Set<int> selectedIds;
+  final Function(int) onToggle;
+
+  const _ReminderList({
+    required this.filter,
+    required this.selectedIds,
+    required this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -275,7 +335,12 @@ class _ReminderList extends StatelessWidget {
       itemCount: reminders.length,
       itemBuilder: (context, index) {
         final r = reminders[index];
-        return _ReminderCard(reminder: r);
+        return _ReminderCard(
+          reminder: r,
+          isSelected: selectedIds.contains(r.id),
+          isSelectionMode: selectedIds.isNotEmpty,
+          onToggle: () => onToggle(r.id!),
+        );
       },
     );
   }
@@ -283,7 +348,16 @@ class _ReminderList extends StatelessWidget {
 
 class _ReminderCard extends StatelessWidget {
   final PurchaseReminderModel reminder;
-  const _ReminderCard({required this.reminder});
+  final bool isSelected;
+  final bool isSelectionMode;
+  final VoidCallback onToggle;
+
+  const _ReminderCard({
+    required this.reminder,
+    this.isSelected = false,
+    this.isSelectionMode = false,
+    required this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -293,93 +367,105 @@ class _ReminderCard extends StatelessWidget {
     Color priorityColor = reminder.priority == 'High' ? Colors.red : (reminder.priority == 'Medium' ? Colors.orange : Colors.blue);
     bool isCompleted = reminder.status != 'pending';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: profile.cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: isCompleted ? (reminder.status == 'bought' ? Colors.green : Colors.grey).withValues(alpha: 0.2) : profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        children: [
-          ListTile(
-            contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
-            leading: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: priorityColor.withValues(alpha: 0.1), shape: BoxShape.circle),
-              child: Icon(Icons.shopping_cart_outlined, color: priorityColor, size: 20),
-            ),
-            title: Text(reminder.itemName, style: TextStyle(fontWeight: FontWeight.w900, color: isCompleted ? profile.secondaryTextColor : profile.textColor, decoration: isCompleted ? TextDecoration.lineThrough : null)),
-            subtitle: Text('${reminder.quantity} Required • ${reminder.category}', style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
-            trailing: PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert, color: profile.secondaryTextColor),
-              onSelected: (v) {
-                if (v == 'edit') {
-                  context.findAncestorStateOfType<PurchaseReminderScreenState>()?.showReminderDialog(context, editReminder: reminder);
-                } else if (v == 'skip') {
-                  reminder.status = 'skipped';
-                  provider.updateReminder(reminder);
-                } else if (v == 'delete') {
-                  _showDeleteConfirm(context, provider);
-                } else if (v == 'reset') {
-                  reminder.status = 'pending';
-                  provider.updateReminder(reminder);
-                }
-              },
-              itemBuilder: (context) => [
-                if (!isCompleted) const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18), SizedBox(width: 8), Text('Edit')])),
-                if (!isCompleted) const PopupMenuItem(value: 'skip', child: Row(children: [Icon(Icons.block_flipped, size: 18), SizedBox(width: 8), Text('Skip/Cancel')])),
-                if (isCompleted) const PopupMenuItem(value: 'reset', child: Row(children: [Icon(Icons.restore_rounded, size: 18), SizedBox(width: 8), Text('Mark Pending')])),
-                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Colors.red, size: 18), SizedBox(width: 8), Text('Delete Permanent', style: TextStyle(color: Colors.red))])),
-              ],
-            ),
+    return GestureDetector(
+      onLongPress: onToggle,
+      onTap: isSelectionMode ? onToggle : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: isSelected ? profile.themeColor.withValues(alpha: 0.1) : profile.cardColor,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isSelected 
+              ? profile.themeColor 
+              : (isCompleted ? (reminder.status == 'bought' ? Colors.green : Colors.grey).withValues(alpha: 0.2) : profile.isDarkMode ? Colors.white10 : Colors.grey.shade100),
+            width: isSelected ? 2 : 1,
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Row(
-              children: [
-                Icon(Icons.event, size: 14, color: profile.secondaryTextColor),
-                const SizedBox(width: 6),
-                Text(DateFormat('dd MMM, hh:mm a').format(reminder.dueDate), style: TextStyle(fontSize: 11, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
-                const Spacer(),
-                if (!isCompleted)
-                  ElevatedButton(
-                    onPressed: () async {
-                      bool? purchased = await Navigator.push(context, MaterialPageRoute(builder: (c) => EntryScreen(
-                        initialType: 'purchase',
-                        initialCategory: reminder.category,
-                      )));
-                      
-                      if (purchased == true) {
-                        reminder.status = 'bought';
-                        provider.updateReminder(reminder);
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: profile.themeColor,
-                      minimumSize: const Size(80, 36),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Column(
+          children: [
+            ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+              leading: isSelectionMode 
+                ? Icon(isSelected ? Icons.check_circle_rounded : Icons.radio_button_off_rounded, color: isSelected ? profile.themeColor : profile.secondaryTextColor)
+                : Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: priorityColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+                    child: Icon(Icons.shopping_cart_outlined, color: priorityColor, size: 20),
+                  ),
+              title: Text(reminder.itemName, style: TextStyle(fontWeight: FontWeight.w900, color: isCompleted ? profile.secondaryTextColor : profile.textColor, decoration: isCompleted ? TextDecoration.lineThrough : null)),
+              subtitle: Text('${reminder.quantity} Required • ${reminder.category}', style: TextStyle(fontSize: 12, color: profile.secondaryTextColor)),
+              trailing: isSelectionMode ? null : PopupMenuButton<String>(
+                icon: Icon(Icons.more_vert, color: profile.secondaryTextColor),
+                onSelected: (v) {
+                  if (v == 'edit') {
+                    context.findAncestorStateOfType<PurchaseReminderScreenState>()?.showReminderDialog(context, editReminder: reminder);
+                  } else if (v == 'skip') {
+                    reminder.status = 'skipped';
+                    provider.updateReminder(reminder);
+                  } else if (v == 'delete') {
+                    _showDeleteConfirm(context, provider);
+                  } else if (v == 'reset') {
+                    reminder.status = 'pending';
+                    provider.updateReminder(reminder);
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (!isCompleted) const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18), SizedBox(width: 8), Text('Edit')])),
+                  if (!isCompleted) const PopupMenuItem(value: 'skip', child: Row(children: [Icon(Icons.block_flipped, size: 18), SizedBox(width: 8), Text('Skip/Cancel')])),
+                  if (isCompleted) const PopupMenuItem(value: 'reset', child: Row(children: [Icon(Icons.restore_rounded, size: 18), SizedBox(width: 8), Text('Mark Pending')])),
+                  const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, color: Colors.red, size: 18), SizedBox(width: 8), Text('Delete Permanent', style: TextStyle(color: Colors.red))])),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Row(
+                children: [
+                  Icon(Icons.event, size: 14, color: profile.secondaryTextColor),
+                  const SizedBox(width: 6),
+                  Text(DateFormat('dd MMM, hh:mm a').format(reminder.dueDate), style: TextStyle(fontSize: 11, color: profile.secondaryTextColor, fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  if (!isCompleted)
+                    ElevatedButton(
+                      onPressed: isSelectionMode ? null : () async {
+                        bool? purchased = await Navigator.push(context, MaterialPageRoute(builder: (c) => EntryScreen(
+                          initialType: 'purchase',
+                          initialCategory: reminder.category,
+                        )));
+                        
+                        if (purchased == true) {
+                          reminder.status = 'bought';
+                          provider.updateReminder(reminder);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: profile.themeColor,
+                        minimumSize: const Size(80, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('BOUGHT IT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     ),
-                    child: const Text('BOUGHT IT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  ),
-                if (reminder.status == 'skipped')
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                    child: const Text('SKIPPED', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                if (reminder.status == 'bought')
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                    child: const Text('PURCHASED', style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-              ],
+                  if (reminder.status == 'skipped')
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                      child: const Text('SKIPPED', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  if (reminder.status == 'bought')
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                      child: const Text('PURCHASED', style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

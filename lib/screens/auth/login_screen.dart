@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../providers/profile_provider.dart';
+import 'staff_login_screen.dart';
 import 'auth_wrapper.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -386,6 +387,25 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: Text(
                                 _isLogin ? "Don't have an account? Register" : "Already have an account? Login",
                                 style: TextStyle(color: themeColor, fontSize: 13),
+                              ),
+                            ),
+                            const Divider(height: 32),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const StaffLoginScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.people_outline, size: 20),
+                              label: const Text("Staff Login", style: TextStyle(fontSize: 13)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: themeColor,
+                                minimumSize: const Size(double.infinity, 50),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                side: BorderSide(color: themeColor.withValues(alpha: 0.5)),
                               ),
                             ),
                           ],

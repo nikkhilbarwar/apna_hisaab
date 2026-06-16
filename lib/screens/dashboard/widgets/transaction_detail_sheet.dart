@@ -6,6 +6,7 @@ import '../../../models/transaction_model.dart';
 import '../../../providers/item_provider.dart';
 import '../../../providers/profile_provider.dart';
 import '../../../providers/transaction_provider.dart';
+import '../../../providers/staff_auth_provider.dart';
 import '../../../services/export_service.dart';
 import '../../daily_entry/entry_screen.dart';
 
@@ -17,6 +18,7 @@ class TransactionDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final profile = Provider.of<ProfileProvider>(context);
+    final staffAuth = Provider.of<StaffAuthProvider>(context);
     final isSalary = tx.category == 'Salary';
     final isSale = tx.type == 'sale';
     final isPending = tx.paymentMode == 'Pending';
@@ -435,48 +437,62 @@ class TransactionDetailSheet extends StatelessWidget {
                   const SizedBox(height: 24),
 
                   // Action Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _actionButton(
-                          label: 'Edit',
-                          icon: Icons.edit_rounded,
-                          color: Colors.blue,
-                          onPressed: () {
-                            Navigator.pop(context); // Close the sheet
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    EntryScreen(transaction: tx),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _actionButton(
-                          label: 'Print',
-                          icon: Icons.print_rounded,
-                          color: profile.themeColor,
-                          onPressed: () => ExportService().saveBillAsPdf(
-                            tx,
-                            profile.displayBusinessName,
+                  if (staffAuth.hasPermission('can_sale'))
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _actionButton(
+                            label: 'Edit',
+                            icon: Icons.edit_rounded,
+                            color: Colors.blue,
+                            onPressed: () {
+                              Navigator.pop(context); // Close the sheet
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      EntryScreen(transaction: tx),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _actionButton(
-                          label: 'Delete',
-                          icon: Icons.delete_outline_rounded,
-                          color: Colors.red,
-                          onPressed: () => _confirmDelete(context, tx),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _actionButton(
+                            label: 'Print',
+                            icon: Icons.print_rounded,
+                            color: profile.themeColor,
+                            onPressed: () => ExportService().saveBillAsPdf(
+                              tx,
+                              profile.displayBusinessName,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _actionButton(
+                            label: 'Delete',
+                            icon: Icons.delete_outline_rounded,
+                            color: Colors.red,
+                            onPressed: () => _confirmDelete(context, tx),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      child: _actionButton(
+                        label: 'Print Receipt',
+                        icon: Icons.print_rounded,
+                        color: profile.themeColor,
+                        onPressed: () => ExportService().saveBillAsPdf(
+                          tx,
+                          profile.displayBusinessName,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
                   const SizedBox(height: 40),
                 ],
               ),

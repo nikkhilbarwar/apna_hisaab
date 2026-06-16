@@ -18,6 +18,7 @@ import 'providers/item_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/category_provider.dart';
 import 'providers/staff_provider.dart';
+import 'providers/staff_auth_provider.dart';
 import 'providers/supplier_provider.dart';
 import 'providers/sync_provider.dart';
 import 'providers/unit_provider.dart';
@@ -252,6 +253,7 @@ void main() async {
             ChangeNotifierProvider(
               create: (_) => StaffProvider()..fetchStaff(),
             ),
+            ChangeNotifierProvider(create: (_) => StaffAuthProvider()),
             ChangeNotifierProvider(
               create: (_) => SupplierProvider()..fetchSuppliers(),
             ),

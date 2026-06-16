@@ -10,6 +10,8 @@ class PurchaseReminderModel {
   DateTime dueDate;
   String status; // pending, bought, skipped
   int isSynced;
+  int isDeleted;
+  DateTime? deletedAt;
   DateTime? updatedAt;
 
   PurchaseReminderModel({
@@ -24,6 +26,8 @@ class PurchaseReminderModel {
     required this.dueDate,
     this.status = 'pending',
     this.isSynced = 0,
+    this.isDeleted = 0,
+    this.deletedAt,
     this.updatedAt,
   });
 
@@ -40,23 +44,27 @@ class PurchaseReminderModel {
       'due_date': dueDate.toIso8601String(),
       'status': status,
       'is_synced': isSynced,
+      'is_deleted': isDeleted,
+      'deleted_at': deletedAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 
   factory PurchaseReminderModel.fromMap(Map<String, dynamic> map) {
     return PurchaseReminderModel(
-      id: map['id'],
-      itemId: map['item_id'],
-      itemName: map['item_name'] ?? '',
-      category: map['category'] ?? '',
+      id: (map['id'] as num?)?.toInt(),
+      itemId: (map['item_id'] as num?)?.toInt(),
+      itemName: map['item_name']?.toString() ?? '',
+      category: map['category']?.toString() ?? '',
       quantity: (map['quantity'] as num? ?? 0).toDouble(),
       expectedPrice: map['expected_price'] != null ? (map['expected_price'] as num).toDouble() : null,
-      note: map['note'],
-      priority: map['priority'] ?? 'Medium',
-      dueDate: map['due_date'] != null ? DateTime.parse(map['due_date']) : DateTime.now(),
-      status: map['status'] ?? 'pending',
-      isSynced: map['is_synced'] ?? 0,
+      note: map['note']?.toString(),
+      priority: map['priority']?.toString() ?? 'Medium',
+      dueDate: map['due_date'] != null ? (DateTime.tryParse(map['due_date'].toString()) ?? DateTime.now()) : DateTime.now(),
+      status: map['status']?.toString() ?? 'pending',
+      isSynced: (map['is_synced'] as num? ?? 0).toInt(),
+      isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
+      deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
       updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );
   }

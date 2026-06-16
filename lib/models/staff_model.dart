@@ -39,7 +39,7 @@ class StaffModel {
     this.isLoginEnabled = false,
     this.staffCode = '',
     this.loginPin = '',
-    this.permissions = '{"can_sale":true,"can_stock":false,"can_reports":false}',
+    this.permissions = '{"can_sale":true,"can_stock":false,"can_reports":false,"can_manage_staff":false}',
   });
 
   Map<String, dynamic> toMap() {
@@ -85,7 +85,7 @@ class StaffModel {
       isLoginEnabled: (map['is_login_enabled'] as num? ?? 0) == 1,
       staffCode: map['staff_code']?.toString() ?? '',
       loginPin: map['login_pin']?.toString() ?? '',
-      permissions: map['permissions']?.toString() ?? '{"can_sale":true,"can_stock":false,"can_reports":false}',
+      permissions: map['permissions']?.toString() ?? '{"can_sale":true,"can_stock":false,"can_reports":false,"can_manage_staff":false}',
     );
   }
 

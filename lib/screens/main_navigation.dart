@@ -7,8 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import '../main.dart';
 import '../providers/profile_provider.dart';
+import '../providers/staff_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/sync_provider.dart';
+import '../providers/staff_auth_provider.dart';
 import '../services/export_service.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'stock/stock_screen.dart';
@@ -37,7 +39,29 @@ class _MainNavigationState extends State<MainNavigation>
     });
     _checkAdminStatus();
     _checkAutoBackup();
-    _checkRestoreNag(); // New: Restore suggestion popup
+    _checkRestoreNag();
+    _checkAccess(); // Added Security Check
+  }
+
+  Future<void> _checkAccess() async {
+    final staffAuth = Provider.of<StaffAuthProvider>(context, listen: false);
+    final staffProvider = Provider.of<StaffProvider>(context, listen: false);
+    
+    if (staffAuth.isStaffLoggedIn && staffAuth.currentStaff != null) {
+      // Reload the staff list to get the latest status
+      await staffProvider.fetchStaff();
+      final latestStaff = staffProvider.allStaff.firstWhere(
+        (s) => s.id == staffAuth.currentStaff!.id,
+        orElse: () => staffAuth.currentStaff!,
+      );
+
+      if (!latestStaff.isLoginEnabled) {
+        await staffAuth.logoutStaff();
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+        }
+      }
+    }
   }
 
   Future<void> _checkRestoreNag() async {
@@ -575,6 +599,7 @@ class _MainNavigationState extends State<MainNavigation>
     final profile = Provider.of<ProfileProvider>(context);
     final txProvider = Provider.of<TransactionProvider>(context);
     final syncProvider = Provider.of<SyncProvider>(context);
+    final staffAuth = Provider.of<StaffAuthProvider>(context);
     final themeColor = profile.themeColor;
     final user = FirebaseAuth.instance.currentUser;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -664,11 +689,29 @@ class _MainNavigationState extends State<MainNavigation>
     Widget body = TabBarView(
       controller: _tabController,
       physics: isTablet ? const NeverScrollableScrollPhysics() : null,
-      children: const [
-        DashboardScreen(),
-        StockScreen(),
-        ReportsScreen(),
-        StaffScreen(),
+      children: [
+        const DashboardScreen(),
+        if (staffAuth.hasPermission('can_stock'))
+          const StockScreen()
+        else
+          _PermissionDeniedPlaceholder(
+            permission: 'View Stock',
+            themeColor: themeColor,
+          ),
+        if (staffAuth.hasPermission('can_reports'))
+          const ReportsScreen()
+        else
+          _PermissionDeniedPlaceholder(
+            permission: 'View Reports',
+            themeColor: themeColor,
+          ),
+        if (staffAuth.hasPermission('can_manage_staff'))
+          const StaffScreen()
+        else
+          _PermissionDeniedPlaceholder(
+            permission: 'Manage Staff',
+            themeColor: themeColor,
+          ),
       ],
     );
 
@@ -847,6 +890,46 @@ class _MainNavigationState extends State<MainNavigation>
                 ],
               )
             : body,
+      ),
+    );
+  }
+}
+
+class _PermissionDeniedPlaceholder extends StatelessWidget {
+  final String permission;
+  final Color themeColor;
+
+  const _PermissionDeniedPlaceholder({
+    required this.permission,
+    required this.themeColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_person_rounded, size: 80, color: themeColor.withValues(alpha: 0.3)),
+            const SizedBox(height: 24),
+            Text(
+              "Access Denied",
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: themeColor,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "You do not have permission to $permission. Please contact your manager/owner for access.",
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+          ],
+        ),
       ),
     );
   }

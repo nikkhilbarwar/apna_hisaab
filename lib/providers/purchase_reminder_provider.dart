@@ -4,33 +4,35 @@ import '../core/database/database_helper.dart';
 
 class PurchaseReminderProvider with ChangeNotifier {
   List<PurchaseReminderModel> _reminders = [];
-  bool _isSyncing = false;
+  bool _isLoading = false;
 
   List<PurchaseReminderModel> get reminders => _reminders;
-  bool get isSyncing => _isSyncing;
+  bool get isLoading => _isLoading;
 
   PurchaseReminderProvider() {
     fetchReminders();
   }
 
   Future<void> fetchReminders() async {
+    _isLoading = true;
+    notifyListeners();
     try {
-      final db = await DatabaseHelper.instance.database;
-      final List<Map<String, dynamic>> maps = await db.query('purchase_reminders', orderBy: 'due_date ASC');
-      _reminders = maps.map((m) => PurchaseReminderModel.fromMap(m)).toList();
-      notifyListeners();
+      _reminders = await DatabaseHelper.instance.getAllPurchaseReminders();
     } catch (e) {
       debugPrint("Error fetching reminders: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
   Future<void> addReminder(PurchaseReminderModel reminder) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      int id = await db.insert('purchase_reminders', reminder.toMap());
+      int id = await DatabaseHelper.instance.insertPurchaseReminder(reminder);
       reminder.id = id;
       _reminders.add(reminder);
       notifyListeners();
+      // TODO: Trigger background sync to Firebase
     } catch (e) {
       debugPrint("Error adding reminder: $e");
     }
@@ -38,26 +40,57 @@ class PurchaseReminderProvider with ChangeNotifier {
 
   Future<void> updateReminder(PurchaseReminderModel reminder) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      await db.update('purchase_reminders', reminder.toMap(), where: 'id = ?', whereArgs: [reminder.id]);
+      await DatabaseHelper.instance.updatePurchaseReminder(reminder);
       int index = _reminders.indexWhere((r) => r.id == reminder.id);
       if (index != -1) {
         _reminders[index] = reminder;
         notifyListeners();
+        // TODO: Trigger background sync to Firebase
       }
     } catch (e) {
       debugPrint("Error updating reminder: $e");
     }
   }
 
+  Future<void> softDeleteReminder(int id) async {
+    try {
+      await DatabaseHelper.instance.softDeletePurchaseReminder(id);
+      _reminders.removeWhere((r) => r.id == id);
+      notifyListeners();
+      // TODO: Trigger background sync to Firebase
+    } catch (e) {
+      debugPrint("Error soft deleting reminder: $e");
+    }
+  }
+
+  Future<void> restoreReminder(int id) async {
+    try {
+      await DatabaseHelper.instance.restorePurchaseReminder(id);
+      await fetchReminders();
+    } catch (e) {
+      debugPrint("Error restoring reminder: $e");
+    }
+  }
+
   Future<void> deleteReminder(int id) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      await db.delete('purchase_reminders', where: 'id = ?', whereArgs: [id]);
+      await DatabaseHelper.instance.permanentDeletePurchaseReminder(id);
       _reminders.removeWhere((r) => r.id == id);
       notifyListeners();
     } catch (e) {
       debugPrint("Error deleting reminder: $e");
+    }
+  }
+
+  Future<void> deleteMultipleReminders(List<int> ids) async {
+    try {
+      for (var id in ids) {
+        await DatabaseHelper.instance.permanentDeletePurchaseReminder(id);
+      }
+      _reminders.removeWhere((r) => ids.contains(r.id));
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error deleting multiple reminders: $e");
     }
   }
 

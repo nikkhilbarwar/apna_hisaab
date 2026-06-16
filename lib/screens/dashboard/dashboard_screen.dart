@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../models/category_model.dart';
+import '../../providers/staff_auth_provider.dart';
 import '../../providers/transaction_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/transaction_model.dart';
@@ -1026,81 +1027,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (c) => EntryScreen(transaction: tx),
+                if (Provider.of<StaffAuthProvider>(context, listen: false).hasPermission('can_sale'))
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (c) => EntryScreen(transaction: tx),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.add_shopping_cart_rounded,
+                            size: 16,
+                          ),
+                          label: const Text(
+                            'ADD MORE',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
                             ),
-                          );
-                        },
-                        icon: const Icon(
-                          Icons.add_shopping_cart_rounded,
-                          size: 16,
-                        ),
-                        label: const Text(
-                          'ADD MORE',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueGrey.shade100,
+                            foregroundColor: Colors.blueGrey.shade800,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
                           ),
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueGrey.shade100,
-                          foregroundColor: Colors.blueGrey.shade800,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (c) => EntryScreen(transaction: tx),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            'COMPLETE BILL',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: () =>
+                            provider.softDeleteTransaction(tx.id!, itemProvider),
+                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.red.withValues(alpha: 0.1),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          elevation: 0,
                         ),
                       ),
+                    ],
+                  )
+                else
+                  const Center(
+                    child: Text(
+                      'Locked: Sale permission required',
+                      style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (c) => EntryScreen(transaction: tx),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'COMPLETE BILL',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: () =>
-                          provider.softDeleteTransaction(tx.id!, itemProvider),
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.red.withValues(alpha: 0.1),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
               ],
             ),
           ),
@@ -1215,6 +1224,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildQuickActions(BuildContext context) {
+    final staffAuth = Provider.of<StaffAuthProvider>(context, listen: false);
+    if (!staffAuth.hasPermission('can_sale')) return const SizedBox.shrink();
+
     return Row(
       children: [
         _modernActionButton(

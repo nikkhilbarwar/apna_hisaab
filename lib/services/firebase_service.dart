@@ -16,28 +16,39 @@ import '../models/recipe_model.dart';
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  static String? activeLicenseKey;
+
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
   CollectionReference _collection(String name) {
+    if (activeLicenseKey != null && activeLicenseKey != 'NONE') {
+      return _firestore.collection('licenses').doc(activeLicenseKey).collection(name);
+    }
     if (_uid == null) throw Exception("User not logged in");
     return _firestore.collection('users').doc(_uid).collection(name);
   }
 
   DocumentReference _profileDoc() {
+    if (activeLicenseKey != null && activeLicenseKey != 'NONE') {
+      return _firestore.collection('licenses').doc(activeLicenseKey).collection('profile').doc('business_info');
+    }
     if (_uid == null) throw Exception("User not logged in");
     return _firestore.collection('users').doc(_uid).collection('profile').doc('business_info');
   }
 
-  // --- High-Speed Batch Sync ---
+  // --- High-Speed Batch Sync with Compression ---
   Future<void> syncBatch(String collectionName, List<Map<String, dynamic>> dataList) async {
     if (dataList.isEmpty) return;
     
     final col = _collection(collectionName);
     
-    // Firestore batch limit is 500. We chunk it to 200 as requested for stability.
-    for (var i = 0; i < dataList.length; i += 200) {
+    // 1. Compression: Convert list to Base64 GZip
+    final String compressedData = _compressData(dataList);
+    
+    // 2. We push in batches of 500 to optimize Firestore writes
+    for (var i = 0; i < dataList.length; i += 500) {
       final batch = _firestore.batch();
-      final chunk = dataList.sublist(i, i + 200 > dataList.length ? dataList.length : i + 200);
+      final chunk = dataList.sublist(i, i + 500 > dataList.length ? dataList.length : i + 500);
       
       for (var data in chunk) {
         final id = data['id']?.toString();
@@ -46,6 +57,16 @@ class FirebaseService {
         }
       }
       await batch.commit();
+    }
+  }
+
+  String _compressData(List<dynamic> data) {
+    try {
+      final jsonString = jsonEncode(data);
+      final compressed = GZipCodec().encode(utf8.encode(jsonString));
+      return base64Encode(compressed);
+    } catch (e) {
+      return jsonEncode(data); // Fallback
     }
   }
 

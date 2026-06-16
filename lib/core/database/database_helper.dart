@@ -2,31 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/transaction_model.dart';
-import '../../models/item_model.dart';
-import '../../models/supplier_model.dart';
-import '../../models/staff_model.dart';
-import '../../models/category_model.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/models/supplier_model.dart';
+import 'package:apna_hisaab/models/staff_model.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/models/purchase_reminder_model.dart';
+
+import '../../services/firebase_service.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
   static String? _currentUserId;
+  static String? _currentLicenseId;
 
   DatabaseHelper._init();
 
   Future<Database> get database async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw Exception("User not logged in");
+    
+    // We get licenseId from some global state. 
+    // For now assuming it is set in ProfileProvider.activeLicenseKey
+    // We use licenseId to partition database files
+    final String licenseId = FirebaseService.activeLicenseKey ?? 'default';
 
-    if (_currentUserId != user.uid) {
+    if (_currentUserId != user.uid || _currentLicenseId != licenseId) {
       await closeDatabase();
       _currentUserId = user.uid;
-      _database = await _initDB('food_cart_${user.uid}.db');
+      _currentLicenseId = licenseId;
+      _database = await _initDB('food_cart_${user.uid}_$licenseId.db');
     }
 
     if (_database != null) return _database!;
-    _database = await _initDB('food_cart_${user.uid}.db');
+    _database = await _initDB('food_cart_${user.uid}_$licenseId.db');
     return _database!;
   }
 
@@ -43,7 +53,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path, 
-      version: 34,
+      version: 39,
       onCreate: _createDB, 
       onUpgrade: (db, oldVersion, newVersion) async {
         debugPrint("MIGRATION: Upgrading from $oldVersion to $newVersion");
@@ -52,25 +62,81 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> _ensureTableColumn(Database db, String tableName, String columnName, String columnType) async {
+    try {
+      var tableInfo = await db.rawQuery('PRAGMA table_info($tableName)');
+      var columns = tableInfo.map((row) => row['name']).toList();
+      if (!columns.contains(columnName)) {
+        debugPrint("MIGRATION: Adding column $columnName to $tableName");
+        await db.execute('ALTER TABLE $tableName ADD COLUMN $columnName $columnType');
+      }
+    } catch (e) {
+      debugPrint("MIGRATION ERROR: Could not add $columnName to $tableName: $e");
+    }
+  }
+
+  // Helper to ensure license_id exists in all tables
+  Future<void> _addLicenseIdToTables(Database db) async {
+    final tables = [
+      'transactions', 'items', 'suppliers', 'staff', 
+      'categories', 'units', 'purchase_reminders', 'recipes'
+    ];
+    for (var table in tables) {
+      await _ensureTableColumn(db, table, 'license_id', 'TEXT DEFAULT "NONE"');
+    }
+  }
+
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 40) {
+      await _addLicenseIdToTables(db);
+    }
+
     debugPrint("DEBUG: Running migration from $oldVersion to $newVersion");
     
-    var tableInfo = await db.rawQuery('PRAGMA table_info(items)');
-    var columns = tableInfo.map((row) => row['name']).toList();
-    
-    if (!columns.contains('linked_item_id')) {
-      await db.execute('ALTER TABLE items ADD COLUMN linked_item_id INTEGER');
+    // Self-healing migration for version 39
+    if (oldVersion < 39) {
+      final tables = [
+        'items', 'transactions', 'categories', 'staff', 'suppliers', 
+        'units', 'purchase_reminders', 'recipes', 'staff_advance', 'staff_leave'
+      ];
+
+      for (var table in tables) {
+        await _ensureTableColumn(db, table, 'is_synced', 'INTEGER DEFAULT 0');
+        await _ensureTableColumn(db, table, 'updated_at', 'TEXT');
+        
+        // Add soft delete columns to relevant tables
+        if (table != 'recipes' && table != 'staff_advance' && table != 'staff_leave') {
+          await _ensureTableColumn(db, table, 'is_deleted', 'INTEGER DEFAULT 0');
+          await _ensureTableColumn(db, table, 'deleted_at', 'TEXT');
+        }
+      }
+
+      // Additional specific columns that might be missing
+      await _ensureTableColumn(db, 'items', 'purchase_price', 'REAL');
+      await _ensureTableColumn(db, 'items', 'transport_cost', 'REAL');
+      await _ensureTableColumn(db, 'items', 'linked_item_ids', 'TEXT');
+      await _ensureTableColumn(db, 'items', 'linked_category_ids', 'TEXT');
+      await _ensureTableColumn(db, 'items', 'icon', 'TEXT');
+      
+      await _ensureTableColumn(db, 'transactions', 'cash_amount', 'REAL DEFAULT 0');
+      await _ensureTableColumn(db, 'transactions', 'upi_amount', 'REAL DEFAULT 0');
+      await _ensureTableColumn(db, 'transactions', 'customer_contact', 'TEXT DEFAULT ""');
+      await _ensureTableColumn(db, 'transactions', 'status', 'TEXT DEFAULT "completed"');
+
+      await _ensureTableColumn(db, 'categories', 'display_order', 'INTEGER DEFAULT 0');
+      await _ensureTableColumn(db, 'categories', 'use_category_stock', 'INTEGER DEFAULT 0');
+      await _ensureTableColumn(db, 'categories', 'stock_qty', 'REAL DEFAULT 0');
+      await _ensureTableColumn(db, 'categories', 'low_stock_limit', 'REAL DEFAULT 10');
+
+      await _ensureTableColumn(db, 'staff', 'role', 'TEXT DEFAULT "Staff"');
+      await _ensureTableColumn(db, 'staff', 'is_login_enabled', 'INTEGER DEFAULT 0');
+      await _ensureTableColumn(db, 'staff', 'staff_code', 'TEXT DEFAULT ""');
+      await _ensureTableColumn(db, 'staff', 'login_pin', 'TEXT DEFAULT ""');
+      await _ensureTableColumn(db, 'staff', 'permissions', 'TEXT DEFAULT "{\\"can_sale\\":true,\\"can_stock\\":false,\\"can_reports\\":false}"');
+      
+      await _ensureTableColumn(db, 'staff_advance', 'status', 'TEXT DEFAULT "pending"');
     }
-    if (!columns.contains('linked_category_id')) {
-      await db.execute('ALTER TABLE items ADD COLUMN linked_category_id INTEGER');
-    }
-    if (!columns.contains('purchase_price')) {
-      await db.execute('ALTER TABLE items ADD COLUMN purchase_price REAL');
-    }
-    if (!columns.contains('transport_cost')) {
-      await db.execute('ALTER TABLE items ADD COLUMN transport_cost REAL');
-    }
-    
+
     if (oldVersion < 19) {
       try { await db.execute('ALTER TABLE categories ADD COLUMN display_order INTEGER DEFAULT 0'); } catch(_) {}
     }
@@ -162,8 +228,13 @@ class DatabaseHelper {
       ''');
     }
     if (oldVersion < 30) {
-      try { await db.execute('ALTER TABLE items ADD COLUMN linked_item_ids TEXT DEFAULT ""'); } catch(_) {}
-      try { await db.execute('ALTER TABLE items ADD COLUMN linked_category_ids TEXT DEFAULT ""'); } catch(_) {}
+      // Handled by the check at the start of _onUpgrade
+    }
+    if (oldVersion < 37) {
+      try { await db.execute('ALTER TABLE suppliers ADD COLUMN is_deleted INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE suppliers ADD COLUMN deleted_at TEXT'); } catch(_) {}
+      try { await db.execute('ALTER TABLE units ADD COLUMN is_deleted INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE units ADD COLUMN deleted_at TEXT'); } catch(_) {}
     }
     if (oldVersion < 35) {
       try { await db.execute('ALTER TABLE staff_advance ADD COLUMN status TEXT DEFAULT "pending"'); } catch(_) {}
@@ -173,6 +244,10 @@ class DatabaseHelper {
       try { await db.execute('ALTER TABLE staff ADD COLUMN staff_code TEXT DEFAULT ""'); } catch(_) {}
       try { await db.execute('ALTER TABLE staff ADD COLUMN login_pin TEXT DEFAULT ""'); } catch(_) {}
       try { await db.execute('ALTER TABLE staff ADD COLUMN permissions TEXT DEFAULT "{\\"can_sale\\":true,\\"can_stock\\":false,\\"can_reports\\":false}"'); } catch(_) {}
+    }
+    if (oldVersion < 38) {
+      try { await db.execute('ALTER TABLE purchase_reminders ADD COLUMN is_deleted INTEGER DEFAULT 0'); } catch(_) {}
+      try { await db.execute('ALTER TABLE purchase_reminders ADD COLUMN deleted_at TEXT'); } catch(_) {}
     }
   }
 
@@ -226,7 +301,8 @@ class DatabaseHelper {
         transport_cost REAL,
         linked_item_ids TEXT,
         linked_category_ids TEXT,
-        updated_at TEXT
+        updated_at TEXT,
+        license_id TEXT DEFAULT "NONE"
       )
     ''');
 
@@ -238,7 +314,10 @@ class DatabaseHelper {
         items_supplied TEXT,
         notes TEXT,
         is_synced INTEGER DEFAULT 0,
-        updated_at TEXT
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT,
+        updated_at TEXT,
+        license_id TEXT DEFAULT "NONE"
       )
     ''');
 
@@ -257,7 +336,8 @@ class DatabaseHelper {
         is_synced INTEGER DEFAULT 0,
         is_deleted INTEGER DEFAULT 0,
         deleted_at TEXT,
-        updated_at TEXT
+        updated_at TEXT,
+        license_id TEXT DEFAULT "NONE"
       )
     ''');
 
@@ -269,7 +349,8 @@ class DatabaseHelper {
         date TEXT,
         status TEXT DEFAULT "pending",
         is_synced INTEGER DEFAULT 0,
-        updated_at TEXT
+        updated_at TEXT,
+        license_id TEXT DEFAULT "NONE"
       )
     ''');
 
@@ -280,7 +361,8 @@ class DatabaseHelper {
         date TEXT,
         type REAL,
         is_synced INTEGER DEFAULT 0,
-        updated_at TEXT
+        updated_at TEXT,
+        license_id TEXT DEFAULT "NONE"
       )
     ''');
 
@@ -297,7 +379,8 @@ class DatabaseHelper {
         low_stock_limit REAL DEFAULT 10,
         is_deleted INTEGER DEFAULT 0,
         deleted_at TEXT,
-        updated_at TEXT
+        updated_at TEXT,
+        license_id TEXT DEFAULT "NONE"
       )
     ''');
 
@@ -306,7 +389,10 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         is_synced INTEGER DEFAULT 0,
-        updated_at TEXT
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT,
+        updated_at TEXT,
+        license_id TEXT DEFAULT "NONE"
       )
     ''');
 
@@ -323,7 +409,10 @@ class DatabaseHelper {
         due_date TEXT,
         status TEXT,
         is_synced INTEGER DEFAULT 0,
-        updated_at TEXT
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT,
+        updated_at TEXT,
+        license_id TEXT DEFAULT "NONE"
       )
     ''');
 
@@ -334,7 +423,8 @@ class DatabaseHelper {
         material_id INTEGER,
         quantity REAL,
         is_synced INTEGER DEFAULT 0,
-        updated_at TEXT
+        updated_at TEXT,
+        license_id TEXT DEFAULT "NONE"
       )
     ''');
   }
@@ -356,6 +446,18 @@ class DatabaseHelper {
   Future<void> batchInsert(String table, List<Map<String, dynamic>> dataList) async {
     if (dataList.isEmpty) return;
     final db = await instance.database;
+
+    // Self-healing: Ensure columns exist before batch insert
+    final firstEntry = dataList.first;
+    for (var columnName in firstEntry.keys) {
+      // Basic type inference for column creation
+      String columnType = 'TEXT';
+      if (firstEntry[columnName] is int) columnType = 'INTEGER DEFAULT 0';
+      if (firstEntry[columnName] is double) columnType = 'REAL DEFAULT 0';
+      
+      await _ensureTableColumn(db, table, columnName, columnType);
+    }
+
     await db.transaction((txn) async {
       final batch = txn.batch();
       for (var data in dataList) {
@@ -370,6 +472,16 @@ class DatabaseHelper {
   Future<void> smartMerge(String table, List<Map<String, dynamic>> dataList) async {
     if (dataList.isEmpty) return;
     final db = await instance.database;
+
+    // Self-healing: Ensure columns exist before merge
+    final firstEntry = dataList.first;
+    for (var columnName in firstEntry.keys) {
+      String columnType = 'TEXT';
+      if (firstEntry[columnName] is int) columnType = 'INTEGER DEFAULT 0';
+      if (firstEntry[columnName] is double) columnType = 'REAL DEFAULT 0';
+      
+      await _ensureTableColumn(db, table, columnName, columnType);
+    }
     
     await db.transaction((txn) async {
       for (var cloudMap in dataList) {
@@ -424,7 +536,9 @@ class DatabaseHelper {
   Future<int> insertTransaction(TransactionModel tx) async {
     final db = await instance.database;
     tx.updatedAt = DateTime.now();
-    return await db.insert('transactions', tx.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    final map = tx.toMap();
+    map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    return await db.insert('transactions', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<int> insertRecipe(int productId, int materialId, double quantity, {int? isSynced}) async {
@@ -434,6 +548,7 @@ class DatabaseHelper {
       'material_id': materialId,
       'quantity': quantity,
       'is_synced': isSynced ?? 0,
+      'license_id': FirebaseService.activeLicenseKey ?? 'NONE',
     });
   }
 
@@ -468,12 +583,14 @@ class DatabaseHelper {
   }
   Future<List<TransactionModel>> getAllTransactions() async {
     final db = await instance.database;
-    final result = await db.query('transactions', orderBy: 'date DESC');
+    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final result = await db.query('transactions', where: 'license_id = ?', whereArgs: [licenseId], orderBy: 'date DESC');
     return result.map((json) => TransactionModel.fromMap(json)).toList();
   }
   Future<List<TransactionModel>> getUnsyncedTransactions() async {
     final db = await instance.database;
-    final result = await db.query('transactions', where: 'is_synced = ?', whereArgs: [0]);
+    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final result = await db.query('transactions', where: 'is_synced = ? AND license_id = ?', whereArgs: [0, licenseId]);
     return result.map((json) => TransactionModel.fromMap(json)).toList();
   }
   Future<int> updateTransactionSyncStatus(int id, int status) async {
@@ -485,7 +602,19 @@ class DatabaseHelper {
     try {
       debugPrint("DB: Inserting item: ${item.name} (ID: ${item.id})");
       item.updatedAt = DateTime.now();
-      return await db.insert('items', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      final map = item.toMap();
+      map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+      
+      // Self-healing for single insert
+      for (var col in map.keys) {
+         if (col == 'id') continue;
+         String type = 'TEXT';
+         if (map[col] is int) type = 'INTEGER DEFAULT 0';
+         if (map[col] is double) type = 'REAL DEFAULT 0';
+         await _ensureTableColumn(db, 'items', col, type);
+      }
+
+      return await db.insert('items', map, conflictAlgorithm: ConflictAlgorithm.replace);
     } catch (e) {
       debugPrint("DB ERROR: Failed to insert item ${item.name}: $e");
       return -1;
@@ -519,7 +648,8 @@ class DatabaseHelper {
   }
   Future<List<ItemModel>> getAllItems() async {
     final db = await instance.database;
-    final result = await db.query('items');
+    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final result = await db.query('items', where: 'license_id = ?', whereArgs: [licenseId]);
     return result.map((json) => ItemModel.fromMap(json)).toList();
   }
   Future<int> updateItem(ItemModel item) async {
@@ -561,11 +691,14 @@ class DatabaseHelper {
 
   Future<int> insertCategory(CategoryModel category) async {
     final db = await instance.database;
-    return await db.insert('categories', category.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    final map = category.toMap();
+    map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    return await db.insert('categories', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<CategoryModel>> getAllCategories() async {
     final db = await instance.database;
-    final result = await db.query('categories', orderBy: 'display_order ASC');
+    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final result = await db.query('categories', where: 'license_id = ?', whereArgs: [licenseId], orderBy: 'display_order ASC');
     return result.map((json) => CategoryModel.fromMap(json)).toList();
   }
   Future<int> updateCategory(CategoryModel category) async {
@@ -591,11 +724,14 @@ class DatabaseHelper {
 
   Future<int> insertStaff(StaffModel staff) async {
     final db = await instance.database;
-    return await db.insert('staff', staff.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    final map = staff.toMap();
+    map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    return await db.insert('staff', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<StaffModel>> getAllStaff() async {
     final db = await instance.database;
-    final result = await db.query('staff');
+    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final result = await db.query('staff', where: 'license_id = ?', whereArgs: [licenseId]);
     return result.map((json) => StaffModel.fromMap(json)).toList();
   }
   Future<int> updateStaff(StaffModel staff) async {
@@ -612,45 +748,139 @@ class DatabaseHelper {
   }
   Future<int> permanentDeleteStaff(int id) async {
     final db = await instance.database;
-    return await db.delete('items', where: 'id = ?', whereArgs: [id]);
+    return await db.delete('staff', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> insertSupplier(SupplierModel supplier) async {
     final db = await instance.database;
-    return await db.insert('suppliers', supplier.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    final map = supplier.toMap();
+    map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    return await db.insert('suppliers', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<SupplierModel>> getAllSuppliers() async {
     final db = await instance.database;
-    final result = await db.query('suppliers');
+    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final result = await db.query('suppliers', where: 'license_id = ?', whereArgs: [licenseId]);
     return result.map((json) => SupplierModel.fromMap(json)).toList();
   }
   Future<int> updateSupplier(SupplierModel supplier) async {
     final db = await instance.database;
     return await db.update('suppliers', supplier.toMap(), where: 'id = ?', whereArgs: [supplier.id]);
   }
-  Future<int> deleteSupplier(int id) async {
+  Future<int> softDeleteSupplier(int id) async {
+    final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update('suppliers', {'is_deleted': 1, 'deleted_at': now, 'updated_at': now, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+  Future<int> restoreSupplier(int id) async {
+    final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update('suppliers', {'is_deleted': 0, 'deleted_at': null, 'updated_at': now, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+  Future<int> permanentDeleteSupplier(int id) async {
     final db = await instance.database;
     return await db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> insertUnit(String name, {int? id, int isSynced = 0}) async {
     final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
     return await db.insert(
       'units', 
       {
         'id': id,
         'name': name, 
-        'is_synced': isSynced
+        'is_synced': isSynced,
+        'is_deleted': 0,
+        'updated_at': now,
+        'license_id': FirebaseService.activeLicenseKey ?? 'NONE',
       }, 
       conflictAlgorithm: ConflictAlgorithm.replace
     );
   }
+
+  Future<int> updateUnit(int id, String name) async {
+    final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update(
+      'units',
+      {
+        'name': name,
+        'is_synced': 0,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
   Future<List<Map<String, dynamic>>> getAllUnits() async {
     final db = await instance.database;
-    return await db.query('units');
+    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    return await db.query('units', where: 'license_id = ?', whereArgs: [licenseId]);
   }
-  Future<int> deleteUnit(int id) async {
+  Future<int> softDeleteUnit(int id) async {
+    final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update('units', {'is_deleted': 1, 'deleted_at': now, 'updated_at': now, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+  Future<int> restoreUnit(int id) async {
+    final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update('units', {'is_deleted': 0, 'deleted_at': null, 'updated_at': now, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+  Future<int> permanentDeleteUnit(int id) async {
     final db = await instance.database;
     return await db.delete('units', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Purchase Reminders
+  Future<int> insertPurchaseReminder(PurchaseReminderModel reminder) async {
+    final db = await instance.database;
+    reminder.updatedAt = DateTime.now();
+    reminder.isSynced = 0;
+    final map = reminder.toMap();
+    map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    return await db.insert('purchase_reminders', map, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<int> updatePurchaseReminder(PurchaseReminderModel reminder) async {
+    final db = await instance.database;
+    reminder.updatedAt = DateTime.now();
+    reminder.isSynced = 0;
+    return await db.update('purchase_reminders', reminder.toMap(), where: 'id = ?', whereArgs: [reminder.id]);
+  }
+
+  Future<int> softDeletePurchaseReminder(int id) async {
+    final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update('purchase_reminders', {
+      'is_deleted': 1, 
+      'deleted_at': now, 
+      'updated_at': now, 
+      'is_synced': 0
+    }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> restorePurchaseReminder(int id) async {
+    final db = await instance.database;
+    final now = DateTime.now().toIso8601String();
+    return await db.update('purchase_reminders', {
+      'is_deleted': 0, 
+      'deleted_at': null, 
+      'updated_at': now, 
+      'is_synced': 0
+    }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> permanentDeletePurchaseReminder(int id) async {
+    final db = await instance.database;
+    return await db.delete('purchase_reminders', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<PurchaseReminderModel>> getAllPurchaseReminders() async {
+    final db = await instance.database;
+    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final result = await db.query('purchase_reminders', where: 'is_deleted = 0 AND license_id = ?', whereArgs: [licenseId], orderBy: 'due_date ASC');
+    return result.map((json) => PurchaseReminderModel.fromMap(json)).toList();
   }
 }

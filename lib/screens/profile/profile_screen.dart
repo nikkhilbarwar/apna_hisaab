@@ -16,6 +16,7 @@ import '../../providers/transaction_provider.dart';
 import '../../providers/item_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/staff_provider.dart';
+import '../../providers/staff_auth_provider.dart';
 import '../../providers/unit_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/export_service.dart';
@@ -568,6 +569,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _confirmLogout() {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final staffAuth = Provider.of<StaffAuthProvider>(context, listen: false);
+    
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -581,7 +584,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         content: Text(
-          AppStrings.confirmLogout,
+          staffAuth.isStaffLoggedIn 
+              ? "Are you sure you want to logout from your staff account?"
+              : AppStrings.confirmLogout,
           style: TextStyle(color: profile.secondaryTextColor),
         ),
         actions: [
@@ -591,7 +596,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           TextButton(
             onPressed: () async {
-              await _authService.signOut();
+              if (staffAuth.isStaffLoggedIn) {
+                await staffAuth.logoutStaff();
+              } else {
+                await _authService.signOut();
+              }
+
               if (!mounted) return;
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -3077,6 +3087,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final profile = Provider.of<ProfileProvider>(context);
+    final staffAuth = Provider.of<StaffAuthProvider>(context);
     final themeColor = profile.themeColor;
     final user = FirebaseAuth.instance.currentUser;
 
@@ -3388,6 +3399,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Center(
                     child: Column(
                       children: [
+                        if (staffAuth.isStaffLoggedIn)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.badge_outlined, color: Colors.orange, size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "Logged in as: ${staffAuth.currentStaff?.name}",
+                                  style: const TextStyle(
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         TextButton.icon(
                           onPressed: _confirmLogout,
                           icon: const Icon(Icons.logout, color: Colors.red),

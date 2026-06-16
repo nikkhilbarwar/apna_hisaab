@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../providers/staff_auth_provider.dart';
 import '../../providers/item_provider.dart';
 import '../../models/item_model.dart';
 import '../../models/category_model.dart';
@@ -454,6 +455,7 @@ class _EntryScreenState extends State<EntryScreen>
   void _showItemOptionsBottomSheet(ItemModel item) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+    final staffAuth = Provider.of<StaffAuthProvider>(context, listen: false);
     final themeColor = profile.themeColor;
 
     AppBottomSheet.show(
@@ -480,6 +482,12 @@ class _EntryScreenState extends State<EntryScreen>
               'Edit Stock',
               Colors.blue,
               () {
+                if (!staffAuth.hasPermission('can_stock')) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Permission Denied: Stock Access Required')),
+                  );
+                  return;
+                }
                 Navigator.pop(context);
                 _showEditStockDialog(item);
               },
@@ -490,6 +498,12 @@ class _EntryScreenState extends State<EntryScreen>
             'Move to Category',
             Colors.orange,
             () {
+              if (!staffAuth.hasPermission('can_stock')) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Permission Denied: Item Management Required')),
+                );
+                return;
+              }
               Navigator.pop(context);
               _showMoveCategorySheet(item);
             },
@@ -500,6 +514,12 @@ class _EntryScreenState extends State<EntryScreen>
             'Update Item',
             Colors.green,
             () {
+              if (!staffAuth.hasPermission('can_stock')) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Permission Denied: Item Management Required')),
+                );
+                return;
+              }
               Navigator.pop(context);
               _showEditItemSheet(item);
             },
@@ -510,6 +530,12 @@ class _EntryScreenState extends State<EntryScreen>
             'Delete Item',
             Colors.red,
             () {
+              if (!staffAuth.hasPermission('can_stock')) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Permission Denied: Item Management Required')),
+                );
+                return;
+              }
               Navigator.pop(context);
               _showDeleteConfirm(item);
             },
@@ -874,6 +900,13 @@ class _EntryScreenState extends State<EntryScreen>
   }
 
   void _showCategoryReorderSheet() {
+    final staffAuth = Provider.of<StaffAuthProvider>(context, listen: false);
+    if (!staffAuth.hasPermission('can_sale') && !staffAuth.hasPermission('can_stock')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Permission Denied')),
+      );
+      return;
+    }
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final catProvider = Provider.of<CategoryProvider>(context, listen: false);
 

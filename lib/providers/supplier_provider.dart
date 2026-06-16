@@ -9,7 +9,10 @@ class SupplierProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
   bool _isSyncing = false;
 
-  List<SupplierModel> get suppliers => _suppliers;
+  List<SupplierModel> get suppliers => _suppliers.where((s) => s.isDeleted == 0).toList();
+  List<SupplierModel> get deletedSuppliers => _suppliers.where((s) => s.isDeleted == 1).toList();
+  List<SupplierModel> get allSuppliers => _suppliers;
+  bool get isSyncing => _isSyncing;
 
   SupplierProvider() {
     fetchSuppliers();
@@ -55,6 +58,7 @@ class SupplierProvider with ChangeNotifier {
   Future<void> addSupplier(SupplierModel supplier) async {
     try {
       supplier.isSynced = 0;
+      supplier.updatedAt = DateTime.now();
       int id = await DatabaseHelper.instance.insertSupplier(supplier);
       supplier.id = id;
       await fetchSuppliers();
@@ -73,6 +77,7 @@ class SupplierProvider with ChangeNotifier {
   Future<void> updateSupplier(SupplierModel supplier) async {
     try {
       supplier.isSynced = 0;
+      supplier.updatedAt = DateTime.now();
       await DatabaseHelper.instance.updateSupplier(supplier);
       await fetchSuppliers();
       
@@ -87,13 +92,60 @@ class SupplierProvider with ChangeNotifier {
     }
   }
 
-  Future<void> deleteSupplier(int id) async {
+  Future<void> softDeleteSupplier(int id) async {
     try {
-      await DatabaseHelper.instance.deleteSupplier(id);
-      await _firebaseService.deleteSupplier(id);
-      await fetchSuppliers();
+      await DatabaseHelper.instance.softDeleteSupplier(id);
+      int index = _suppliers.indexWhere((s) => s.id == id);
+      if (index != -1) {
+        _suppliers[index].isDeleted = 1;
+        _suppliers[index].deletedAt = DateTime.now();
+        _suppliers[index].updatedAt = DateTime.now();
+        _suppliers[index].isSynced = 0;
+        
+        try {
+          await _firebaseService.syncSupplier(_suppliers[index]);
+          await DatabaseHelper.instance.updateSyncStatus('suppliers', id, 1);
+        } catch (e) {
+          debugPrint("Soft Delete Supplier Sync Error: $e");
+        }
+      }
+      notifyListeners();
     } catch (e) {
-      debugPrint("Error deleting supplier: $e");
+      debugPrint("Error soft deleting supplier: $e");
+    }
+  }
+
+  Future<void> restoreSupplier(int id) async {
+    try {
+      await DatabaseHelper.instance.restoreSupplier(id);
+      int index = _suppliers.indexWhere((s) => s.id == id);
+      if (index != -1) {
+        _suppliers[index].isDeleted = 0;
+        _suppliers[index].deletedAt = null;
+        _suppliers[index].updatedAt = DateTime.now();
+        _suppliers[index].isSynced = 0;
+        
+        try {
+          await _firebaseService.syncSupplier(_suppliers[index]);
+          await DatabaseHelper.instance.updateSyncStatus('suppliers', id, 1);
+        } catch (e) {
+          debugPrint("Restore Supplier Sync Error: $e");
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error restoring supplier: $e");
+    }
+  }
+
+  Future<void> permanentDeleteSupplier(int id) async {
+    try {
+      await DatabaseHelper.instance.permanentDeleteSupplier(id);
+      await _firebaseService.deleteSupplier(id);
+      _suppliers.removeWhere((s) => s.id == id);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error permanent deleting supplier: $e");
     }
   }
 }

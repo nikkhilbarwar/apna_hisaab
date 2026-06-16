@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../providers/staff_auth_provider.dart';
 import '../../models/category_model.dart';
 import '../../models/transaction_model.dart';
 import '../../providers/transaction_provider.dart';
@@ -1439,6 +1440,13 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
   }
 
   Future<void> _handleSave({bool isPending = false}) async {
+    final staffAuth = Provider.of<StaffAuthProvider>(context, listen: false);
+    if (!staffAuth.hasPermission('can_sale')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Permission Denied: Sale Access Required')),
+      );
+      return;
+    }
     final totalAmt = _currentGrandTotal;
     if (totalAmt < 0) return;
 

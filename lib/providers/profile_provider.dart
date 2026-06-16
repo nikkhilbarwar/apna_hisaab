@@ -207,6 +207,9 @@ class ProfileProvider with ChangeNotifier {
       // Check if we have local data, if not try fetching from cloud
       final hasLocalData = prefs.containsKey('business_name_$uid');
       
+      // Update active license key in FirebaseService for partitioning
+      FirebaseService.activeLicenseKey = _licenseKey.isNotEmpty ? _licenseKey : 'NONE';
+      
       if (!hasLocalData && _isCloudSyncEnabled) {
         await fetchProfileFromCloud();
       } else {
@@ -461,6 +464,7 @@ class ProfileProvider with ChangeNotifier {
 
   Future<bool> activateLicense(String key) async {
     _licenseKey = key.trim();
+    FirebaseService.activeLicenseKey = _licenseKey;
     _isActivated = true; // Set locally first to allow navigation
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_getUKey('license_key'), _licenseKey);

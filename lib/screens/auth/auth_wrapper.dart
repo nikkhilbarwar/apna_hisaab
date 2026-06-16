@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/transaction_provider.dart';
+import '../../providers/staff_auth_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/license_service.dart';
 import '../main_navigation.dart';
@@ -180,9 +181,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: AuthService().authStateChanges,
-      builder: (context, snapshot) {
+    return Consumer<StaffAuthProvider>(
+      builder: (context, staffAuth, _) {
+        if (staffAuth.isLoading) {
+          return const _LoadingScreen(message: 'Verifying Staff Session...');
+        }
+
+        if (staffAuth.isStaffLoggedIn) {
+          return const MainNavigation();
+        }
+
+        return StreamBuilder<User?>(
+          stream: AuthService().authStateChanges,
+          builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _LoadingScreen(message: 'Authenticating...');
         }
@@ -243,6 +254,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         return const LoginScreen();
+          },
+        );
       },
     );
   }
