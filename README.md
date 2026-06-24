@@ -6,7 +6,7 @@
 
 | Dashboard | Password/Biometric | Reports | Stock |
 | :---: | :---: | :---: | :---: |
-| ![Dashboard](assets/screenshots/photo_6231065418793684428_y.jpg) | ![Password/Biometric](assets/screenshots/photo_6231065418793684432_y.jpg) | ![Reports](assets/screenshots/photo_6231065418793684423_y.jpg) | ![Stock](assets/screenshots/photo_6231065418793684424_y.jpg) |
+| ![Dashboard](assets/screenshots/photo_6231065418793684428_y.jpg) | ![New Sale/Purchase Menu](assets/screenshots/photo_6231065418793684432_y.jpg) | ![Reports](assets/screenshots/photo_6231065418793684423_y.jpg) | ![Stock](assets/screenshots/photo_6231065418793684424_y.jpg) |
 
 ## 🚀 Key Features
 
