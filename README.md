@@ -52,26 +52,8 @@
 - **State Management**: Provider
 - **Local Utilities**: Workmanager (Background backups), Shared Preferences.
 
-## ⚙️ Installation
-
-1. **Clone the repo**:
-   ```sh
-   git clone https://github.com/your-username/list_maker.git
-   ```
-2. **Install dependencies**:
-   ```sh
-   flutter pub get
-   ```
-3. **Setup Firebase**:
-   - Create a project on [Firebase Console](https://console.firebase.google.com/).
-   - Add Android/iOS apps and download `google-services.json`.
-4. **Run the app**:
-   ```sh
-   flutter run
-   ```
-
 ## 👨‍💻 Developer
-**Nikkhil Barwar** - [+919992256959 call/WhatsApp]
+**Nikkhil Barwar** - [dev.grillerzone@gmail.com]
 
 ---
 *Built with ❤️ for professional business management.*
