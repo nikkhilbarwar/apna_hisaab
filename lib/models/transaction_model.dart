@@ -186,6 +186,7 @@ class TransactionModel {
   String customerContact;
   String status;
   DateTime? updatedAt;
+  String? licenseId;
 
   TransactionModel({
     this.id,
@@ -208,6 +209,7 @@ class TransactionModel {
     this.customerContact = '',
     this.status = 'completed',
     this.updatedAt,
+    this.licenseId,
     List<TransactionItemSnapshot>? itemSnapshots,
   }) : _manualSnapshots = itemSnapshots;
 
@@ -359,6 +361,7 @@ class TransactionModel {
       'customer_contact': customerContact,
       'status': status,
       'updated_at': updatedAt?.toIso8601String() ?? date.toIso8601String(),
+      'license_id': licenseId ?? 'NONE',
     };
   }
 
@@ -373,23 +376,37 @@ class TransactionModel {
       debugPrint("TransactionModel: Date parsing error, using now()");
     }
 
+    // Helper to safely parse int from various types
+    int? parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString());
+    }
+
+    // Helper to safely parse double from various types
+    double parseDouble(dynamic value, double defaultValue) {
+      if (value == null) return defaultValue;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString()) ?? defaultValue;
+    }
+
     return TransactionModel(
-      id: (map['id'] as num?)?.toInt(),
-      itemId: (map['item_id'] as num?)?.toInt(),
+      id: parseInt(map['id']),
+      itemId: parseInt(map['item_id']),
       type: map['type']?.toString() ?? 'sale',
       category: map['category']?.toString() ?? 'General',
       description: map['description']?.toString() ?? '',
-      amount: (map['amount'] as num? ?? 0).toDouble(),
-      paidAmount: (map['paid_amount'] as num? ?? 0).toDouble(),
-      quantity: (map['quantity'] as num? ?? 0).toDouble(),
+      amount: parseDouble(map['amount'], 0.0),
+      paidAmount: parseDouble(map['paid_amount'], 0.0),
+      quantity: parseDouble(map['quantity'], 0.0),
       unit: map['unit']?.toString() ?? 'pcs',
-      rate: (map['rate'] as num? ?? 0).toDouble(),
+      rate: parseDouble(map['rate'], 0.0),
       paymentMode: map['payment_mode']?.toString() ?? 'Cash',
       date: parsedDate,
-      isSynced: (map['is_synced'] as num? ?? 0).toInt(),
-      cashAmount: (map['cash_amount'] as num? ?? 0).toDouble(),
-      upiAmount: (map['upi_amount'] as num? ?? 0).toDouble(),
-      isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
+      isSynced: parseInt(map['is_synced'] ?? 0) ?? 0,
+      cashAmount: parseDouble(map['cash_amount'], 0.0),
+      upiAmount: parseDouble(map['upi_amount'], 0.0),
+      isDeleted: parseInt(map['is_deleted'] ?? 0) ?? 0,
       deletedAt: map['deleted_at'] != null
           ? DateTime.tryParse(map['deleted_at'].toString())
           : null,
@@ -398,6 +415,7 @@ class TransactionModel {
       updatedAt: map['updated_at'] != null
           ? DateTime.tryParse(map['updated_at'].toString())
           : parsedDate,
+      licenseId: map['license_id']?.toString(),
     );
   }
 }

@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../providers/profile_provider.dart';
 import '../../services/license_service.dart';
 import '../../services/auth_service.dart';
+import '../../providers/transaction_provider.dart';
+import 'setup_wizard_screen.dart';
 import '../../main.dart';
 import 'login_screen.dart';
 import '../../core/widgets/app_bottom_sheet.dart';
@@ -88,8 +90,25 @@ class _ActivationScreenState extends State<ActivationScreen> {
                   backgroundColor: Colors.green,
                 ),
               );
-              // Restart app to refresh all providers and navigation state
-              RestartWidget.restartApp(context);
+
+              // Check if database is empty to show Setup Wizard
+              final txProvider =
+                  Provider.of<TransactionProvider>(context, listen: false);
+              await txProvider.fetchTransactions();
+
+              if (mounted) {
+                if (txProvider.transactions.isEmpty) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder:
+                          (context) => SetupWizardScreen(licenseId: key),
+                    ),
+                  );
+                } else {
+                  // Restart app to refresh all providers and navigation state
+                  RestartWidget.restartApp(context);
+                }
+              }
             }
           }
         }

@@ -13,6 +13,7 @@ class PurchaseReminderModel {
   int isDeleted;
   DateTime? deletedAt;
   DateTime? updatedAt;
+  String? licenseId;
 
   PurchaseReminderModel({
     this.id,
@@ -29,6 +30,7 @@ class PurchaseReminderModel {
     this.isDeleted = 0,
     this.deletedAt,
     this.updatedAt,
+    this.licenseId,
   });
 
   Map<String, dynamic> toMap() {
@@ -47,6 +49,7 @@ class PurchaseReminderModel {
       'is_deleted': isDeleted,
       'deleted_at': deletedAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'license_id': licenseId ?? 'NONE',
     };
   }
 
@@ -66,6 +69,7 @@ class PurchaseReminderModel {
       isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
       deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
       updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
+      licenseId: map['license_id']?.toString(),
     );
   }
 }

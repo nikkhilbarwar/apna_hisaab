@@ -19,6 +19,12 @@ class DatabaseHelper {
 
   DatabaseHelper._init();
 
+  static void resetDatabase() {
+    _database = null;
+    _currentUserId = null;
+    _currentLicenseId = null;
+  }
+
   Future<Database> get database async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw Exception("User not logged in");
@@ -26,7 +32,7 @@ class DatabaseHelper {
     // We get licenseId from some global state. 
     // For now assuming it is set in ProfileProvider.activeLicenseKey
     // We use licenseId to partition database files
-    final String licenseId = FirebaseService.activeLicenseKey ?? 'default';
+    final String licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
 
     if (_currentUserId != user.uid || _currentLicenseId != licenseId) {
       await closeDatabase();
@@ -53,7 +59,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path, 
-      version: 39,
+      version: 40,
       onCreate: _createDB, 
       onUpgrade: (db, oldVersion, newVersion) async {
         debugPrint("MIGRATION: Upgrading from $oldVersion to $newVersion");
@@ -79,7 +85,8 @@ class DatabaseHelper {
   Future<void> _addLicenseIdToTables(Database db) async {
     final tables = [
       'transactions', 'items', 'suppliers', 'staff', 
-      'categories', 'units', 'purchase_reminders', 'recipes'
+      'categories', 'units', 'purchase_reminders', 'recipes',
+      'staff_advance', 'staff_leave'
     ];
     for (var table in tables) {
       await _ensureTableColumn(db, table, 'license_id', 'TEXT DEFAULT "NONE"');
@@ -273,7 +280,8 @@ class DatabaseHelper {
         deleted_at TEXT,
         customer_contact TEXT DEFAULT "",
         status TEXT DEFAULT "completed",
-        updated_at TEXT
+        updated_at TEXT,
+        license_id TEXT DEFAULT "NONE"
       )
     ''');
 
@@ -430,21 +438,23 @@ class DatabaseHelper {
   }
 
   Future<void> clearAllData() async {
-    final db = await instance.database;
-    await db.delete('transactions');
-    await db.delete('items');
-    await db.delete('categories');
-    await db.delete('staff');
-    await db.delete('staff_advance');
-    await db.delete('staff_leave');
-    await db.delete('suppliers');
-    await db.delete('units');
-    await db.delete('purchase_reminders');
-    await db.delete('recipes');
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('transactions');
+      await txn.delete('items');
+      await txn.delete('categories');
+      await txn.delete('staff');
+      await txn.delete('staff_advance');
+      await txn.delete('staff_leave');
+      await txn.delete('suppliers');
+      await txn.delete('units');
+      await txn.delete('purchase_reminders');
+      await txn.delete('recipes');
+    });
   }
 
-  Future<void> batchInsert(String table, List<Map<String, dynamic>> dataList) async {
-    if (dataList.isEmpty) return;
+  Future<int> batchInsert(String table, List<Map<String, dynamic>> dataList) async {
+    if (dataList.isEmpty) return 0;
     final db = await instance.database;
 
     // Self-healing: Ensure columns exist before batch insert
@@ -465,6 +475,7 @@ class DatabaseHelper {
       }
       await batch.commit(noResult: true);
     });
+    return dataList.length;
   }
 
   /// Implementation of "Last Write Wins" (LWW) for Delta Sync.
@@ -693,6 +704,16 @@ class DatabaseHelper {
     final db = await instance.database;
     final map = category.toMap();
     map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+
+    // Self-healing for categories
+    for (var col in map.keys) {
+      if (col == 'id') continue;
+      String type = 'TEXT';
+      if (map[col] is int) type = 'INTEGER DEFAULT 0';
+      if (map[col] is double) type = 'REAL DEFAULT 0';
+      await _ensureTableColumn(db, 'categories', col, type);
+    }
+
     return await db.insert('categories', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<CategoryModel>> getAllCategories() async {
@@ -726,6 +747,16 @@ class DatabaseHelper {
     final db = await instance.database;
     final map = staff.toMap();
     map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    
+    // Self-healing for staff
+    for (var col in map.keys) {
+      if (col == 'id') continue;
+      String type = 'TEXT';
+      if (map[col] is int) type = 'INTEGER DEFAULT 0';
+      if (map[col] is double) type = 'REAL DEFAULT 0';
+      await _ensureTableColumn(db, 'staff', col, type);
+    }
+    
     return await db.insert('staff', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<StaffModel>> getAllStaff() async {
@@ -755,6 +786,16 @@ class DatabaseHelper {
     final db = await instance.database;
     final map = supplier.toMap();
     map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    
+    // Self-healing for suppliers
+    for (var col in map.keys) {
+      if (col == 'id') continue;
+      String type = 'TEXT';
+      if (map[col] is int) type = 'INTEGER DEFAULT 0';
+      if (map[col] is double) type = 'REAL DEFAULT 0';
+      await _ensureTableColumn(db, 'suppliers', col, type);
+    }
+
     return await db.insert('suppliers', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
   Future<List<SupplierModel>> getAllSuppliers() async {
@@ -840,6 +881,16 @@ class DatabaseHelper {
     reminder.isSynced = 0;
     final map = reminder.toMap();
     map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    
+    // Self-healing for purchase_reminders
+    for (var col in map.keys) {
+      if (col == 'id') continue;
+      String type = 'TEXT';
+      if (map[col] is int) type = 'INTEGER DEFAULT 0';
+      if (map[col] is double) type = 'REAL DEFAULT 0';
+      await _ensureTableColumn(db, 'purchase_reminders', col, type);
+    }
+
     return await db.insert('purchase_reminders', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 

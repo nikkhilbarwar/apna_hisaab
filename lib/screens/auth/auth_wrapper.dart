@@ -236,11 +236,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
                   if (isAdmin) {
                     final prefs = await SharedPreferences.getInstance();
+                    final uid = user.uid;
                     await prefs.setString(
-                      'admin_id',
+                      'admin_id_$uid',
                       user.email ?? "Super Admin",
                     );
-                    await prefs.setBool('is_sys_admin', true);
+                    await prefs.setBool('is_sys_admin_$uid', true);
                   }
                   _checkAnnouncement(context);
                   _updateUserHeartbeat(profile);

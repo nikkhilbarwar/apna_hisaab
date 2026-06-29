@@ -10,11 +10,13 @@ import 'dart:math';
 import 'dart:async';
 import '../../services/license_service.dart';
 import '../../providers/profile_provider.dart';
+import 'starter_pack_manager_screen.dart';
 import '../../utils/report_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/export_service.dart';
+import '../../services/firebase_service.dart';
 import '../../core/widgets/app_bottom_sheet.dart';
 
 class AdminPanelScreen extends StatefulWidget {
@@ -600,10 +602,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
 
   void _showLicenseDetails(Map<String, dynamic> data, ProfileProvider profile) {
     bool isActive = data['status'] == 'active';
+    bool isSyncingStats = false; // Define here so it persists in the modal scope
     bool isReminderEnabled = data['isReminderEnabled'] ?? true;
     bool saleBlocked = data['saleBlocked'] ?? false;
     bool bypassCheck = data['bypassCheck'] ?? false;
     String appVersion = data['appVersion'] ?? "Unknown";
+    int txCount = data['tx_count'] ?? 0;
     String lastUsed = data['lastUsedAt'] != null
         ? DateFormat(
             'dd MMM, hh:mm a',
@@ -708,6 +712,140 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 valueColor: Colors.green,
               ),
 
+              const Divider(height: 12),
+              StatefulBuilder(
+                builder: (context, setBtnState) {
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "USAGE ACTIVITY (TX COUNT)",
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: profile.secondaryTextColor,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: isSyncingStats
+                            ? null
+                            : () async {
+                                setBtnState(() => isSyncingStats = true);
+                                try {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Deep scanning transactions..."),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                  final count = await FirebaseService().recalculateLicenseStats(data['licenseKey']);
+                                  
+                                  if (context.mounted) {
+                                    setModalState(() {}); // Refresh the FutureBuilder
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(count > 0 
+                                          ? "Success: $count transactions found & synced!" 
+                                          : "No transactions found in database for this license."),
+                                        backgroundColor: count > 0 ? Colors.green : Colors.orange,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text("Error: $e")),
+                                    );
+                                  }
+                                } finally {
+                                  if (context.mounted) {
+                                    setBtnState(() => isSyncingStats = false);
+                                  }
+                                }
+                              },
+                        icon: isSyncingStats
+                            ? const SizedBox(
+                                height: 12,
+                                width: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.blue,
+                                ),
+                              )
+                            : Icon(Icons.sync_rounded, size: 14, color: profile.themeColor),
+                        label: Text(
+                          isSyncingStats ? "SYNCING..." : "FIX DATA",
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isSyncingStats ? profile.secondaryTextColor : profile.themeColor,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          backgroundColor: profile.themeColor.withOpacity(0.1),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              FutureBuilder<Map<String, int>>(
+                future: FirebaseService().getLicenseStats(data['licenseKey']),
+                builder: (context, statsSnapshot) {
+                  final stats =
+                      statsSnapshot.data ?? {'today': 0, 'week': 0, 'month': 0, 'total': 0};
+                  final isLoading =
+                      statsSnapshot.connectionState == ConnectionState.waiting;
+
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          _buildUsageBox(
+                            "Today",
+                            stats['today']!,
+                            Colors.blue,
+                            isLoading,
+                            profile,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildUsageBox(
+                            "7 Days",
+                            stats['week']!,
+                            Colors.orange,
+                            isLoading,
+                            profile,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildUsageBox(
+                            "30 Days",
+                            stats['month']!,
+                            Colors.purple,
+                            isLoading,
+                            profile,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildUsageBox(
+                        "Lifetime Total Transactions",
+                        stats['total']!,
+                        profile.themeColor,
+                        isLoading,
+                        profile,
+                        isFullWidth: true,
+                      ),
+                    ],
+                  );
+                },
+              ),
+
               if (data['upgradeRequest'] != null) ...[
                 const SizedBox(height: 10),
                 Container(
@@ -760,20 +898,33 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 ],
               ),
               const SizedBox(height: 24),
-              _detailRow(
-                "App Version",
-                appVersion,
-                Icons.phonelink_setup_rounded,
-                profile,
+              Row(
+                children: [
+                  Expanded(
+                    child: _detailRow(
+                      "App Version",
+                      appVersion,
+                      Icons.phonelink_setup_rounded,
+                      profile,
+                    ),
+                  ),
+                  Expanded(
+                    child: _detailRow(
+                      "Total Trans.",
+                      txCount.toString(),
+                      Icons.receipt_long_rounded,
+                      profile,
+                      valueColor: profile.themeColor,
+                    ),
+                  ),
+                ],
               ),
               _detailRow(
                 "Device ID",
                 data['activeDeviceId'] ?? "NOT LINKED",
                 Icons.phone_android_rounded,
                 profile,
-                valueColor: data['activeDeviceId'] == null
-                    ? Colors.orange
-                    : null,
+                valueColor: data['activeDeviceId'] == null ? Colors.orange : null,
                 trailing: data['activeDeviceId'] != null
                     ? TextButton(
                         onPressed: () => _resetDevice(
@@ -1421,6 +1572,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                   if (value == 'staff') _showStaffManagement(profile);
                   if (value == 'cleanup') _performDataCleanup(profile);
                   if (value == 'logs') _showLogsModal(profile);
+                  if (value == 'templates') _showTemplateManager(profile);
                 },
                 itemBuilder: (context) => [
                   if (_adminRole == 'super_admin')
@@ -1430,6 +1582,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                         Icons.people_alt_rounded,
                         "Staff Control",
                         profile,
+                      ),
+                    ),
+                  if (_adminRole == 'super_admin')
+                    PopupMenuItem(
+                      value: 'templates',
+                      child: _buildPopupItem(
+                        Icons.auto_awesome_motion_rounded,
+                        "Starter Packs",
+                        profile,
+                        iconColor: Colors.teal,
                       ),
                     ),
                   if (_adminRole == 'super_admin')
@@ -2941,6 +3103,69 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     }
   }
 
+  Widget _buildUsageBox(
+    String label,
+    int count,
+    Color color,
+    bool isLoading,
+    ProfileProvider p, {
+    bool isFullWidth = false,
+  }) {
+    final content = Column(
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: p.secondaryTextColor,
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        isLoading
+            ? SizedBox(
+                height: 14,
+                width: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: color,
+                ),
+              )
+            : Text(
+                count.toString(),
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w900,
+                  fontSize: isFullWidth ? 22 : 18,
+                ),
+              ),
+      ],
+    );
+
+    return isFullWidth
+        ? Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withValues(alpha: 0.2)),
+            ),
+            child: content,
+          )
+        : Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: color.withValues(alpha: 0.2)),
+              ),
+              child: content,
+            ),
+          );
+  }
+
   Widget _toggleTile(
     String t,
     String s,
@@ -2971,6 +3196,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       child: OutlinedButton(
         onPressed: () => _showExtensionConfirmDialog(data, d, l, p),
         child: Text("+ $l", style: const TextStyle(fontSize: 10)),
+      ),
+    );
+  }
+
+  void _showTemplateManager(ProfileProvider profile) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const StarterPackManagerScreen(),
       ),
     );
   }

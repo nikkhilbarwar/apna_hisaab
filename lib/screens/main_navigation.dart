@@ -620,9 +620,7 @@ class _MainNavigationState extends State<MainNavigation>
     ];
 
     bool isUserAdmin =
-        profile.isSysAdmin ||
-        (user?.email != null &&
-            adminEmails.contains(user!.email!.toLowerCase()));
+        (user?.email != null && adminEmails.contains(user!.email!.toLowerCase()));
 
     // Common AppBar Actions
     List<Widget> appBarActions = [

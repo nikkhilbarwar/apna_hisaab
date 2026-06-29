@@ -14,6 +14,7 @@ class StaffModel {
   int isDeleted;
   DateTime? deletedAt;
   DateTime? updatedAt;
+  String? licenseId;
 
   // New Staff Mode Fields
   bool isLoginEnabled;
@@ -36,6 +37,7 @@ class StaffModel {
     this.isDeleted = 0,
     this.deletedAt,
     this.updatedAt,
+    this.licenseId,
     this.isLoginEnabled = false,
     this.staffCode = '',
     this.loginPin = '',
@@ -57,6 +59,7 @@ class StaffModel {
       'is_deleted': isDeleted,
       'deleted_at': deletedAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'license_id': licenseId ?? 'NONE',
       'is_login_enabled': isLoginEnabled ? 1 : 0,
       'staff_code': staffCode,
       'login_pin': loginPin,
@@ -65,24 +68,39 @@ class StaffModel {
   }
 
   factory StaffModel.fromMap(Map<String, dynamic> map) {
+    // Helper to safely parse int from various types
+    int? parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString());
+    }
+
+    // Helper to safely parse double from various types
+    double parseDouble(dynamic value, double defaultValue) {
+      if (value == null) return defaultValue;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString()) ?? defaultValue;
+    }
+
     return StaffModel(
-      id: (map['id'] as num?)?.toInt(),
+      id: parseInt(map['id']),
       name: map['name']?.toString() ?? 'Unknown',
       role: map['role']?.toString() ?? 'Staff',
-      monthlySalary: (map['monthly_salary'] as num? ?? 0).toDouble(),
-      joinDate: map['join_date'] != null 
-          ? DateTime.tryParse(map['join_date'].toString()) ?? DateTime.now() 
+      monthlySalary: parseDouble(map['monthly_salary'], 0.0),
+      joinDate: map['join_date'] != null
+          ? DateTime.tryParse(map['join_date'].toString()) ?? DateTime.now()
           : DateTime.now(),
       contact: map['contact']?.toString() ?? '',
-      totalLeaves: (map['total_leaves'] as num? ?? 0).toDouble(),
+      totalLeaves: parseDouble(map['total_leaves'], 0.0),
       imagePath: map['image_path']?.toString(),
       imageUrl: map['image_url']?.toString(),
-      isSynced: (map['is_synced'] as num? ?? 0).toInt(),
+      isSynced: parseInt(map['is_synced'] ?? 0) ?? 0,
       advance: 0,
-      isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
+      isDeleted: parseInt(map['is_deleted'] ?? 0) ?? 0,
       deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
       updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
-      isLoginEnabled: (map['is_login_enabled'] as num? ?? 0) == 1,
+      licenseId: map['license_id']?.toString(),
+      isLoginEnabled: (parseInt(map['is_login_enabled'] ?? 0) ?? 0) == 1,
       staffCode: map['staff_code']?.toString() ?? '',
       loginPin: map['login_pin']?.toString() ?? '',
       permissions: map['permissions']?.toString() ?? '{"can_sale":true,"can_stock":false,"can_reports":false,"can_manage_staff":false}',
@@ -106,6 +124,7 @@ class StaffAdvanceModel {
   String status; // 'pending' or 'settled'
   int isSynced;
   DateTime? updatedAt;
+  String? licenseId;
 
   StaffAdvanceModel({
     this.id,
@@ -115,6 +134,7 @@ class StaffAdvanceModel {
     this.status = 'pending',
     this.isSynced = 0,
     this.updatedAt,
+    this.licenseId,
   });
 
   Map<String, dynamic> toMap() {
@@ -126,20 +146,28 @@ class StaffAdvanceModel {
       'status': status,
       'is_synced': isSynced,
       'updated_at': updatedAt?.toIso8601String() ?? date.toIso8601String(),
+      'license_id': licenseId ?? 'NONE',
     };
   }
 
   factory StaffAdvanceModel.fromMap(Map<String, dynamic> map) {
+    int? parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString());
+    }
+
     return StaffAdvanceModel(
-      id: (map['id'] as num?)?.toInt(),
-      staffId: (map['staff_id'] as num? ?? 0).toInt(),
+      id: parseInt(map['id']),
+      staffId: parseInt(map['staff_id']) ?? 0,
       amount: (map['amount'] as num? ?? 0).toDouble(),
-      date: map['date'] != null 
-          ? DateTime.tryParse(map['date'].toString()) ?? DateTime.now() 
+      date: map['date'] != null
+          ? DateTime.tryParse(map['date'].toString()) ?? DateTime.now()
           : DateTime.now(),
       status: map['status']?.toString() ?? 'pending',
-      isSynced: (map['is_synced'] as num? ?? 0).toInt(),
+      isSynced: parseInt(map['is_synced'] ?? 0) ?? 0,
       updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
+      licenseId: map['license_id']?.toString(),
     );
   }
 }
@@ -151,6 +179,7 @@ class StaffLeaveModel {
   double type; // 1.0 for full, 0.5 for half
   int isSynced;
   DateTime? updatedAt;
+  String? licenseId;
 
   StaffLeaveModel({
     this.id,
@@ -159,6 +188,7 @@ class StaffLeaveModel {
     required this.type,
     this.isSynced = 0,
     this.updatedAt,
+    this.licenseId,
   });
 
   Map<String, dynamic> toMap() {
@@ -169,19 +199,27 @@ class StaffLeaveModel {
       'type': type,
       'is_synced': isSynced,
       'updated_at': updatedAt?.toIso8601String() ?? date.toIso8601String(),
+      'license_id': licenseId ?? 'NONE',
     };
   }
 
   factory StaffLeaveModel.fromMap(Map<String, dynamic> map) {
+    int? parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString());
+    }
+
     return StaffLeaveModel(
-      id: (map['id'] as num?)?.toInt(),
-      staffId: (map['staff_id'] as num? ?? 0).toInt(),
-      date: map['date'] != null 
-          ? DateTime.tryParse(map['date'].toString()) ?? DateTime.now() 
+      id: parseInt(map['id']),
+      staffId: parseInt(map['staff_id']) ?? 0,
+      date: map['date'] != null
+          ? DateTime.tryParse(map['date'].toString()) ?? DateTime.now()
           : DateTime.now(),
       type: (map['type'] as num? ?? 0).toDouble(),
-      isSynced: (map['is_synced'] as num? ?? 0).toInt(),
+      isSynced: parseInt(map['is_synced'] ?? 0) ?? 0,
       updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
+      licenseId: map['license_id']?.toString(),
     );
   }
 }

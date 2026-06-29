@@ -12,6 +12,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:printing/printing.dart';
 import '../core/database/database_helper.dart';
+import '../models/staff_model.dart';
 import '../models/transaction_model.dart';
 import '../models/item_model.dart';
 
@@ -1325,10 +1326,32 @@ class ExportService {
           for (var item in list) {
             try {
               final Map<String, dynamic> map = Map.from(item);
-              // Ensure critical fields exist for new versions
-              if (table == 'items' && !map.containsKey('is_synced')) map['is_synced'] = 0;
-              if (table == 'transactions' && !map.containsKey('is_synced')) map['is_synced'] = 0;
-              if (table == 'staff' && !map.containsKey('is_synced')) map['is_synced'] = 0;
+              
+              // CRITICAL FIX: Ensure missing fields for compatibility with older backups
+              if (table == 'items') {
+                if (!map.containsKey('is_synced')) map['is_synced'] = 0;
+                if (!map.containsKey('license_id')) map['license_id'] = 'NONE';
+              }
+              if (table == 'transactions') {
+                if (!map.containsKey('is_synced')) map['is_synced'] = 0;
+                if (!map.containsKey('license_id')) map['license_id'] = 'NONE';
+              }
+              if (table == 'staff') {
+                if (!map.containsKey('is_synced')) map['is_synced'] = 0;
+                if (!map.containsKey('license_id')) map['license_id'] = 'NONE';
+              }
+              if (table == 'categories') {
+                if (!map.containsKey('license_id')) map['license_id'] = 'NONE';
+              }
+              if (table == 'suppliers') {
+                if (!map.containsKey('license_id')) map['license_id'] = 'NONE';
+              }
+              if (table == 'units') {
+                if (!map.containsKey('license_id')) map['license_id'] = 'NONE';
+              }
+              if (table == 'purchase_reminders') {
+                if (!map.containsKey('license_id')) map['license_id'] = 'NONE';
+              }
 
               await txn.insert(table, map);
             } catch (e) {

@@ -73,10 +73,13 @@ class LicenseService {
       }
 
       final version = await getAppVersion();
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+
       if (data['activated'] != true) {
         await firestore.collection('licenses').doc(key).update({
           'activated': true,
           'activeDeviceId': deviceId,
+          'activatedBy': uid, // Link UID here
           'activatedAt': FieldValue.serverTimestamp(),
           'lastUsedAt': FieldValue.serverTimestamp(),
           'appVersion': version,
@@ -84,6 +87,7 @@ class LicenseService {
       } else {
         await firestore.collection('licenses').doc(key).update({
           'lastUsedAt': FieldValue.serverTimestamp(),
+          'activatedBy': uid, // Ensure UID is present even if already activated
           'appVersion': version,
         });
       }

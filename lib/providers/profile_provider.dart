@@ -190,22 +190,21 @@ class ProfileProvider with ChangeNotifier {
       notifyListeners();
       return;
     }
-    final uid = user.uid;
 
     try {
       _isLoading = true;
       final prefs = await SharedPreferences.getInstance();
-      
-      // Admin Check (पहले लोड करें)
-      _isSysAdmin = prefs.getBool('is_sys_admin') ?? false;
-      _adminRole = prefs.getString('admin_role') ?? 'user';
+
+      // Admin Check (Partitioned by UID for security)
+      _isSysAdmin = prefs.getBool(_getUKey('is_sys_admin')) ?? false;
+      _adminRole = prefs.getString(_getUKey('admin_role')) ?? 'user';
 
       // Always try to recover license key and device id from persistent storage if missing for this UID
-      _licenseKey = prefs.getString('license_key_$uid') ?? prefs.getString('license_key') ?? '';
-      _isActivated = prefs.getBool('is_app_activated_$uid') ?? (_licenseKey.isNotEmpty);
+      _licenseKey = prefs.getString(_getUKey('license_key')) ?? prefs.getString('license_key') ?? '';
+      _isActivated = prefs.getBool(_getUKey('is_app_activated')) ?? (_licenseKey.isNotEmpty);
 
       // Check if we have local data, if not try fetching from cloud
-      final hasLocalData = prefs.containsKey('business_name_$uid');
+      final hasLocalData = prefs.containsKey(_getUKey('business_name'));
       
       // Update active license key in FirebaseService for partitioning
       FirebaseService.activeLicenseKey = _licenseKey.isNotEmpty ? _licenseKey : 'NONE';
@@ -213,37 +212,37 @@ class ProfileProvider with ChangeNotifier {
       if (!hasLocalData && _isCloudSyncEnabled) {
         await fetchProfileFromCloud();
       } else {
-        _businessName = prefs.getString('business_name_$uid') ?? 'My Business';
-        _ownerName = prefs.getString('owner_name_$uid') ?? '';
-        _contact = prefs.getString('contact_$uid') ?? '';
-        _address = prefs.getString('address_$uid') ?? '';
-        _logoPath = prefs.getString('logo_path_$uid') ?? '';
-        _qrPath = prefs.getString('qr_path_$uid') ?? '';
-        _qrLabel = prefs.getString('qr_label_$uid') ?? 'Scan for Payment/Review';
-        _isCloudSyncEnabled = prefs.getBool('cloud_sync_$uid') ?? true;
-        _syncMode = prefs.getString('sync_mode_$uid') ?? 'hybrid';
-        _currencySymbol = prefs.getString('currency_$uid') ?? '₹';
-        _themeColorValue = prefs.getInt('theme_color_$uid') ?? 0xFF5E35B1;
-        final colorStrings = prefs.getStringList('custom_theme_colors_$uid');
+        _businessName = prefs.getString(_getUKey('business_name')) ?? 'My Business';
+        _ownerName = prefs.getString(_getUKey('owner_name')) ?? '';
+        _contact = prefs.getString(_getUKey('contact')) ?? '';
+        _address = prefs.getString(_getUKey('address')) ?? '';
+        _logoPath = prefs.getString(_getUKey('logo_path')) ?? '';
+        _qrPath = prefs.getString(_getUKey('qr_path')) ?? '';
+        _qrLabel = prefs.getString(_getUKey('qr_label')) ?? 'Scan for Payment/Review';
+        _isCloudSyncEnabled = prefs.getBool(_getUKey('cloud_sync')) ?? true;
+        _syncMode = prefs.getString(_getUKey('sync_mode')) ?? 'hybrid';
+        _currencySymbol = prefs.getString(_getUKey('currency')) ?? '₹';
+        _themeColorValue = prefs.getInt(_getUKey('theme_color')) ?? 0xFF5E35B1;
+        final colorStrings = prefs.getStringList(_getUKey('custom_theme_colors'));
         if (colorStrings != null) {
           _customThemeColors = colorStrings.map((s) => int.parse(s)).toList();
         } else {
           _customThemeColors = [0xFF5E35B1];
         }
-        _taxPercentage = prefs.getDouble('tax_percentage_$uid') ?? 0.0;
-        _isDarkMode = prefs.getBool('is_dark_mode_$uid') ?? false;
-        _totalTables = prefs.getInt('total_tables_$uid') ?? 20;
-        _showAmount = prefs.getBool('show_amount_$uid') ?? true;
-        _isAutoPrintEnabled = prefs.getBool('auto_print_$uid') ?? false;
-        _isKotEnabled = prefs.getBool('kot_enabled_$uid') ?? true;
+        _taxPercentage = prefs.getDouble(_getUKey('tax_percentage')) ?? 0.0;
+        _isDarkMode = prefs.getBool(_getUKey('is_dark_mode')) ?? false;
+        _totalTables = prefs.getInt(_getUKey('total_tables')) ?? 20;
+        _showAmount = prefs.getBool(_getUKey('show_amount')) ?? true;
+        _isAutoPrintEnabled = prefs.getBool(_getUKey('auto_print')) ?? false;
+        _isKotEnabled = prefs.getBool(_getUKey('kot_enabled')) ?? true;
 
-        _customPin = prefs.getString('custom_pin_$uid') ?? '';
-        _isPinEnabled = prefs.getBool('is_pin_enabled_$uid') ?? false;
-        _isBiometricEnabled = prefs.getBool('is_biometric_enabled_$uid') ?? false;
+        _customPin = prefs.getString(_getUKey('custom_pin')) ?? '';
+        _isPinEnabled = prefs.getBool(_getUKey('is_pin_enabled')) ?? false;
+        _isBiometricEnabled = prefs.getBool(_getUKey('is_biometric_enabled')) ?? false;
 
-        _isLifetime = prefs.getBool('is_lifetime_$uid') ?? false;
+        _isLifetime = prefs.getBool(_getUKey('is_lifetime')) ?? false;
         
-        String? expiryStr = prefs.getString('expiry_date_$uid');
+        String? expiryStr = prefs.getString(_getUKey('expiry_date'));
         if (expiryStr != null && expiryStr.isNotEmpty) {
           _expiryDate = DateTime.tryParse(expiryStr);
         }
@@ -305,10 +304,9 @@ class ProfileProvider with ChangeNotifier {
   }
 
   Future<void> toggleAutoPrint(bool value) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
     _isAutoPrintEnabled = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('auto_print_$uid', value);
+    await prefs.setBool(_getUKey('auto_print'), value);
     notifyListeners();
   }
 
@@ -347,34 +345,32 @@ class ProfileProvider with ChangeNotifier {
   }
 
   Future<void> setPin(String pin) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
     final prefs = await SharedPreferences.getInstance();
     
     _customPin = pin;
     _isPinEnabled = pin.isNotEmpty;
-    await prefs.setString('custom_pin_$uid', pin);
-    await prefs.setBool('is_pin_enabled_$uid', _isPinEnabled);
+    await prefs.setString(_getUKey('custom_pin'), pin);
+    await prefs.setBool(_getUKey('is_pin_enabled'), _isPinEnabled);
     
     if (_isPinEnabled) {
       _isBiometricEnabled = false;
-      await prefs.setBool('is_biometric_enabled_$uid', false);
+      await prefs.setBool(_getUKey('is_biometric_enabled'), false);
     }
     
     notifyListeners();
   }
 
   Future<void> setBiometric(bool enabled) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
     final prefs = await SharedPreferences.getInstance();
     
     _isBiometricEnabled = enabled;
-    await prefs.setBool('is_biometric_enabled_$uid', enabled);
+    await prefs.setBool(_getUKey('is_biometric_enabled'), enabled);
     
     if (enabled) {
       _isPinEnabled = false;
       _customPin = "";
-      await prefs.setBool('is_pin_enabled_$uid', false);
-      await prefs.setString('custom_pin_$uid', "");
+      await prefs.setBool(_getUKey('is_pin_enabled'), false);
+      await prefs.setString(_getUKey('custom_pin'), "");
     }
     
     notifyListeners();
@@ -414,6 +410,14 @@ class ProfileProvider with ChangeNotifier {
           _licenseBusinessName = data['restaurantName'] ?? '';
           _licenseOwnerName = data['ownerName'] ?? '';
           _licensePhone = data['phone'] ?? '';
+
+          // Auto-link UID if missing for existing users
+          final currentUser = FirebaseAuth.instance.currentUser;
+          if (currentUser != null && data['activatedBy'] == null) {
+            LicenseService.firestore.collection('licenses').doc(_licenseKey).update({
+              'activatedBy': currentUser.uid,
+            });
+          }
 
           if (data['validTill'] != null) {
             _expiryDate = DateTime.tryParse(data['validTill']);
@@ -543,16 +547,15 @@ class ProfileProvider with ChangeNotifier {
   }
 
   Future<void> toggleCloudSync(bool value) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
     final prefs = await SharedPreferences.getInstance();
     _isCloudSyncEnabled = value;
-    await prefs.setBool('cloud_sync_$uid', value);
+    await prefs.setBool(_getUKey('cloud_sync'), value);
     if (!value) {
       _syncMode = 'offline';
-      await prefs.setString('sync_mode_$uid', 'offline');
+      await prefs.setString(_getUKey('sync_mode'), 'offline');
     } else if (_syncMode == 'offline') {
       _syncMode = 'hybrid';
-      await prefs.setString('sync_mode_$uid', 'hybrid');
+      await prefs.setString(_getUKey('sync_mode'), 'hybrid');
     }
     notifyListeners();
     if (value) {
@@ -569,17 +572,16 @@ class ProfileProvider with ChangeNotifier {
   }
 
   Future<void> updateSyncMode(String mode) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
     final prefs = await SharedPreferences.getInstance();
     _syncMode = mode;
-    await prefs.setString('sync_mode_$uid', mode);
+    await prefs.setString(_getUKey('sync_mode'), mode);
     
     if (mode == 'offline') {
       _isCloudSyncEnabled = false;
-      await prefs.setBool('cloud_sync_$uid', false);
+      await prefs.setBool(_getUKey('cloud_sync'), false);
     } else {
       _isCloudSyncEnabled = true;
-      await prefs.setBool('cloud_sync_$uid', true);
+      await prefs.setBool(_getUKey('cloud_sync'), true);
     }
     
     notifyListeners();
@@ -665,54 +667,53 @@ class ProfileProvider with ChangeNotifier {
   }
 
   Future<void> loadFromMap(Map<String, dynamic> map) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
     final prefs = await SharedPreferences.getInstance();
 
-    if (map['business_name'] != null) { _businessName = map['business_name']; await prefs.setString('business_name_$uid', _businessName); }
-    if (map['owner_name'] != null) { _ownerName = map['owner_name']; await prefs.setString('owner_name_$uid', _ownerName); }
-    if (map['contact'] != null) { _contact = map['contact']; await prefs.setString('contact_$uid', _contact); }
-    if (map['address'] != null) { _address = map['address']; await prefs.setString('address_$uid', _address); }
-    if (map['logo_path'] != null) { _logoPath = map['logo_path']; await prefs.setString('logo_path_$uid', _logoPath); }
-    if (map['qr_path'] != null) { _qrPath = map['qr_path']; await prefs.setString('qr_path_$uid', _qrPath); }
-    if (map['qr_label'] != null) { _qrLabel = map['qr_label']; await prefs.setString('qr_label_$uid', _qrLabel); }
-    if (map['sync_mode'] != null) { _syncMode = map['sync_mode']; await prefs.setString('sync_mode_$uid', _syncMode); }
-    if (map['currency'] != null) { _currencySymbol = map['currency']; await prefs.setString('currency_$uid', _currencySymbol); }
+    if (map['business_name'] != null) { _businessName = map['business_name']; await prefs.setString(_getUKey('business_name'), _businessName); }
+    if (map['owner_name'] != null) { _ownerName = map['owner_name']; await prefs.setString(_getUKey('owner_name'), _ownerName); }
+    if (map['contact'] != null) { _contact = map['contact']; await prefs.setString(_getUKey('contact'), _contact); }
+    if (map['address'] != null) { _address = map['address']; await prefs.setString(_getUKey('address'), _address); }
+    if (map['logo_path'] != null) { _logoPath = map['logo_path']; await prefs.setString(_getUKey('logo_path'), _logoPath); }
+    if (map['qr_path'] != null) { _qrPath = map['qr_path']; await prefs.setString(_getUKey('qr_path'), _qrPath); }
+    if (map['qr_label'] != null) { _qrLabel = map['qr_label']; await prefs.setString(_getUKey('qr_label'), _qrLabel); }
+    if (map['sync_mode'] != null) { _syncMode = map['sync_mode']; await prefs.setString(_getUKey('sync_mode'), _syncMode); }
+    if (map['currency'] != null) { _currencySymbol = map['currency']; await prefs.setString(_getUKey('currency'), _currencySymbol); }
     
     // Theme color can be stored as 'theme_color' or 'themeColor' in older backups
     final themeCol = map['theme_color'] ?? map['themeColor'];
     if (themeCol != null) { 
       _themeColorValue = themeCol is String ? int.parse(themeCol) : themeCol; 
-      await prefs.setInt('theme_color_$uid', _themeColorValue); 
+      await prefs.setInt(_getUKey('theme_color'), _themeColorValue); 
     }
 
     if (map['custom_theme_colors'] != null) {
       _customThemeColors = List<int>.from(map['custom_theme_colors']);
-      await prefs.setStringList('custom_theme_colors_$uid', _customThemeColors.map((e) => e.toString()).toList());
+      await prefs.setStringList(_getUKey('custom_theme_colors'), _customThemeColors.map((e) => e.toString()).toList());
     }
 
-    if (map['tax_percentage'] != null) { _taxPercentage = (map['tax_percentage'] as num).toDouble(); await prefs.setDouble('tax_percentage_$uid', _taxPercentage); }
+    if (map['tax_percentage'] != null) { _taxPercentage = (map['tax_percentage'] as num).toDouble(); await prefs.setDouble(_getUKey('tax_percentage'), _taxPercentage); }
     
     final darkMode = map['is_dark_mode'] ?? map['isDarkMode'];
     if (darkMode != null) { 
       _isDarkMode = _toBool(darkMode);
-      await prefs.setBool('is_dark_mode_$uid', _isDarkMode); 
+      await prefs.setBool(_getUKey('is_dark_mode'), _isDarkMode); 
     }
 
-    if (map['total_tables'] != null) { _totalTables = map['total_tables']; await prefs.setInt('total_tables_$uid', _totalTables); }
-    if (map['show_amount'] != null) { _showAmount = _toBool(map['show_amount']); await prefs.setBool('show_amount_$uid', _showAmount); }
-    if (map['auto_print'] != null) { _isAutoPrintEnabled = _toBool(map['auto_print']); await prefs.setBool('auto_print_$uid', _isAutoPrintEnabled); }
-    if (map['kot_enabled'] != null) { _isKotEnabled = _toBool(map['kot_enabled']); await prefs.setBool('kot_enabled_$uid', _isKotEnabled); }
-    if (map['custom_pin'] != null) { _customPin = map['custom_pin']; await prefs.setString('custom_pin_$uid', _customPin); }
-    if (map['is_pin_enabled'] != null) { _isPinEnabled = _toBool(map['is_pin_enabled']); await prefs.setBool('is_pin_enabled_$uid', _isPinEnabled); }
-    if (map['is_biometric_enabled'] != null) { _isBiometricEnabled = _toBool(map['is_biometric_enabled']); await prefs.setBool('is_biometric_enabled_$uid', _isBiometricEnabled); }
+    if (map['total_tables'] != null) { _totalTables = map['total_tables']; await prefs.setInt(_getUKey('total_tables'), _totalTables); }
+    if (map['show_amount'] != null) { _showAmount = _toBool(map['show_amount']); await prefs.setBool(_getUKey('show_amount'), _showAmount); }
+    if (map['auto_print'] != null) { _isAutoPrintEnabled = _toBool(map['auto_print']); await prefs.setBool(_getUKey('auto_print'), _isAutoPrintEnabled); }
+    if (map['kot_enabled'] != null) { _isKotEnabled = _toBool(map['kot_enabled']); await prefs.setBool(_getUKey('kot_enabled'), _isKotEnabled); }
+    if (map['custom_pin'] != null) { _customPin = map['custom_pin']; await prefs.setString(_getUKey('custom_pin'), _customPin); }
+    if (map['is_pin_enabled'] != null) { _isPinEnabled = _toBool(map['is_pin_enabled']); await prefs.setBool(_getUKey('is_pin_enabled'), _isPinEnabled); }
+    if (map['is_biometric_enabled'] != null) { _isBiometricEnabled = _toBool(map['is_biometric_enabled']); await prefs.setBool(_getUKey('is_biometric_enabled'), _isBiometricEnabled); }
     if (map['license_key'] != null) { 
       _licenseKey = map['license_key'].toString().trim(); 
-      await prefs.setString('license_key_$uid', _licenseKey); 
+      await prefs.setString(_getUKey('license_key'), _licenseKey); 
     }
-    if (map['is_app_activated'] != null) { _isActivated = _toBool(map['is_app_activated']); await prefs.setBool('is_app_activated_$uid', _isActivated); }
-    if (map['is_lifetime'] != null) { _isLifetime = _toBool(map['is_lifetime']); await prefs.setBool('is_lifetime_$uid', _isLifetime); }
+    if (map['is_app_activated'] != null) { _isActivated = _toBool(map['is_app_activated']); await prefs.setBool(_getUKey('is_app_activated'), _isActivated); }
+    if (map['is_lifetime'] != null) { _isLifetime = _toBool(map['is_lifetime']); await prefs.setBool(_getUKey('is_lifetime'), _isLifetime); }
     if (map['amount_paid'] != null) { _amountPaid = (map['amount_paid'] as num).toDouble(); }
-    if (map['expiry_date'] != null) { _expiryDate = DateTime.tryParse(map['expiry_date'].toString()); await prefs.setString('expiry_date_$uid', map['expiry_date'].toString()); }
+    if (map['expiry_date'] != null) { _expiryDate = DateTime.tryParse(map['expiry_date'].toString()); await prefs.setString(_getUKey('expiry_date'), map['expiry_date'].toString()); }
 
     notifyListeners();
   }

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../main.dart';
 import '../models/purchase_reminder_model.dart';
 import '../models/staff_model.dart'; // Added missing imports
 import '../models/recipe_model.dart'; // Added missing imports
@@ -67,7 +68,10 @@ class SyncProvider with ChangeNotifier {
       if (connectivity.any((result) => result != ConnectivityResult.none)) {
         // Run background delta push and pull
         await syncAllToCloudSilently();
-        await syncCloudToLocalSilently();
+        
+        // Pass global navigator context if available to refresh UI after silent pull
+        final context = navigatorKey.currentContext;
+        await syncCloudToLocalSilently(context: context);
       }
     });
   }
@@ -331,31 +335,77 @@ class SyncProvider with ChangeNotifier {
     _progress(0.0, "Connecting to cloud backup...");
 
     try {
+      // PHASE 1: Restore Identity (Profile & License)
+      // This is critical because business data path depends on licenseKey
+      _progress(0.05, "Restoring identity...");
+      
+      // Try fetching profile from UID-based path first (where it's always stored for discovery)
+      Map<String, dynamic>? identityProfile = await _firebaseService.fetchProfileFromUserPath();
+      
+      if (identityProfile == null) {
+        // Fallback to active license path if already set (unlikely in fresh install)
+        identityProfile = await _firebaseService.fetchProfile();
+      }
+
+      if (identityProfile != null) {
+        final profile = Provider.of<ProfileProvider>(context, listen: false);
+        await profile.loadFromMap(identityProfile);
+        
+        // Ensure FirebaseService and DatabaseHelper are updated with the newly restored license
+        final restoredLicense = identityProfile['license_key']?.toString() ?? 'NONE';
+        FirebaseService.activeLicenseKey = restoredLicense;
+        DatabaseHelper.resetDatabase(); // Force reload database with new license context
+        debugPrint("Identity Restored: License Key = $restoredLicense");
+      } else {
+        debugPrint("No identity profile found in cloud.");
+      }
+
+      // PHASE 2: Fetch Business Data using the correct License context
+      _progress(0.1, "Fetching business data...");
+      
+      // CRITICAL FIX: Update the static license key one last time before fetching
+      final String currentLicense = FirebaseService.activeLicenseKey ?? 'NONE';
+      debugPrint("🚀 RESTORE: Fetching data for License: $currentLicense");
+
       final cloudData = await _firebaseService.fetchAllUserData();
       
-      _progress(0.1, "Securing local database...");
-      await DatabaseHelper.instance.clearAllData();
+      final List<ItemModel> fetchedItems = cloudData['items'] as List<ItemModel>;
+      final List<CategoryModel> fetchedCategories = cloudData['categories'] as List<CategoryModel>;
+      
+      debugPrint("📦 RESTORE: Cloud Data Received -> Items: ${fetchedItems.length}, Categories: ${fetchedCategories.length}");
 
-      // Restore Profile
-      if (cloudData['profile'] != null) {
-        final profile = Provider.of<ProfileProvider>(context, listen: false);
-        await profile.loadFromMap(cloudData['profile']);
+      if (fetchedItems.isEmpty && fetchedCategories.isEmpty) {
+        debugPrint("⚠️ RESTORE: No data found in cloud for license $currentLicense. Checking User path as fallback...");
       }
+
+      _progress(0.15, "Securing local database...");
+      await DatabaseHelper.instance.clearAllData();
 
       final db = DatabaseHelper.instance;
 
       // Restore Categories (MUST BE FIRST)
       _progress(0.2, "Restoring categories...");
-      final categories = cloudData['categories'] as List<CategoryModel>;
-      if (categories.isNotEmpty) {
-        await db.batchInsert('categories', categories.map((c) => (c..isSynced = 1).toMap()).toList());
+      if (fetchedCategories.isNotEmpty) {
+        int catCount = await db.batchInsert('categories', fetchedCategories.map((c) {
+          c.isSynced = 1;
+          c.licenseId = currentLicense;
+          return c.toMap();
+        }).toList());
+        debugPrint("✅ RESTORE: Inserted $catCount/${fetchedCategories.length} categories.");
       }
 
       // Restore Items
       _progress(0.3, "Restoring items...");
-      final items = cloudData['items'] as List<ItemModel>;
-      if (items.isNotEmpty) {
-        await db.batchInsert('items', items.map((i) => (i..isSynced = 1).toMap()).toList());
+      if (fetchedItems.isNotEmpty) {
+        int itemCount = await db.batchInsert('items', fetchedItems.map((i) {
+          i.isSynced = 1;
+          // CRITICAL FIX: Ensure license_id is set to the correct context even if null in model
+          i.licenseId = (currentLicense.isEmpty || currentLicense == 'NONE') ? 'NONE' : currentLicense;
+          return i.toMap();
+        }).toList());
+        debugPrint("✅ RESTORE: Inserted $itemCount/${fetchedItems.length} items.");
+      } else {
+        debugPrint("❌ RESTORE: No items to insert (List was empty).");
       }
 
       // Restore Staff
@@ -369,6 +419,7 @@ class SyncProvider with ChangeNotifier {
             if (path != null) staff.imagePath = path;
           }
           staff.isSynced = 1;
+          staff.licenseId = currentLicense;
         }
         await db.batchInsert('staff', staffList.map((s) => s.toMap()).toList());
       }
@@ -376,26 +427,40 @@ class SyncProvider with ChangeNotifier {
       // Restore Staff Advances
       final advances = cloudData['staff_advances'] as List<StaffAdvanceModel>;
       if (advances.isNotEmpty) {
-        await db.batchInsert('staff_advance', advances.map((a) => (a..isSynced = 1).toMap()).toList());
+        await db.batchInsert('staff_advance', advances.map((a) {
+          a.isSynced = 1;
+          a.licenseId = currentLicense;
+          return a.toMap();
+        }).toList());
       }
 
       // Restore Staff Leaves
       final leaves = cloudData['staff_leaves'] as List<StaffLeaveModel>;
       if (leaves.isNotEmpty) {
-        await db.batchInsert('staff_leave', leaves.map((l) => (l..isSynced = 1).toMap()).toList());
+        await db.batchInsert('staff_leave', leaves.map((l) {
+          l.isSynced = 1;
+          l.licenseId = currentLicense;
+          return l.toMap();
+        }).toList());
       }
 
       // Restore Suppliers
       _progress(0.5, "Restoring suppliers...");
       final suppliers = cloudData['suppliers'] as List<SupplierModel>;
       if (suppliers.isNotEmpty) {
-        await db.batchInsert('suppliers', suppliers.map((s) => s.toMap()).toList());
+        await db.batchInsert('suppliers', suppliers.map((s) {
+          s.isSynced = 1;
+          s.licenseId = currentLicense;
+          return s.toMap();
+        }).toList());
       }
 
       // Restore Units
       final units = cloudData['units'] as List<Map<String, dynamic>>;
       if (units.isNotEmpty) {
         for (var unit in units) {
+          unit['is_synced'] = 1;
+          unit['license_id'] = currentLicense;
           await db.insertUnit(unit['name'] ?? "", id: unit['id'], isSynced: 1);
         }
       }
@@ -404,22 +469,33 @@ class SyncProvider with ChangeNotifier {
       _progress(0.6, "Restoring reminders...");
       final reminders = cloudData['purchase_reminders'] as List<PurchaseReminderModel>;
       if (reminders.isNotEmpty) {
-        await db.batchInsert('purchase_reminders', reminders.map((r) => (r..isSynced = 1).toMap()).toList());
+        await db.batchInsert('purchase_reminders', reminders.map((r) {
+          r.isSynced = 1;
+          r.licenseId = currentLicense;
+          return r.toMap();
+        }).toList());
       }
 
       // Restore Recipes
       _progress(0.7, "Restoring recipes...");
       final recipes = cloudData['recipes'] as List<RecipeModel>;
       if (recipes.isNotEmpty) {
-        await db.batchInsert('recipes', recipes.map((r) => (r..isSynced = 1).toMap()).toList());
+        await db.batchInsert('recipes', recipes.map((r) {
+          r.isSynced = 1;
+          r.licenseId = currentLicense;
+          return r.toMap();
+        }).toList());
       }
 
       // Restore Transactions
       _progress(0.8, "Restoring transactions...");
       final txs = cloudData['transactions'] as List<TransactionModel>;
       if (txs.isNotEmpty) {
-        // Transactions can be many, but batchInsert handles it
-        await db.batchInsert('transactions', txs.map((t) => (t..isSynced = 1).toMap()).toList());
+        await db.batchInsert('transactions', txs.map((t) {
+          t.isSynced = 1;
+          t.licenseId = currentLicense;
+          return t.toMap();
+        }).toList());
       }
 
       // Refresh UI

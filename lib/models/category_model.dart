@@ -11,6 +11,7 @@ class CategoryModel {
   int isDeleted;
   DateTime? deletedAt;
   DateTime? updatedAt;
+  String? licenseId;
 
   CategoryModel({
     this.id,
@@ -25,6 +26,7 @@ class CategoryModel {
     this.isDeleted = 0,
     this.deletedAt,
     this.updatedAt,
+    this.licenseId,
   });
 
   Map<String, dynamic> toMap() {
@@ -41,23 +43,39 @@ class CategoryModel {
       'is_deleted': isDeleted,
       'deleted_at': deletedAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'license_id': licenseId ?? 'NONE',
     };
   }
 
   factory CategoryModel.fromMap(Map<String, dynamic> map) {
+    // Helper to safely parse int from various types
+    int? parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString());
+    }
+
+    // Helper to safely parse double from various types
+    double parseDouble(dynamic value, double defaultValue) {
+      if (value == null) return defaultValue;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString()) ?? defaultValue;
+    }
+
     return CategoryModel(
-      id: (map['id'] as num?)?.toInt(),
+      id: parseInt(map['id']),
       name: map['name']?.toString() ?? 'General',
       iconName: map['icon_name']?.toString() ?? 'category',
       type: map['type']?.toString() ?? 'selling',
-      displayOrder: (map['display_order'] as num? ?? 0).toInt(),
-      useCategoryStock: (map['use_category_stock'] as num? ?? 0).toInt(),
-      stockQty: (map['stock_qty'] as num? ?? 0).toDouble(),
-      lowStockLimit: (map['low_stock_limit'] as num? ?? 10).toDouble(),
-      isSynced: (map['is_synced'] as num? ?? 0).toInt(),
-      isDeleted: (map['is_deleted'] as num? ?? 0).toInt(),
+      displayOrder: parseInt(map['display_order'] ?? 0) ?? 0,
+      useCategoryStock: parseInt(map['use_category_stock'] ?? 0) ?? 0,
+      stockQty: parseDouble(map['stock_qty'], 0.0),
+      lowStockLimit: parseDouble(map['low_stock_limit'], 10.0),
+      isSynced: parseInt(map['is_synced'] ?? 0) ?? 0,
+      isDeleted: parseInt(map['is_deleted'] ?? 0) ?? 0,
       deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
       updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
+      licenseId: map['license_id']?.toString(),
     );
   }
 
@@ -74,6 +92,7 @@ class CategoryModel {
     int? isDeleted,
     DateTime? deletedAt,
     DateTime? updatedAt,
+    String? licenseId,
   }) {
     return CategoryModel(
       id: id ?? this.id,
@@ -88,6 +107,7 @@ class CategoryModel {
       isDeleted: isDeleted ?? this.isDeleted,
       deletedAt: deletedAt ?? this.deletedAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      licenseId: licenseId ?? this.licenseId,
     );
   }
 }

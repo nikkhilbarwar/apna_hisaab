@@ -745,15 +745,18 @@ class TransactionProvider with ChangeNotifier {
 
       final tx = _allTransactions[index];
 
+      final now = DateTime.now();
       tx.isDeleted = 1;
-      tx.deletedAt = DateTime.now();
+      tx.deletedAt = now;
+      tx.updatedAt = now;
+      tx.isSynced = 0;
       notifyListeners();
 
       await DatabaseHelper.instance.softDeleteTransaction(id);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: false);
       await NotificationService().cancelOrderReminders(id);
 
-      _syncSingleTransaction(tx);
+      await _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error soft deleting transaction: $e");
     }
@@ -766,14 +769,18 @@ class TransactionProvider with ChangeNotifier {
 
       final tx = _allTransactions[index];
 
+      final now = DateTime.now();
       tx.isDeleted = 0;
       tx.deletedAt = null;
+      tx.updatedAt = now;
+      tx.isSynced = 0;
       notifyListeners();
 
       await DatabaseHelper.instance.restoreTransaction(id);
       await _applyStockEffect(tx, itemProvider, isAddingEffect: true);
 
-      _syncSingleTransaction(tx);
+      // Force immediate sync for restored transaction
+      await _syncSingleTransaction(tx);
     } catch (e) {
       debugPrint("Error restoring transaction: $e");
     }
