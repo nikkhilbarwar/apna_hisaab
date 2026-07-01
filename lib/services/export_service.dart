@@ -744,6 +744,7 @@ class ExportService {
     final logoPath = prefs.getString('logo_path_$uid') ?? "";
     final address = prefs.getString('address_$uid') ?? "";
     final contact = prefs.getString('contact_$uid') ?? "";
+    final footerNote = prefs.getString('footer_note_$uid') ?? "";
 
     pw.MemoryImage? logoImage;
     if (logoPath.isNotEmpty && File(logoPath).existsSync()) {
@@ -777,195 +778,221 @@ class ExportService {
     if (taxAmount.abs() < 0.1) taxAmount = 0;
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.roll80,
-        build: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Center(
-              child: pw.Column(
-                children: [
-                  if (logoImage != null)
-                    pw.Container(
-                      width: 50, height: 50,
-                      margin: const pw.EdgeInsets.only(bottom: 5),
-                      child: pw.Image(logoImage),
-                    ),
-                  pw.Text(businessName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-                  if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
-                  if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7)),
-                  if (!isPurchase && tx.token.isNotEmpty)
-                    pw.Align(
-                      alignment: pw.Alignment.centerRight,
-                      child: pw.Text("TOKEN: ${tx.token}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                    ),
-                ],
-              ),
-            ),
-            pw.Divider(thickness: 0.5),
-            pw.Center(
-              child: pw.Text(
-                isSalary ? "SALARY VOUCHER" : (isPurchase ? "PURCHASE VOUCHER" : (isExpense ? "EXPENSE VOUCHER" : "CASH MEMO")),
-                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1)
-              )
-            ),
-            pw.Divider(thickness: 0.5),
-
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                if (!isSalary)
-                  pw.Text((isPurchase || isExpense) ? "Voucher No: ${tx.id}" : "Bill No: ${tx.id}", style: const pw.TextStyle(fontSize: 8)),
-                if (isSalary) pw.SizedBox(), // Keeps date on the right
-                pw.Text("Date: ${DateFormat('dd-MM-yy HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 8)),
-              ],
-            ),
-            // Table Number (Hide for purchase)
-            if (!isPurchase && snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0')
-              pw.Text("TABLE: ${snapshots.first.tableNumber}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-
-            if (tx.customerContact.isNotEmpty)
-              pw.Text(isPurchase ? "Supplier: ${tx.customerContact}" : "Cust Contact: ${tx.customerContact}", style: const pw.TextStyle(fontSize: 8)),
-
-            pw.Divider(thickness: 0.5),
-
-            pw.Row(
-              children: [
-                pw.Expanded(flex: 4, child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                pw.Expanded(flex: 2, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
-                pw.Expanded(flex: 2, child: pw.Text("TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
-              ],
-            ),
-            pw.SizedBox(height: 4),
-            if (snapshots.isEmpty)
-              pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                child: pw.Row(
-                  children: [
-                    pw.Expanded(flex: 4, child: pw.Text(tx.category, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-                    pw.Expanded(flex: 2, child: pw.Text("1", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                    pw.Expanded(flex: 2, child: pw.Text(subtotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
-                  ],
-                ),
-              )
-            else
-              ...snapshots.map((item) {
-                String qtyStr = item.qty == 0.5 ? "Half" : (item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString());
-                String cleanName = item.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
-                String variant = item.variant.trim();
-                bool hideVariant = variant.toLowerCase() == 'full' || variant.toLowerCase() == 'none' || variant.isEmpty || variant.toLowerCase() == 'half';
-                String displayName = hideVariant ? cleanName : "$cleanName ($variant)";
-
-                // Sub-detail line: @ Rate | Method | Extras
-                List<String> details = [];
-                details.add("@ ${item.price.toStringAsFixed(0)}");
-                // Premium Fix: Only show serving method if it's NOT 'N/A' and NOT a Salary voucher
-                if (item.servingMethod.isNotEmpty && item.servingMethod != 'N/A' && !isSalary) {
-                  details.add(item.servingMethod);
-                }
-                if (item.extraQty > 0) {
-                  String exQty = item.extraQty % 1 == 0 ? item.extraQty.toInt().toString() : item.extraQty.toString();
-                  details.add("+ Extra PC'S: $exQty @ ${item.extraPrice.toStringAsFixed(0)}");
-                }
-                String detailString = details.join(" | ");
-
-                return pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Row(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Expanded(flex: 4, child: pw.Text(displayName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-                          pw.Expanded(flex: 2, child: pw.Text(qtyStr, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                          pw.Expanded(flex: 2, child: pw.Text(item.lineTotal.toStringAsFixed(0), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
-                        ],
-                      ),
-                      if (detailString.isNotEmpty)
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.only(left: 5),
-                          child: pw.Text(detailString, style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
-                        ),
-                    ],
-                  ),
-                );
-              }),
-            pw.Divider(thickness: 0.5),
-
-            _buildPdfBreakdownRow("Subtotal", subtotal.toStringAsFixed(0)),
-            if (discount > 0) _buildPdfBreakdownRow("Discount", "-${discount.toStringAsFixed(0)}"),
-            if (tx.transportValue > 0) 
-              _buildPdfBreakdownRow(
-                (tx.type.toLowerCase() == 'sale' || tx.type.toLowerCase() == 'income') 
-                ? "Delivery Charge" 
-                : "Transport / Rent", 
-                tx.transportValue.toStringAsFixed(0)
-              ),
-            if (taxAmount > 0) _buildPdfBreakdownRow("Tax", taxAmount.toStringAsFixed(0)),
-
-            pw.SizedBox(height: 8),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: pw.CrossAxisAlignment.end,
-              children: [
-                pw.Text("ITEM COUNT: ${snapshots.length}", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-                pw.Row(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text("GRAND TOTAL: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                    pw.Text(tx.amount.toStringAsFixed(0), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
-                  ]
-                ),
-              ],
-            ),
-
-            if (tx.paymentMode == 'Credit') ...[
-              pw.SizedBox(height: 4),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.Text("CREDIT SETTLEMENT:", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-              _buildPdfBreakdownRow("Paid Amount", tx.paidAmount.toStringAsFixed(0)),
-              _buildPdfBreakdownRow("Remaining Due", tx.remainingCredit.toStringAsFixed(0)),
-            ],
-
-            if (isPurchase) ...[
-              pw.SizedBox(height: 2),
-              pw.Text("Payment Mode: ${tx.paymentMode}", style: const pw.TextStyle(fontSize: 8)),
-              if (tx.paymentMode == 'Credit') ...[
-                pw.Text("Paid: Rs. ${tx.paidAmount.toStringAsFixed(0)}", style: const pw.TextStyle(fontSize: 8)),
-                pw.Text("Balance: Rs. ${tx.remainingCredit.toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-              ],
-              pw.SizedBox(height: 10),
-              pw.Divider(thickness: 0.5),
-              pw.Center(child: pw.Text("Receiver Signature", style: const pw.TextStyle(fontSize: 7))),
-              pw.SizedBox(height: 5),
-            ],
-
-            pw.Divider(thickness: 0.5),
-
-            if (!isPurchase && qrImage != null)
+        build: (context) => [
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
               pw.Center(
                 child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.SizedBox(height: 3),
-                    pw.Container(width: 80, height: 80, child: pw.Image(qrImage)),
-                    pw.SizedBox(height: 2),
-                    pw.Text(qrLabel.isNotEmpty ? qrLabel : "Scan for Payment/Review", style: const pw.TextStyle(fontSize: 6)),
-                    pw.SizedBox(height: 3),
+                    if (logoImage != null)
+                      pw.Container(
+                        width: 50, height: 50,
+                        margin: const pw.EdgeInsets.only(bottom: 5),
+                        child: pw.Image(logoImage),
+                      ),
+                    pw.Text(
+                      businessName.toUpperCase(), 
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                    if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
+                    if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7)),
+                    if (!isPurchase && tx.token.isNotEmpty)
+                      pw.Align(
+                        alignment: pw.Alignment.centerRight,
+                        child: pw.Text("TOKEN: ${tx.token}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                      ),
+                  ],
+                ),
+              ),
+              pw.Divider(thickness: 0.5),
+              pw.Center(
+                child: pw.Text(
+                  isSalary ? "SALARY VOUCHER" : (isPurchase ? "PURCHASE VOUCHER" : (isExpense ? "EXPENSE VOUCHER" : "CASH MEMO")),
+                  style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1)
+                )
+              ),
+              pw.Divider(thickness: 0.5),
+
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  if (!isSalary)
+                    pw.Text((isPurchase || isExpense) ? "Voucher No: ${tx.id}" : "Bill No: ${tx.id}", style: const pw.TextStyle(fontSize: 8)),
+                  if (isSalary) pw.SizedBox(), // Keeps date on the right
+                  pw.Text("Date: ${DateFormat('dd-MM-yy HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 8)),
+                ],
+              ),
+              // Table Number (Hide for purchase)
+              if (!isPurchase && snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0')
+                pw.Text("TABLE: ${snapshots.first.tableNumber}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+
+              if (tx.customerContact.isNotEmpty)
+                pw.Text(isPurchase ? "Supplier: ${tx.customerContact}" : "Cust Contact: ${tx.customerContact}", style: const pw.TextStyle(fontSize: 8)),
+
+              pw.Divider(thickness: 0.5),
+
+              pw.Row(
+                children: [
+                  pw.Expanded(flex: 4, child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                  pw.Expanded(flex: 1, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
+                  pw.Expanded(flex: 2, child: pw.Text("RATE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
+                  pw.Expanded(flex: 2, child: pw.Text("TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+              if (snapshots.isEmpty)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                  child: pw.Row(
+                    children: [
+                      pw.Expanded(flex: 4, child: pw.Text(tx.category, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+                      pw.Expanded(flex: 1, child: pw.Text("1", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                      pw.Expanded(flex: 2, child: pw.Text(subtotal.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                      pw.Expanded(flex: 2, child: pw.Text(subtotal.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                    ],
+                  ),
+                )
+              else
+                ...snapshots.map((item) {
+                  String qtyStr = item.qty == 0.5 ? "Half" : (item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString());
+                  String cleanName = item.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
+                  String variant = item.variant.trim();
+                  bool hideVariant = variant.toLowerCase() == 'full' || variant.toLowerCase() == 'none' || variant.isEmpty || variant.toLowerCase() == 'half';
+                  String displayName = hideVariant ? cleanName : "$cleanName ($variant)";
+
+                  // Sub-detail line: Method | Extras
+                  List<String> details = [];
+                  if (item.servingMethod.isNotEmpty && item.servingMethod != 'N/A' && !isSalary) {
+                    details.add(item.servingMethod);
+                  }
+                  if (item.extraQty > 0) {
+                    String exQty = item.extraQty % 1 == 0 ? item.extraQty.toInt().toString() : item.extraQty.toString();
+                    details.add("+ Extra: $exQty @ ${item.extraPrice.toStringAsFixed(2)}");
+                  }
+                  String detailString = details.join(" | ");
+
+                  return pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Row(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Expanded(flex: 4, child: pw.Text(displayName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+                            pw.Expanded(flex: 1, child: pw.Text(qtyStr, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                            pw.Expanded(flex: 2, child: pw.Text(item.price.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                            pw.Expanded(flex: 2, child: pw.Text(item.lineTotal.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                          ],
+                        ),
+                        if (detailString.isNotEmpty)
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.only(left: 5),
+                            child: pw.Text(detailString, style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700)),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
+              pw.Divider(thickness: 0.5),
+
+              _buildPdfBreakdownRow("Subtotal", subtotal.toStringAsFixed(2)),
+              if (discount > 0) _buildPdfBreakdownRow("Discount (-)", discount.toStringAsFixed(2)),
+              if (taxAmount > 0) 
+                _buildPdfBreakdownRow(
+                  "Tax (${((subtotal > 0) ? (taxAmount / subtotal) * 100 : 0).toStringAsFixed(1)}%)", 
+                  taxAmount.toStringAsFixed(2)
+                ),
+              if (tx.transportValue > 0) 
+                _buildPdfBreakdownRow(
+                  (tx.type.toLowerCase() == 'sale' || tx.type.toLowerCase() == 'income') 
+                  ? "Delivery Charge (+)" 
+                  : "Transport / Rent (+)", 
+                  tx.transportValue.toStringAsFixed(2)
+                ),
+
+              pw.SizedBox(height: 8),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(4),
+                decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text("ITEM COUNT: ${snapshots.length}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    pw.Row(
+                      children: [
+                        pw.Text("GRAND TOTAL: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                        pw.Text("${tx.amount.toStringAsFixed(2)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+                      ]
+                    ),
                   ],
                 ),
               ),
 
-            pw.Center(child: pw.Text(isPurchase ? "Stock Inward Successful" : "Thank You! Visit Again", style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic))),
-            pw.SizedBox(height: 4),
+              if (tx.paymentMode == 'Credit') ...[
+                pw.SizedBox(height: 4),
+                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+                pw.Text("CREDIT SETTLEMENT:", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                _buildPdfBreakdownRow("Paid Amount", tx.paidAmount.toStringAsFixed(0)),
+                _buildPdfBreakdownRow("Remaining Due", tx.remainingCredit.toStringAsFixed(0)),
+              ],
 
-            pw.Divider(thickness: 0.5),
-            pw.Center(child: pw.Text("POWERED BY: APNA HISAAB", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800))),
-            pw.Center(child: pw.Text("Developer: Nikkhil | +91 9992256959", style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700))),
-            pw.Center(child: pw.Text("Terms: This is a computer generated invoice.", style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700))),
-            pw.SizedBox(height: 5),
-          ],
-        ),
+              if (isPurchase) ...[
+                pw.SizedBox(height: 2),
+                pw.Text("Payment Mode: ${tx.paymentMode}", style: const pw.TextStyle(fontSize: 8)),
+                if (tx.paymentMode == 'Credit') ...[
+                  pw.Text("Paid: Rs. ${tx.paidAmount.toStringAsFixed(0)}", style: const pw.TextStyle(fontSize: 8)),
+                  pw.Text("Balance: Rs. ${tx.remainingCredit.toStringAsFixed(0)}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                ],
+                pw.SizedBox(height: 10),
+                pw.Divider(thickness: 0.5),
+                pw.Center(child: pw.Text("Receiver Signature", style: const pw.TextStyle(fontSize: 7))),
+                pw.SizedBox(height: 5),
+              ],
+
+              pw.Divider(thickness: 0.5),
+
+              if (!isPurchase && qrImage != null)
+                pw.Center(
+                  child: pw.Column(
+                    children: [
+                      pw.SizedBox(height: 3),
+                      pw.Container(width: 80, height: 80, child: pw.Image(qrImage)),
+                      pw.SizedBox(height: 2),
+                      pw.Text(qrLabel.isNotEmpty ? qrLabel : "Scan for Payment/Review", style: const pw.TextStyle(fontSize: 6)),
+                      pw.SizedBox(height: 3),
+                    ],
+                  ),
+                ),
+
+              if (footerNote.isNotEmpty) ...[
+                pw.SizedBox(height: 5),
+                pw.Center(
+                  child: pw.Text(
+                    footerNote, 
+                    style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.normal),
+                    textAlign: pw.TextAlign.center,
+                  ),
+                ),
+                pw.SizedBox(height: 5),
+              ],
+
+              pw.Center(child: pw.Text(isPurchase ? "Stock Inward Successful" : "Thank You! Visit Again", style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic))),
+              pw.SizedBox(height: 4),
+
+              pw.Divider(thickness: 0.5),
+              pw.Center(child: pw.Text("POWERED BY: APNA HISAAB", style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800))),
+              pw.Center(child: pw.Text("Developer: Nikkhil | +91 9992256959", style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700))),
+              pw.Center(child: pw.Text("Terms: This is a computer generated invoice.", style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700))),
+              pw.SizedBox(height: 5),
+            ],
+          ),
+        ],
       ),
     );
 
@@ -1001,99 +1028,103 @@ class ExportService {
 
     final address = prefs.getString('address_$uid') ?? "";
     final contact = prefs.getString('contact_$uid') ?? "";
+    final footerNote = prefs.getString('footer_note_$uid') ?? "";
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.roll80,
-        build: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            // Header: Restaurant Details
-            pw.Center(
-              child: pw.Column(
-                children: [
-                  pw.Text(businessName.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-                  if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
-                  if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7)),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 5),
-            pw.Divider(thickness: 0.5),
-            pw.Center(child: pw.Text("KITCHEN ORDER", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
-
-            // Token: Large and Bold
-            if (tx.token.isNotEmpty) ...[
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.Center(child: pw.Text("TOKEN: ${tx.token}", style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold))),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-            ],
-
-            pw.SizedBox(height: 5),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text("Order No: #${tx.id}", style: const pw.TextStyle(fontSize: 9)),
-                pw.Text("Time: ${DateFormat('HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 9)),
-              ],
-            ),
-
-            // Table Number
-            if (snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0') ...[
-              pw.SizedBox(height: 5),
-              pw.Center(child: pw.Text("TABLE: ${snapshots.first.tableNumber}", style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
-            ],
-
-            pw.Divider(thickness: 0.5),
-            ...snapshots.map((item) {
-              // Handle 0.5 for Half items
-              String qtyStr;
-              if (item.qty == 0.5) {
-                qtyStr = "Half";
-              } else {
-                qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString();
-              }
-
-              // Clean name from redundant (Half)/(Full)
-              String cleanName = item.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
-
-              String v = item.variant.trim().toLowerCase();
-              bool hideV = v == 'full' || v == 'none' || v == '' || v == 'half';
-              String variantDisplay = hideV ? "" : "(${item.variant})";
-
-              return pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(vertical: 3),
+        build: (context) => [
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Header: Restaurant Details
+              pw.Center(
                 child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.Row(
-                      children: [
-                        pw.Expanded(
-                          child: pw.Text("[ ] $qtyStr x $cleanName $variantDisplay",
-                            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                        ),
-                      ],
+                    pw.Text(businessName.toUpperCase(), 
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                      textAlign: pw.TextAlign.center,
                     ),
-                    if (item.extraQty > 0)
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.only(left: 15),
-                        child: pw.Text("+ EXTRA PC'S: ${item.extraQty % 1 == 0 ? item.extraQty.toInt() : item.extraQty}",
-                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                      ),
-                    if (item.servingMethod.toLowerCase() == 'takeaway')
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.only(left: 15),
-                        child: pw.Text("[ TAKEAWAY ]", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                      ),
+                    if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
+                    if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
                   ],
                 ),
-              );
-            }),
-            pw.Divider(thickness: 0.5),
-            pw.SizedBox(height: 5),
-            pw.Center(child: pw.Text(DateFormat('dd-MM-yyyy').format(tx.date), style: const pw.TextStyle(fontSize: 8))),
-          ],
-        ),
+              ),
+              pw.SizedBox(height: 5),
+              pw.Divider(thickness: 0.5),
+              pw.Center(child: pw.Text("KITCHEN ORDER", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+
+              // Token: Large and Bold
+              if (tx.token.isNotEmpty) ...[
+                pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+                pw.Center(child: pw.Text("TOKEN: ${tx.token}", style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold))),
+                pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
+              ],
+
+              pw.SizedBox(height: 5),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Order No: #${tx.id}", style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text("Time: ${DateFormat('HH:mm').format(tx.date)}", style: const pw.TextStyle(fontSize: 9)),
+                ],
+              ),
+
+              // Table Number
+              if (snapshots.isNotEmpty && snapshots.first.tableNumber.isNotEmpty && snapshots.first.tableNumber != '0') ...[
+                pw.SizedBox(height: 5),
+                pw.Center(child: pw.Text("TABLE: ${snapshots.first.tableNumber}", style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
+              ],
+
+              pw.Divider(thickness: 0.5),
+              ...snapshots.map((item) {
+                // Handle 0.5 for Half items
+                String qtyStr;
+                if (item.qty == 0.5) {
+                  qtyStr = "Half";
+                } else {
+                  qtyStr = item.qty % 1 == 0 ? item.qty.toInt().toString() : item.qty.toString();
+                }
+
+                // Clean name from redundant (Half)/(Full)
+                String cleanName = item.name.replaceAll(RegExp(r'\s*\((Half|Full)\)', caseSensitive: false), '').trim();
+
+                String v = item.variant.trim().toLowerCase();
+                bool hideV = v == 'full' || v == 'none' || v == '' || v == 'half';
+                String variantDisplay = hideV ? "" : "(${item.variant})";
+
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 3),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(
+                        children: [
+                          pw.Expanded(
+                            child: pw.Text("[ ] $qtyStr x $cleanName $variantDisplay",
+                              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                      if (item.extraQty > 0)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(left: 15),
+                          child: pw.Text("+ EXTRA PC'S: ${item.extraQty % 1 == 0 ? item.extraQty.toInt() : item.extraQty}",
+                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                        ),
+                      if (item.servingMethod.toLowerCase() == 'takeaway')
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(left: 15),
+                          child: pw.Text("[ TAKEAWAY ]", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ],
       ),
     );
 

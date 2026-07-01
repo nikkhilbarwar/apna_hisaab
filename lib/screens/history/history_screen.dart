@@ -6,6 +6,7 @@ import '../../providers/item_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/transaction_model.dart';
 import '../daily_entry/entry_screen.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 
 class HistoryScreen extends StatefulWidget {
   final bool isPopup;
@@ -206,35 +207,27 @@ class _HistoryScreenState extends State<HistoryScreen>
     });
   }
 
-  void _bulkDelete() {
+  void _bulkDelete() async {
     final txProvider = Provider.of<TransactionProvider>(context, listen: false);
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
 
-    showDialog(
+    final confirmed = await AppBottomSheet.showAction(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete ${_selectedIds.length} Records?'),
-        content: const Text(
-          'Are you sure you want to move these items to Trash?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () async {
-              for (int id in _selectedIds) {
-                await txProvider.softDeleteTransaction(id, itemProvider);
-              }
-              setState(() => _selectedIds.clear());
-              if (mounted) Navigator.pop(ctx);
-            },
-            child: const Text('DELETE', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      profile: profile,
+      title: 'Bulk Delete',
+      message: 'Are you sure you want to move ${_selectedIds.length} items to Trash?',
+      confirmLabel: 'DELETE',
+      isDestructive: true,
+      icon: Icons.delete_sweep_rounded,
     );
+
+    if (confirmed == true && mounted) {
+      for (int id in _selectedIds) {
+        await txProvider.softDeleteTransaction(id, itemProvider);
+      }
+      setState(() => _selectedIds.clear());
+    }
   }
 
   @override

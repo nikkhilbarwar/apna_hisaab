@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../services/license_service.dart';
 import '../services/local_auth_service.dart';
 import '../services/firebase_service.dart';
+import '../core/widgets/app_bottom_sheet.dart';
 
 class ProfileProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
@@ -19,6 +20,7 @@ class ProfileProvider with ChangeNotifier {
   String _logoPath = '';
   String _qrPath = '';
   String _qrLabel = 'Scan for Payment/Review'; 
+  String _footerNote = '';
   bool _isCloudSyncEnabled = true;
   String _syncMode = 'hybrid'; // 'offline', 'online', 'hybrid'
   String _currencySymbol = '₹';
@@ -70,6 +72,7 @@ class ProfileProvider with ChangeNotifier {
   String get logoPath => _logoPath;
   String get qrPath => _qrPath;
   String get qrLabel => _qrLabel;
+  String get footerNote => _footerNote;
   bool get isCloudSyncEnabled => _isCloudSyncEnabled;
   String get syncMode => _syncMode;
   String get currencySymbol => _currencySymbol;
@@ -219,6 +222,7 @@ class ProfileProvider with ChangeNotifier {
         _logoPath = prefs.getString(_getUKey('logo_path')) ?? '';
         _qrPath = prefs.getString(_getUKey('qr_path')) ?? '';
         _qrLabel = prefs.getString(_getUKey('qr_label')) ?? 'Scan for Payment/Review';
+        _footerNote = prefs.getString(_getUKey('footer_note')) ?? '';
         _isCloudSyncEnabled = prefs.getBool(_getUKey('cloud_sync')) ?? true;
         _syncMode = prefs.getString(_getUKey('sync_mode')) ?? 'hybrid';
         _currencySymbol = prefs.getString(_getUKey('currency')) ?? '₹';
@@ -249,6 +253,8 @@ class ProfileProvider with ChangeNotifier {
 
         // Start listening to license status if key exists
         if (_licenseKey.isNotEmpty) {
+          // Force network verification to prevent device-to-device bypass
+          _verifyLicenseStatusNetwork(_licenseKey);
           listenToLicenseRealTime();
           _listenToSupportTickets();
         }
@@ -327,20 +333,14 @@ class ProfileProvider with ChangeNotifier {
   }
 
   Future<String?> _showPinVerifyDialog(BuildContext context) async {
-    return await showDialog<String>(
+    return await AppBottomSheet.show<String>(
       context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return _PinEntryDialog(
-          title: 'ENTER PIN',
-          subtitle: 'Verify your 4-digit PIN to reveal data',
-          themeColor: themeColor,
-          cardColor: cardColor,
-          textColor: textColor,
-          scaffoldColor: scaffoldColor,
-          secondaryTextColor: secondaryTextColor,
-        );
-      },
+      profile: this,
+      title: 'ENTER PIN',
+      child: _PinEntryBottomSheet(
+        subtitle: 'Verify your 4-digit PIN to reveal data',
+        profile: this,
+      ),
     );
   }
 
@@ -588,12 +588,13 @@ class ProfileProvider with ChangeNotifier {
     if (_isCloudSyncEnabled) _syncToFirebase();
   }
 
-  Future<void> updateProfile({String? businessName, String? ownerName, String? contact, String? address, String? logoPath, String? qrPath, String? qrLabel, bool? isCloudSyncEnabled, String? currencySymbol, double? taxPercentage, int? totalTables}) async {
+  Future<void> updateProfile({String? businessName, String? ownerName, String? contact, String? address, String? logoPath, String? qrPath, String? qrLabel, String? footerNote, bool? isCloudSyncEnabled, String? currencySymbol, double? taxPercentage, int? totalTables}) async {
     final prefs = await SharedPreferences.getInstance();
     if (businessName != null) { _businessName = businessName; await prefs.setString(_getUKey('business_name'), businessName); }
     if (ownerName != null) { _ownerName = ownerName; await prefs.setString(_getUKey('owner_name'), ownerName); }
     if (contact != null) { _contact = contact; await prefs.setString(_getUKey('contact'), contact); }
     if (address != null) { _address = address; await prefs.setString(_getUKey('address'), address); }
+    if (footerNote != null) { _footerNote = footerNote; await prefs.setString(_getUKey('footer_note'), footerNote); }
     
     String? logoB64;
     if (logoPath != null) { 
@@ -634,6 +635,7 @@ class ProfileProvider with ChangeNotifier {
       'logo_path': _logoPath,
       'qr_path': _qrPath,
       'qr_label': _qrLabel,
+      'footer_note': _footerNote,
       'sync_mode': _syncMode,
       'currency': _currencySymbol,
       'theme_color': _themeColorValue,
@@ -647,6 +649,8 @@ class ProfileProvider with ChangeNotifier {
       'custom_pin': _customPin,
       'is_pin_enabled': _isPinEnabled,
       'is_biometric_enabled': _isBiometricEnabled,
+      'is_sys_admin': _isSysAdmin,
+      'admin_role': _adminRole,
       'license_key': _licenseKey,
       'is_app_activated': _isActivated,
       'is_lifetime': _isLifetime,
@@ -706,6 +710,16 @@ class ProfileProvider with ChangeNotifier {
     if (map['custom_pin'] != null) { _customPin = map['custom_pin']; await prefs.setString(_getUKey('custom_pin'), _customPin); }
     if (map['is_pin_enabled'] != null) { _isPinEnabled = _toBool(map['is_pin_enabled']); await prefs.setBool(_getUKey('is_pin_enabled'), _isPinEnabled); }
     if (map['is_biometric_enabled'] != null) { _isBiometricEnabled = _toBool(map['is_biometric_enabled']); await prefs.setBool(_getUKey('is_biometric_enabled'), _isBiometricEnabled); }
+    
+    if (map['is_sys_admin'] != null) { 
+      _isSysAdmin = _toBool(map['is_sys_admin']); 
+      await prefs.setBool(_getUKey('is_sys_admin'), _isSysAdmin); 
+    }
+    if (map['admin_role'] != null) { 
+      _adminRole = map['admin_role'].toString(); 
+      await prefs.setString(_getUKey('admin_role'), _adminRole); 
+    }
+
     if (map['license_key'] != null) { 
       _licenseKey = map['license_key'].toString().trim(); 
       await prefs.setString(_getUKey('license_key'), _licenseKey); 
@@ -793,40 +807,38 @@ class ProfileProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  @override
-  void dispose() {
-    _licenseSub?.cancel();
-    _supportSub?.cancel();
-    _authSub?.cancel();
-    super.dispose();
+  Future<void> _verifyLicenseStatusNetwork(String licenseKey) async {
+    try {
+      final doc = await LicenseService.firestore.collection('licenses').doc(licenseKey).get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        _isActivated = data['status'] == 'active';
+        _saleBlocked = data['saleBlocked'] ?? false;
+        _expenseBlocked = data['expenseBlocked'] ?? false;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Network License Verification Error: $e");
+    }
   }
 }
 
-class _PinEntryDialog extends StatefulWidget {
-  final String title;
+class _PinEntryBottomSheet extends StatefulWidget {
   final String subtitle;
-  final Color themeColor;
-  final Color cardColor;
-  final Color textColor;
-  final Color scaffoldColor;
-  final Color secondaryTextColor;
+  final ProfileProvider profile;
 
-  const _PinEntryDialog({
-    required this.title,
+  const _PinEntryBottomSheet({
     required this.subtitle,
-    required this.themeColor,
-    required this.cardColor,
-    required this.textColor,
-    required this.scaffoldColor,
-    required this.secondaryTextColor,
+    required this.profile,
   });
 
   @override
-  State<_PinEntryDialog> createState() => _PinEntryDialogState();
+  State<_PinEntryBottomSheet> createState() => _PinEntryBottomSheetState();
 }
 
-class _PinEntryDialogState extends State<_PinEntryDialog> {
-  final List<TextEditingController> _controllers = List.generate(4, (_) => TextEditingController());
+class _PinEntryBottomSheetState extends State<_PinEntryBottomSheet> {
+  final List<TextEditingController> _controllers =
+      List.generate(4, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
 
   @override
@@ -844,7 +856,7 @@ class _PinEntryDialogState extends State<_PinEntryDialog> {
     if (value.length == 1 && index < 3) {
       _focusNodes[index + 1].requestFocus();
     }
-    
+
     String pin = _controllers.map((c) => c.text).join();
     if (pin.length == 4) {
       Navigator.pop(context, pin);
@@ -853,23 +865,24 @@ class _PinEntryDialogState extends State<_PinEntryDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: widget.cardColor,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-      contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      title: Center(child: Text(widget.title, style: TextStyle(color: widget.themeColor, fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 1))),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(widget.subtitle, style: TextStyle(color: widget.secondaryTextColor, fontSize: 12)),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(4, (index) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8), 
+    final profile = widget.profile;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          widget.subtitle,
+          style: TextStyle(color: profile.secondaryTextColor, fontSize: 13),
+        ),
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            4,
+            (index) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: SizedBox(
-                width: 55,
+                width: 60,
+                height: 70,
                 child: TextField(
                   controller: _controllers[index],
                   focusNode: _focusNodes[index],
@@ -879,28 +892,45 @@ class _PinEntryDialogState extends State<_PinEntryDialog> {
                   autofocus: index == 0,
                   obscureText: true,
                   onChanged: (v) => _onChanged(v, index),
-                  style: TextStyle(color: widget.textColor, fontSize: 24, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: profile.textColor,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
                   decoration: InputDecoration(
                     counterText: "",
                     filled: true,
-                    fillColor: widget.scaffoldColor,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: widget.themeColor.withValues(alpha: 0.1), width: 1)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: widget.themeColor, width: 2)),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    fillColor: profile.scaffoldColor,
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: profile.themeColor.withValues(alpha: 0.1),
+                        width: 1,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(color: profile.themeColor, width: 2),
+                    ),
                   ),
                 ),
               ),
-            )),
+            ),
           ),
-          const SizedBox(height: 12),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context), 
-          child: Text('CANCEL', style: TextStyle(color: widget.secondaryTextColor, fontWeight: FontWeight.bold))
         ),
+        const SizedBox(height: 32),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            'CANCEL',
+            style: TextStyle(
+              color: profile.secondaryTextColor,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
       ],
     );
   }

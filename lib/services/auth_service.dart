@@ -4,6 +4,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/database/database_helper.dart';
+
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
@@ -71,10 +73,18 @@ class AuthService {
 
   Future<void> signOut() async {
     try {
+      // 1. Reset Database instances (closes old DB and resets currentUserId)
+      DatabaseHelper.resetDatabase();
+      
+      // 2. Clear all local storage
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
+      
+      // 3. Sign out from Firebase and Google
       await _googleSignIn.signOut();
       await _auth.signOut();
+      
+      debugPrint("✅ Full Sign-out and data cleanup complete.");
     } catch (e) {
       debugPrint("Sign-Out Error: $e");
     }

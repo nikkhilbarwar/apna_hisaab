@@ -13,6 +13,7 @@ import '../../providers/profile_provider.dart';
 import '../../models/cart_item.dart';
 import '../../models/item_model.dart';
 import '../../services/print_service.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 
 class CartDetailsScreen extends StatefulWidget {
   final List<CartItem> cart;
@@ -273,8 +274,9 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
     return base + totalExtra;
   }
 
-  void _showManualQuantityDialog(CartItem cartItem) {
+  void _showManualQuantityDialog(CartItem cartItem) async {
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
     final cat = itemProvider.categories.firstWhere(
       (c) => c.name == cartItem.item.category,
       orElse: () => CategoryModel(name: 'General'),
@@ -291,56 +293,68 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       return;
     }
 
-    final profile = Provider.of<ProfileProvider>(context, listen: false);
     final controller = TextEditingController(
       text: cartItem.quantity.toString(),
     );
 
-    showDialog(
+    await AppBottomSheet.show(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Enter Quantity',
-          style: TextStyle(
-            color: profile.textColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Quantity'),
-          style: TextStyle(
-            color: profile.textColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newQty = double.tryParse(controller.text) ?? 0;
-              setState(() {
-                if (newQty > 0) {
-                  cartItem.quantity = newQty;
-                } else {
-                  widget.cart.remove(cartItem);
-                }
-                _syncPaidAmount();
-              });
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: profile.themeColor,
-              foregroundColor: Colors.white,
+      profile: profile,
+      title: 'Adjust Quantity',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            autofocus: true,
+            style: TextStyle(
+              color: profile.textColor,
+              fontWeight: FontWeight.bold,
             ),
-            child: const Text('UPDATE'),
+            decoration: InputDecoration(
+              labelText: 'Quantity',
+              prefixIcon: Icon(Icons.edit_rounded, color: profile.themeColor),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    'CANCEL',
+                    style: TextStyle(color: profile.secondaryTextColor),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    final newQty = double.tryParse(controller.text) ?? 0;
+                    setState(() {
+                      if (newQty > 0) {
+                        cartItem.quantity = newQty;
+                      } else {
+                        widget.cart.remove(cartItem);
+                      }
+                      _syncPaidAmount();
+                    });
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: profile.themeColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('UPDATE'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1530,13 +1544,15 @@ class _CartDetailsScreenState extends State<CartDetailsScreen> {
       );
 
       TransactionModel? savedTx;
+      //final profile = Provider.of<ProfileProvider>(context, listen: false);
       if (widget.existingTransaction == null) {
-        savedTx = await txProvider.addTransaction(txData, itemProvider);
+        savedTx = await txProvider.addTransaction(txData, itemProvider, profile: profile);
       } else {
         savedTx = await txProvider.updateTransaction(
           txData,
           itemProvider,
           oldTx: widget.existingTransaction,
+          profile: profile,
         );
       }
 

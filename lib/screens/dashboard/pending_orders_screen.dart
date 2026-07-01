@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 import '../../providers/transaction_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/transaction_model.dart';
@@ -46,46 +47,35 @@ class _PendingOrdersScreenState extends State<PendingOrdersScreen> {
     });
   }
 
-  void _bulkDelete() {
+  void _bulkDelete() async {
     if (_selectedIds.isEmpty) return;
 
     final txProvider = Provider.of<TransactionProvider>(context, listen: false);
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
     final profile = Provider.of<ProfileProvider>(context, listen: false);
 
-    showDialog(
+    final bool? confirm = await AppBottomSheet.showAction(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Delete ${_selectedIds.length} Orders?',
-          style: TextStyle(color: profile.textColor),
-        ),
-        content: Text(
-          'Do you want to remove these ${_selectedIds.length} pending drafts? Stock will be restored.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () async {
-              for (int id in _selectedIds) {
-                await txProvider.softDeleteTransaction(id, itemProvider);
-              }
-              setState(() => _selectedIds.clear());
-              if (mounted) Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Orders deleted successfully!')),
-              );
-            },
-            child: const Text('DELETE', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      profile: profile,
+      title: 'Delete ${_selectedIds.length} Orders?',
+      message: 'Do you want to remove these ${_selectedIds.length} pending drafts? Stock will be restored.',
+      confirmLabel: 'DELETE',
+      confirmColor: Colors.red,
+      isDestructive: true,
+      icon: Icons.delete_sweep_rounded,
     );
+
+    if (confirm == true && mounted) {
+      for (int id in _selectedIds) {
+        await txProvider.softDeleteTransaction(id, itemProvider);
+      }
+      setState(() => _selectedIds.clear());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Orders deleted successfully!')),
+        );
+      }
+    }
   }
 
   @override

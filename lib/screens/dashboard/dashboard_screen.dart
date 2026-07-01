@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 import '../../models/category_model.dart';
 import '../../providers/staff_auth_provider.dart';
 import '../../providers/transaction_provider.dart';
@@ -9,6 +10,8 @@ import '../../models/transaction_model.dart';
 import '../../models/item_model.dart';
 import '../../providers/item_provider.dart';
 import '../../providers/purchase_reminder_provider.dart';
+import '../../providers/sync_provider.dart';
+import '../../core/widgets/app_empty_state.dart';
 import '../../utils/app_strings.dart';
 import '../../utils/report_helper.dart';
 import '../daily_entry/entry_screen.dart';
@@ -62,215 +65,175 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
 
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        title: Row(
-          children: [
-            Icon(
-              Icons.warning_amber_rounded,
-              color: Colors.orange.shade800,
-              size: 28,
+      profile: profile,
+      title: 'Low Stock Alert',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Stocks reaching critical levels:',
+            style: TextStyle(
+              color: profile.secondaryTextColor,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(width: 12),
-            Text(
-              'Low Stock Alert',
-              style: TextStyle(
-                color: profile.textColor,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Stocks reaching critical levels:',
-              style: TextStyle(
-                color: profile.secondaryTextColor,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.3,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  children: items.map((item) {
-                    CategoryModel? cat;
-                    try {
-                      cat = itemProvider.categories.firstWhere(
-                        (c) => c.name == item.category,
-                      );
-                    } catch (_) {}
+          ),
+          const SizedBox(height: 16),
+          ...items.map((item) {
+            CategoryModel? cat;
+            try {
+              cat = itemProvider.categories.firstWhere(
+                (c) => c.name == item.category,
+              );
+            } catch (_) {}
 
-                    bool isCat = cat != null && cat.useCategoryStock == 1;
-                    String title = isCat ? cat.name : item.name;
-                    double currentVal = isCat
-                        ? cat.stockQty
-                        : item.currentStock;
-                    double limit = isCat ? cat.lowStockLimit : item.minStock;
+            bool isCat = cat != null && cat.useCategoryStock == 1;
+            String title = isCat ? cat.name : item.name;
+            double currentVal = isCat ? cat.stockQty : item.currentStock;
+            double limit = isCat ? cat.lowStockLimit : item.minStock;
 
-                    final bool isReadymade = item.itemType == 'readymade';
-                    final Color alertColor = isReadymade
-                        ? Colors.blue
-                        : Colors.orange.shade800;
+            final bool isReadymade = item.itemType == 'readymade';
+            final Color alertColor = isReadymade ? Colors.blue : Colors.orange.shade800;
 
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: alertColor.withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: alertColor.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isCat
+                          ? Icons.category_outlined
+                          : (isReadymade
+                              ? Icons.shopping_bag_outlined
+                              : Icons.inventory_2_outlined),
+                      color: alertColor,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              title,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: profile.textColor,
+                                fontSize: 14,
+                              ),
                             ),
-                            child: Icon(
-                              isCat
-                                  ? Icons.category_outlined
-                                  : (isReadymade
-                                        ? Icons.shopping_bag_outlined
-                                        : Icons.inventory_2_outlined),
-                              color: alertColor,
-                              size: 16,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      title,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: profile.textColor,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    if (isReadymade) ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.withValues(
-                                            alpha: 0.1,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'R',
-                                          style: TextStyle(
-                                            color: Colors.blue,
-                                            fontSize: 8,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
+                            if (isReadymade) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
                                 ),
-                                Text(
-                                  'Stock: ${currentVal.toStringAsFixed(1)} / Min: ${limit.toInt()}${isCat ? ' (Shared)' : ''}',
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'R',
                                   style: TextStyle(
-                                    color: profile.secondaryTextColor,
-                                    fontSize: 11,
+                                    color: Colors.blue,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        Text(
+                          'Stock: ${currentVal.toStringAsFixed(1)} / Min: ${limit.toInt()}${isCat ? ' (Shared)' : ''}',
+                          style: TextStyle(
+                            color: profile.secondaryTextColor,
+                            fontSize: 11,
                           ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+      footer: Row(
+        children: [
+          Expanded(
+            child: TextButton(
+              onPressed: () {
+                for (var item in items) {
+                  itemProvider.snoozeAlert(item);
+                }
+                Navigator.pop(context);
+              },
+              child: Text(
+                'REMIND LATER',
+                style: TextStyle(
+                  color: profile.secondaryTextColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
                 ),
               ),
             ),
-          ],
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        actions: [
-          Row(
-            children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: () {
-                    for (var item in items) {
-                      itemProvider.snoozeAlert(item);
-                    }
-                    Navigator.pop(context);
-                  },
-                  child: Text(
-                    'REMIND LATER',
-                    style: TextStyle(
-                      color: profile.secondaryTextColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                    ),
-                  ),
+          ),
+          Expanded(
+            child: TextButton(
+              onPressed: () {
+                for (var item in items) {
+                  itemProvider.dismissAlertForToday(item);
+                }
+                Navigator.pop(context);
+              },
+              child: Text(
+                'OK',
+                style: TextStyle(
+                  color: profile.themeColor,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12,
                 ),
               ),
-              Expanded(
-                child: TextButton(
-                  onPressed: () {
-                    for (var item in items) {
-                      itemProvider.dismissAlertForToday(item);
-                    }
-                    Navigator.pop(context);
-                  },
-                  child: Text(
-                    'OK',
-                    style: TextStyle(
-                      color: profile.themeColor,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12,
-                    ),
+            ),
+          ),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (c) => const StockScreen(filterLowStock: true),
                   ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: profile.themeColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                elevation: 0,
               ),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (c) => const StockScreen(filterLowStock: true),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: profile.themeColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'UPDATE',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                  ),
-                ),
+              child: const Text(
+                'UPDATE',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -317,36 +280,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final itemProvider = Provider.of<ItemProvider>(context, listen: false);
     final profile = Provider.of<ProfileProvider>(context, listen: false);
 
-    showDialog(
+    AppBottomSheet.showAction(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        title: Text('Delete ${_selectedIds.length} Records?'),
-        content: const Text(
-          'Move selected items to Trash? Stock will be restored for Sales/Purchases.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () async {
-              for (int id in _selectedIds) {
-                await txProvider.softDeleteTransaction(id, itemProvider);
-              }
-              setState(() => _selectedIds.clear());
-              if (ctx.mounted) Navigator.pop(ctx);
-              _checkLowStock();
-            },
-            child: const Text(
-              'DELETE',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
+      profile: profile,
+      title: 'Delete ${_selectedIds.length} Records?',
+      message: 'Move selected items to Trash? Stock will be restored for Sales/Purchases.',
+      confirmLabel: 'DELETE',
+      isDestructive: true,
+      icon: Icons.delete_sweep_rounded,
+    ).then((confirmed) async {
+      if (confirmed == true) {
+        for (int id in _selectedIds) {
+          await txProvider.softDeleteTransaction(id, itemProvider);
+        }
+        setState(() => _selectedIds.clear());
+        _checkLowStock();
+      }
+    });
   }
 
   Future<void> _selectDateRange(BuildContext context) async {
@@ -370,6 +320,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final txProvider = Provider.of<TransactionProvider>(context);
     final profileProvider = Provider.of<ProfileProvider>(context);
     final reminderProvider = Provider.of<PurchaseReminderProvider>(context);
+
+    final syncProvider = Provider.of<SyncProvider>(context);
 
     // Watch ItemProvider for real-time stock alerts
     Provider.of<ItemProvider>(context);
@@ -472,9 +424,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ],
               )
-            : null,
-        body: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
+            : AppBar(
+                backgroundColor: profileProvider.scaffoldColor,
+                elevation: 0,
+                title: Row(
+                  children: [
+                    Text(
+                      'LIST MAKER',
+                      style: TextStyle(
+                        color: profileProvider.textColor,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const Spacer(),
+                    _buildSyncIndicator(syncProvider, profileProvider),
+                  ],
+                ),
+              ),
+        body: RefreshIndicator(
+          onRefresh: () async {
+            await syncProvider.syncAllToCloudSilently();
+            await syncProvider.syncCloudToLocalSilently(context: context);
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
@@ -621,7 +597,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (filteredTransactions.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
-                child: _buildEmptyState(profileProvider),
+                child: AppEmptyState(
+                  title: 'No activity found',
+                  subtitle: _activeFilter == 'Pending'
+                      ? 'You have no pending orders at the moment.'
+                      : 'Try changing the filter or date range.',
+                  icon: _activeFilter == 'Pending'
+                      ? Icons.timer_off_outlined
+                      : Icons.history_toggle_off_rounded,
+                ),
               )
             else
               SliverPadding(
@@ -656,7 +640,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   void _showPendingOrdersSheet(
@@ -1128,6 +1112,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
           shape: BoxShape.circle,
         ),
         child: Icon(icon, size: 16),
+      ),
+    );
+  }
+
+  Widget _buildSyncIndicator(SyncProvider sync, ProfileProvider profile) {
+    return InkWell(
+      onTap: () {
+        final lastSync = sync.lastSyncTimestamp;
+        final timeStr = lastSync != null
+            ? DateFormat('hh:mm a').format(lastSync)
+            : 'Never';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Last synced: $timeStr'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: profile.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: sync.isSyncing
+                ? profile.themeColor
+                : profile.secondaryTextColor.withValues(alpha: 0.1),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (sync.isSyncing)
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(profile.themeColor),
+                ),
+              )
+            else
+              Icon(
+                Icons.cloud_done_rounded,
+                size: 16,
+                color: Colors.green.shade600,
+              ),
+            const SizedBox(width: 8),
+            Text(
+              sync.isSyncing ? 'Syncing...' : 'Cloud Active',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: sync.isSyncing
+                    ? profile.themeColor
+                    : profile.secondaryTextColor,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

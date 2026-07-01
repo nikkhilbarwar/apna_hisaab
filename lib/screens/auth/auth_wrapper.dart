@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/transaction_provider.dart';
@@ -87,26 +88,37 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _showSlowRestoreDialog(BuildContext context) {
-    showDialog(
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    AppBottomSheet.show(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Restoring Backup"),
-        content: const Text(
-          "Your data is being restored from the cloud. This is taking longer than expected due to your internet speed or large backup size.\n\nYou can wait or continue to the app. Restoration will continue in the background.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("CONTINUE IN BACKGROUND"),
+      profile: profile,
+      title: "Restoring Backup",
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            "Your data is being restored from the cloud. This is taking longer than expected due to your internet speed or large backup size.\n\nYou can wait or continue to the app. Restoration will continue in the background.",
+            textAlign: TextAlign.center,
+            style: TextStyle(height: 1.5),
           ),
+          const SizedBox(height: 32),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              // The _isCurrentlyRestoring state is already true, so the loading screen will stay
-              // unless we set it to false. If they want to "wait", they just stay on the loading screen.
-            },
-            child: const Text("WAIT"),
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: profile.themeColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text("CONTINUE IN BACKGROUND", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "WAIT",
+              style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -139,29 +151,42 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _showAnnouncementDialog(BuildContext context, String message) {
-    showDialog(
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    AppBottomSheet.show(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.campaign, color: Colors.orange),
-            SizedBox(width: 10),
-            Text(
-              "ANNOUNCEMENT",
-              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+      profile: profile,
+      title: "ANNOUNCEMENT",
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
             ),
-          ],
-        ),
-        content: Text(message, style: const TextStyle(fontSize: 16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              "OK, GOT IT",
-              style: TextStyle(fontWeight: FontWeight.bold),
+            child: const Icon(Icons.campaign, color: Colors.orange, size: 40),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16,
+              color: profile.textColor,
+              height: 1.5,
             ),
+          ),
+          const SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: profile.themeColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text("OK, GOT IT", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),

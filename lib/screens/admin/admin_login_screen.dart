@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/license_service.dart';
 import '../../providers/profile_provider.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 import 'package:provider/provider.dart';
 import 'admin_panel_screen.dart';
 
@@ -43,10 +44,17 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   Future<void> _handleLogin() async {
     final phone = _phoneController.text.trim();
     final pass = _passwordController.text.trim();
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
 
     if (phone.isEmpty || pass.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Phone and Password are required")),
+      AppBottomSheet.showAction(
+        context: context,
+        profile: profile,
+        title: "Input Required",
+        message: "Phone and Password are required",
+        confirmLabel: "OK",
+        confirmColor: Colors.red,
+        icon: Icons.error_outline,
       );
       return;
     }
@@ -81,8 +89,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       }
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message']), backgroundColor: Colors.red),
+        AppBottomSheet.showAction(
+          context: context,
+          profile: profile,
+          title: "Login Failed",
+          message: result['message'],
+          confirmLabel: "OK",
+          confirmColor: Colors.red,
+          icon: Icons.error_outline,
         );
       }
     }

@@ -23,6 +23,11 @@ class FirebaseService {
 
   CollectionReference _collection(String name) {
     if (activeLicenseKey != null && activeLicenseKey != 'NONE') {
+      // Check if it's a license or a direct User ID
+      if (activeLicenseKey!.startsWith('USR_') || activeLicenseKey!.length > 20) {
+        final uid = activeLicenseKey!.startsWith('USR_') ? activeLicenseKey!.substring(4) : activeLicenseKey!;
+        return _firestore.collection('users').doc(uid).collection(name);
+      }
       return _firestore.collection('licenses').doc(activeLicenseKey).collection(name);
     }
     if (_uid == null) throw Exception("User not logged in");
@@ -31,6 +36,10 @@ class FirebaseService {
 
   DocumentReference _profileDoc() {
     if (activeLicenseKey != null && activeLicenseKey != 'NONE') {
+      if (activeLicenseKey!.startsWith('USR_') || activeLicenseKey!.length > 20) {
+        final uid = activeLicenseKey!.startsWith('USR_') ? activeLicenseKey!.substring(4) : activeLicenseKey!;
+        return _firestore.collection('users').doc(uid).collection('profile').doc('business_info');
+      }
       return _firestore.collection('licenses').doc(activeLicenseKey).collection('profile').doc('business_info');
     }
     if (_uid == null) throw Exception("User not logged in");

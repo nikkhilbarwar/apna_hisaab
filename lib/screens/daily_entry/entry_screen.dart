@@ -16,6 +16,8 @@ import '../../utils/app_formatter.dart';
 import '../../utils/report_helper.dart';
 import 'cart_details_screen.dart';
 import '../../core/widgets/app_bottom_sheet.dart';
+import '../../core/widgets/app_empty_state.dart';
+import '../items/item_management_screen.dart';
 
 class EntryScreen extends StatefulWidget {
   final TransactionModel? transaction;
@@ -1185,13 +1187,33 @@ class _EntryScreenState extends State<EntryScreen>
       return matchType && matchCategory && matchSearch;
     }).toList();
 
-    if (filteredItems.isEmpty)
-      return Center(
-        child: Text(
-          'No items found',
-          style: TextStyle(color: profile.secondaryTextColor),
-        ),
+    if (filteredItems.isEmpty) {
+      return AppEmptyState(
+        title: _searchQuery.isEmpty ? 'No Items Found' : 'No Results Found',
+        subtitle: _searchQuery.isEmpty 
+            ? 'There are no ${categoryName == 'All' ? '' : '$categoryName '}items available for this transaction type.'
+            : 'We couldn\'t find any items matching "$_searchQuery".',
+        icon: _searchQuery.isEmpty ? Icons.inventory_2_outlined : Icons.search_off_rounded,
+        actionLabel: _searchQuery.isEmpty ? 'ADD NEW ITEM' : 'CLEAR SEARCH',
+        onActionPressed: () {
+          if (_searchQuery.isNotEmpty) {
+            setState(() {
+              _searchQuery = '';
+              _searchController.clear();
+            });
+          } else {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ItemManagementScreen(
+                  category: categoryName == 'All' ? 'General' : categoryName,
+                ),
+              ),
+            );
+          }
+        },
       );
+    }
 
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),

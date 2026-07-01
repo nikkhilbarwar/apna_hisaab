@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import '../main.dart';
+import '../core/widgets/app_bottom_sheet.dart';
 import '../providers/profile_provider.dart';
 import '../providers/staff_provider.dart';
 import '../providers/transaction_provider.dart';
@@ -88,128 +89,106 @@ class _MainNavigationState extends State<MainNavigation>
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final syncProvider = Provider.of<SyncProvider>(context, listen: false);
 
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => Center(
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 24),
-          decoration: BoxDecoration(
-            color: profile.cardColor,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 20,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: 120,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: profile.themeColor.withValues(alpha: 0.1),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(28),
+      profile: profile,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 120,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: profile.themeColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Center(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(
+                    Icons.cloud_download_rounded,
+                    size: 60,
+                    color: profile.themeColor,
                   ),
-                ),
-                child: Center(
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Icon(
-                        Icons.cloud_download_rounded,
-                        size: 60,
+                  Positioned(
+                    bottom: 10,
+                    child: Text(
+                      "RESTORE RECOMMENDATION",
+                      style: TextStyle(
                         color: profile.themeColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10,
+                        letterSpacing: 1,
                       ),
-                      Positioned(
-                        bottom: 10,
-                        child: Text(
-                          "Restore Recommendation",
-                          style: TextStyle(
-                            color: profile.themeColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Text(
-                      "Restore Your Data",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                        color: profile.textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      "We recommend performing a one-time 'Full Restore' to ensure all your previous items, transactions, and settings are correctly synced to this device.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: profile.secondaryTextColor,
-                        fontSize: 13,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _showSyncStatus(
-                          context,
-                          Provider.of<TransactionProvider>(
-                            context,
-                            listen: false,
-                          ),
-                          profile,
-                        );
-                        // Optionally trigger restore confirmation directly
-                        _showFullRestoreConfirm(context, syncProvider, profile);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: profile.themeColor,
-                        minimumSize: const Size(double.infinity, 54),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text(
-                        "RESTORE FROM CLOUD",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: Text(
-                        "I'LL DO IT LATER",
-                        style: TextStyle(
-                          color: profile.secondaryTextColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(height: 24),
+          Text(
+            "Restore Your Data",
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 20,
+              color: profile.textColor,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "We recommend performing a one-time 'Full Restore' to ensure all your previous items, transactions, and settings are correctly synced to this device.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: profile.secondaryTextColor,
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showSyncStatus(
+                context,
+                Provider.of<TransactionProvider>(
+                  context,
+                  listen: false,
+                ),
+                profile,
+              );
+              _showFullRestoreConfirm(context, syncProvider, profile);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: profile.themeColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 54),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              "RESTORE FROM CLOUD",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "I'LL DO IT LATER",
+              style: TextStyle(
+                color: profile.secondaryTextColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -227,50 +206,39 @@ class _MainNavigationState extends State<MainNavigation>
     final backupFile = await exportService.getAutoBackupFile();
 
     if (backupFile != null && mounted) {
-      showDialog(
+      final profile = Provider.of<ProfileProvider>(context, listen: false);
+      
+      final bool? shouldRestore = await AppBottomSheet.showAction(
         context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Text('Backup Found!'),
-          content: const Text(
-            'An automatic backup was found on this device. Would you like to restore your data?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                await prefs.setBool('auto_backup_checked', true);
-                if (mounted) Navigator.pop(context);
-              },
-              child: const Text('IGNORE'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                bool success = await exportService.restoreFromBackup(
-                  backupFile,
-                );
-                await prefs.setBool('auto_backup_checked', true);
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        success
-                            ? 'Data Restored Successfully!'
-                            : 'Restore Failed!',
-                      ),
-                      backgroundColor: success ? Colors.green : Colors.red,
-                    ),
-                  );
-                  if (success) {
-                    RestartWidget.restartApp(context);
-                  }
-                }
-              },
-              child: const Text('RESTORE NOW'),
-            ),
-          ],
-        ),
+        profile: profile,
+        title: "Backup Found!",
+        message: "An automatic backup was found on this device. Would you like to restore your data?",
+        confirmLabel: "RESTORE NOW",
+        cancelLabel: "IGNORE",
+        icon: Icons.backup_rounded,
       );
+
+      if (mounted) {
+        if (shouldRestore == true) {
+          bool success = await exportService.restoreFromBackup(backupFile);
+          await prefs.setBool('auto_backup_checked', true);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  success ? 'Data Restored Successfully!' : 'Restore Failed!',
+                ),
+                backgroundColor: success ? Colors.green : Colors.red,
+              ),
+            );
+            if (success) {
+              RestartWidget.restartApp(context);
+            }
+          }
+        } else if (shouldRestore == false) {
+          await prefs.setBool('auto_backup_checked', true);
+        }
+      }
     } else {
       await prefs.setBool('auto_backup_checked', true);
     }
@@ -515,44 +483,31 @@ class _MainNavigationState extends State<MainNavigation>
     BuildContext context,
     SyncProvider syncProvider,
     ProfileProvider profile,
-  ) {
-    showDialog(
+  ) async {
+    final bool? confirm = await AppBottomSheet.showAction(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text('Full Restore Data?'),
-        content: const Text(
-          'This will replace ALL local data with Cloud data. Current unsynced changes might be lost.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              bool success = await syncProvider.fullRestoreFromServer(context);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      success ? 'Restore Successful!' : 'Restore Failed!',
-                    ),
-                    backgroundColor: success ? Colors.green : Colors.red,
-                  ),
-                );
-              }
-            },
-            child: const Text(
-              'RESTORE',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
+      profile: profile,
+      title: 'Full Restore Data?',
+      message: 'This will replace ALL local data with Cloud data. Current unsynced changes might be lost.',
+      confirmLabel: 'RESTORE',
+      confirmColor: Colors.red,
+      icon: Icons.cloud_download_rounded,
+      isDestructive: true,
     );
+
+    if (confirm == true && context.mounted) {
+      bool success = await syncProvider.fullRestoreFromServer(context);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success ? 'Restore Successful!' : 'Restore Failed!',
+            ),
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _syncInfoRow(
@@ -628,6 +583,7 @@ class _MainNavigationState extends State<MainNavigation>
         StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('support_tickets')
+              .where('status', isNotEqualTo: 'deleted')
               .where('status', isEqualTo: 'open')
               .snapshots(),
           builder: (context, snapshot) {

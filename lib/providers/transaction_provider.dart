@@ -389,7 +389,14 @@ class TransactionProvider with ChangeNotifier {
   Future<TransactionModel?> addTransaction(
     TransactionModel tx,
     ItemProvider itemProvider,
+    {ProfileProvider? profile} // Add profile check
   ) async {
+    // BLOCK SALE IF ADMIN BLOCKED IT
+    if (profile != null && tx.type == 'sale' && profile.saleBlocked) {
+      debugPrint("❌ SALE BLOCKED BY ADMIN");
+      return null;
+    }
+
     try {
       tx.status = _normalizeStatus(tx.status).isEmpty
           ? 'completed'
@@ -418,7 +425,13 @@ class TransactionProvider with ChangeNotifier {
     TransactionModel tx,
     ItemProvider itemProvider, {
     TransactionModel? oldTx,
+    ProfileProvider? profile,
   }) async {
+    if (profile != null && tx.type == 'sale' && profile.saleBlocked) {
+      debugPrint("❌ SALE BLOCKED BY ADMIN");
+      return null;
+    }
+
     try {
       tx.status = _normalizeStatus(tx.status).isEmpty
           ? 'completed'

@@ -8,6 +8,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
+import '../../main.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/purchase_reminder_provider.dart';
@@ -21,6 +23,7 @@ import '../../providers/unit_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/export_service.dart';
 import '../../services/license_service.dart';
+import '../../core/widgets/app_empty_state.dart';
 import '../../utils/app_strings.dart';
 import '../../utils/image_helper.dart';
 import '../auth/login_screen.dart';
@@ -77,26 +80,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
           profile.updateProfile(logoPath: croppedPath);
         } else {
           // Ask for QR Label
-          final String? selectedLabel = await showDialog<String>(
+          final String? selectedLabel = await AppBottomSheet.show<String>(
             context: context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: profile.cardColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              title: const Text(
-                "QR Code Type",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              content: const Text("Select what this QR code is for:"),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, "Scan for Payment"),
-                  child: const Text("PAYMENT"),
+            profile: profile,
+            title: "QR Code Type",
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(Icons.payment_rounded, color: profile.themeColor),
+                  title: const Text("Payment QR"),
+                  subtitle: const Text("Customers can scan to pay you"),
+                  onTap: () => Navigator.pop(context, "Scan for Payment"),
                 ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, "Scan for Review"),
-                  child: const Text("REVIEW"),
+                ListTile(
+                  leading: Icon(Icons.rate_review_rounded, color: profile.themeColor),
+                  title: const Text("Review QR"),
+                  subtitle: const Text("Customers can scan to leave a review"),
+                  onTap: () => Navigator.pop(context, "Scan for Review"),
                 ),
               ],
             ),
@@ -123,75 +123,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (mounted) {
       if (path != null) {
-        showDialog(
+        AppBottomSheet.show(
           context: context,
-          builder: (ctx) => Dialog(
-            backgroundColor: profile.cardColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 48),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    "Backup Successful",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: profile.textColor,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    "Your data is safe! The backup file is stored in your Documents folder and will persist even if you uninstall the app.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: profile.secondaryTextColor,
-                      fontSize: 13,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: profile.scaffoldColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      path,
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        color: profile.themeColor,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: profile.themeColor,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      elevation: 0,
-                    ),
-                    child: const Text("GREAT", style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ],
+          profile: profile,
+          title: "Backup Successful",
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 48),
               ),
+              const SizedBox(height: 20),
+              Text(
+                "Your data is safe! The backup file is stored in your Documents folder and will persist even if you uninstall the app.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: profile.secondaryTextColor,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: profile.scaffoldColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  path,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    color: profile.themeColor,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+          footer: ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: profile.themeColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 0,
             ),
+            child: const Text("GREAT", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         );
       } else {
@@ -213,77 +197,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final file = File(result.files.single.path!);
 
         if (mounted) {
-          bool confirm = await showDialog(
-            context: context,
-            builder: (ctx) => Dialog(
-              backgroundColor: profile.cardColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.warning_rounded, color: Colors.red, size: 48),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      "Restore Data?",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: profile.textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      "Warning: This will permanently replace all current app data and settings with the backup file. This cannot be undone.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.red,
-                        fontSize: 13,
-                        height: 1.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: Text(
-                              "CANCEL",
-                              style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                              minimumSize: const Size(double.infinity, 50),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              elevation: 0,
-                            ),
-                            child: const Text("PROCEED", style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ) ?? false;
+          bool confirm = await AppBottomSheet.showAction(
+                context: context,
+                profile: profile,
+                title: "Restore Data?",
+                message:
+                    "Warning: This will permanently replace all current app data and settings with the backup file. This cannot be undone.",
+                confirmLabel: "PROCEED",
+                isDestructive: true,
+                icon: Icons.warning_rounded,
+              ) ??
+              false;
 
           if (confirm && mounted) {
             setState(() => _isBackingUp = true);
@@ -367,76 +291,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _confirmDeleteAccount(ProfileProvider profile) {
     final TextEditingController confirmController = TextEditingController();
 
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red),
-            SizedBox(width: 8),
-            Text("Delete Account?"),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Warning: This action is permanent and cannot be undone.",
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              "Your items, transactions, licenses, and all cloud data will be deleted forever.",
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              "Type 'DELETE' below to confirm:",
-              style: TextStyle(color: profile.secondaryTextColor, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: confirmController,
-              decoration: const InputDecoration(
-                hintText: "DELETE",
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-              ),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.red,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text("CANCEL", style: TextStyle(color: profile.textColor)),
+      profile: profile,
+      title: "Delete Account?",
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Warning: This action is permanent and cannot be undone.",
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              if (confirmController.text.trim().toUpperCase() == "DELETE") {
-                Navigator.pop(ctx);
-                _showDeletingOverlay(profile);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Type DELETE to confirm")),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text(
-              "DELETE EVERYTHING",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+          const SizedBox(height: 12),
+          const Text(
+            "Your items, transactions, licenses, and all cloud data will be deleted forever.",
+            style: TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            "Type 'DELETE' below to confirm:",
+            style: TextStyle(color: profile.secondaryTextColor, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: confirmController,
+            decoration: const InputDecoration(
+              hintText: "DELETE",
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+            ),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
+          ),
+        ],
+      ),
+      footer: Row(
+        children: [
+          Expanded(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("CANCEL", style: TextStyle(color: profile.textColor)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () async {
+                if (confirmController.text.trim().toUpperCase() == "DELETE") {
+                  Navigator.pop(context);
+                  _showDeletingOverlay(profile);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Type DELETE to confirm")),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text(
+                "DELETE EVERYTHING",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -446,31 +368,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showDeletingOverlay(ProfileProvider profile) {
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          backgroundColor: profile.cardColor,
-          content: const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(color: Colors.red),
-              SizedBox(height: 24),
-              Text(
-                "Deleting your data...",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text(
-                "Please wait, this may take a moment",
-                style: TextStyle(fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ],
+      profile: profile,
+      title: "Deleting Data",
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(color: Colors.red),
+          const SizedBox(height: 24),
+          Text(
+            "Deleting your data...",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: profile.textColor,
+            ),
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(
+            "Please wait, this may take a moment",
+            style: TextStyle(
+              fontSize: 12,
+              color: profile.secondaryTextColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
 
@@ -502,120 +425,86 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _showDeletionErrorDialog(String error) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Row(
-          children: [
-            Icon(Icons.lock_clock_rounded, color: Colors.orange),
-            SizedBox(width: 12),
-            Text("Re-authentication\nRequired"),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              "For security reasons, you must have logged in recently to delete your entire profile and data.",
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      profile: profile,
+      title: "Re-authentication Required",
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            "For security reasons, you must have logged in recently to delete your entire profile and data.",
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
             ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+            child: const Text(
+              "Please Logout and Login again, then try deleting your profile.",
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
               ),
-              child: const Text(
-                "Please Logout and Login again, then try deleting your profile.",
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.orange,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          Center(
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: profile.themeColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                minimumSize: const Size(120, 45),
-              ),
-              child: const Text(
-                "OK, I UNDERSTAND",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              textAlign: TextAlign.center,
             ),
           ),
-          const SizedBox(height: 8),
         ],
+      ),
+      footer: ElevatedButton(
+        onPressed: () => Navigator.pop(context),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: profile.themeColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          minimumSize: const Size(double.infinity, 50),
+        ),
+        child: const Text(
+          "OK, I UNDERSTAND",
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }
 
-  void _confirmLogout() {
+  void _confirmLogout() async {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final staffAuth = Provider.of<StaffAuthProvider>(context, listen: false);
-    
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(
-          "${AppStrings.logout}?",
-          style: TextStyle(
-            color: profile.textColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          staffAuth.isStaffLoggedIn 
+
+    bool confirm = await AppBottomSheet.showAction(
+          context: context,
+          profile: profile,
+          title: "${AppStrings.logout}?",
+          message: staffAuth.isStaffLoggedIn
               ? "Are you sure you want to logout from your staff account?"
               : AppStrings.confirmLogout,
-          style: TextStyle(color: profile.secondaryTextColor),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(AppStrings.cancel),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (staffAuth.isStaffLoggedIn) {
-                await staffAuth.logoutStaff();
-              } else {
-                await _authService.signOut();
-              }
+          confirmLabel: AppStrings.logout,
+          isDestructive: true,
+          icon: Icons.logout_rounded,
+        ) ??
+        false;
 
-              if (!mounted) return;
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-                (route) => false,
-              );
-            },
-            child: const Text(
-              AppStrings.logout,
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
+    if (confirm) {
+      if (staffAuth.isStaffLoggedIn) {
+        await staffAuth.logoutStaff();
+      } else {
+        await _authService.signOut();
+      }
+
+      if (!mounted) return;
+
+      // Poori app ko restart karein taaki fresh state load ho
+      RestartWidget.restartApp(context);
+    }
   }
 
   void _showEditBottomSheet(BuildContext context, ProfileProvider profile) {
@@ -624,6 +513,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final o = TextEditingController(text: profile.displayOwnerName);
     final c = TextEditingController(text: profile.displayPhone);
     final a = TextEditingController(text: profile.address);
+    final fn = TextEditingController(text: profile.footerNote);
     final t = TextEditingController(text: profile.taxPercentage.toString());
     final tbl = TextEditingController(text: profile.totalTables.toString());
 
@@ -719,6 +609,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   profile,
                   maxLines: 2,
                 ),
+                _buildField(
+                  fn,
+                  "Custom Bill Footer Note (Optional)",
+                  Icons.note_alt_outlined,
+                  profile,
+                  maxLines: 2,
+                ),
                 const SizedBox(height: 12),
                 ElevatedButton(
                   onPressed: () {
@@ -728,6 +625,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ownerName: o.text.trim(),
                         contact: c.text.trim(),
                         address: a.text.trim(),
+                        footerNote: fn.text.trim(),
                         taxPercentage: double.tryParse(t.text) ?? 0.0,
                         totalTables: int.tryParse(tbl.text) ?? 20,
                       );
@@ -1411,176 +1309,146 @@ class _ProfileScreenState extends State<ProfileScreen> {
       text: pickedColor.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase(),
     );
 
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          backgroundColor: profile.cardColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+      profile: profile,
+      title: "Custom Theme",
+      child: StatefulBuilder(
+        builder: (context, setDialogState) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Modern Color Picker
+            ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: ColorPicker(
+                pickerColor: pickedColor,
+                onColorChanged: (color) {
+                  pickedColor = color;
+                  final newHex =
+                      color.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+                  if (hexController.text.toUpperCase() != newHex) {
+                    hexController.text = newHex;
+                  }
+                  setDialogState(() {});
+                },
+                enableAlpha: false,
+                displayThumbColor: true,
+                pickerAreaHeightPercent: 0.7,
+                hexInputBar: false,
+                labelTypes: const [], // Cleaner UI
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Hex Input Box
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              decoration: BoxDecoration(
+                color: profile.scaffoldColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: pickedColor.withValues(alpha: 0.3),
+                  width: 2,
+                ),
+              ),
+              child: Row(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.brush_rounded, color: pickedColor, size: 28),
-                      const SizedBox(width: 12),
-                      Text(
-                        "Custom Theme",
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: profile.textColor,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    "#",
+                    style: TextStyle(
+                      color: pickedColor,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
+                    ),
                   ),
-                  const SizedBox(height: 24),
-
-                  // Modern Color Picker
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: ColorPicker(
-                      pickerColor: pickedColor,
-                      onColorChanged: (color) {
-                        pickedColor = color;
-                        final newHex = color.value
-                            .toRadixString(16)
-                            .padLeft(8, '0')
-                            .substring(2)
-                            .toUpperCase();
-                        if (hexController.text.toUpperCase() != newHex) {
-                          hexController.text = newHex;
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: hexController,
+                      maxLength: 6,
+                      style: TextStyle(
+                        color: profile.textColor,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 3,
+                        fontSize: 18,
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        counterText: "",
+                        hintText: "FFFFFF",
+                      ),
+                      onChanged: (val) {
+                        if (val.length == 6) {
+                          try {
+                            final color = Color(int.parse("FF$val", radix: 16));
+                            setDialogState(() {
+                              pickedColor = color;
+                            });
+                          } catch (_) {}
                         }
-                        setDialogState(() {});
                       },
-                      enableAlpha: false,
-                      displayThumbColor: true,
-                      pickerAreaHeightPercent: 0.7,
-                      hexInputBar: false,
-                      labelTypes: const [], // Cleaner UI
                     ),
                   ),
-
-                  const SizedBox(height: 24),
-
-                  // Hex Input Box
+                  // Small Preview Circle
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
-                      color: profile.scaffoldColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: pickedColor.withValues(alpha: 0.3),
-                        width: 2,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          "#",
-                          style: TextStyle(
-                            color: pickedColor,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: hexController,
-                            maxLength: 6,
-                            style: TextStyle(
-                              color: profile.textColor,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 3,
-                              fontSize: 18,
-                            ),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              counterText: "",
-                              hintText: "FFFFFF",
-                            ),
-                            onChanged: (val) {
-                              if (val.length == 6) {
-                                try {
-                                  final color = Color(int.parse("FF$val", radix: 16));
-                                  setDialogState(() {
-                                    pickedColor = color;
-                                  });
-                                } catch (_) {}
-                              }
-                            },
-                          ),
-                        ),
-                        // Small Preview Circle
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: pickedColor,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: [
-                              BoxShadow(
-                                color: pickedColor.withValues(alpha: 0.3),
-                                blurRadius: 4,
-                              )
-                            ],
-                          ),
-                        ),
+                      color: pickedColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: pickedColor.withValues(alpha: 0.3),
+                          blurRadius: 4,
+                        )
                       ],
                     ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: Text(
-                            "CANCEL",
-                            style: TextStyle(
-                              color: profile.secondaryTextColor,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            profile.updateThemeColor(pickedColor);
-                            Navigator.pop(ctx);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: pickedColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: const Text(
-                            "APPLY THEME",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
             ),
-          ),
+          ],
         ),
+      ),
+      footer: Row(
+        children: [
+          Expanded(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                "CANCEL",
+                style: TextStyle(
+                  color: profile.secondaryTextColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () {
+                profile.updateThemeColor(pickedColor);
+                Navigator.pop(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: pickedColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: const Text(
+                "APPLY THEME",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1712,40 +1580,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _showSetPinDialog(ProfileProvider profile, StateSetter parentState) {
     final controller = TextEditingController();
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text("Set 4-Digit PIN"),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          maxLength: 4,
-          obscureText: true,
-          autofocus: true,
-          textAlign: TextAlign.center,
-          decoration: const InputDecoration(hintText: "****", counterText: ""),
-          style: const TextStyle(
-            fontSize: 24,
-            letterSpacing: 10,
-            fontWeight: FontWeight.bold,
+      profile: profile,
+      title: "Set 4-Digit PIN",
+      child: Column(
+        children: [
+          TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            maxLength: 4,
+            obscureText: true,
+            autofocus: true,
+            textAlign: TextAlign.center,
+            decoration: const InputDecoration(hintText: "****", counterText: ""),
+            style: const TextStyle(
+              fontSize: 24,
+              letterSpacing: 10,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CANCEL"),
+        ],
+      ),
+      footer: Row(
+        children: [
+          Expanded(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("CANCEL"),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () {
-              if (controller.text.length == 4) {
-                profile.setPin(controller.text);
-                parentState(() {});
-                Navigator.pop(context);
-              }
-            },
-            child: const Text("SAVE"),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () {
+                if (controller.text.length == 4) {
+                  profile.setPin(controller.text);
+                  parentState(() {});
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text("SAVE"),
+            ),
           ),
         ],
       ),
@@ -1942,31 +1818,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   if (docs.isEmpty &&
                       snapshot.connectionState != ConnectionState.waiting) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.confirmation_number_outlined,
-                            size: 64,
-                            color: profile.secondaryTextColor.withValues(
-                              alpha: 0.3,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            profile.licenseKey.isEmpty
-                                ? "License not found"
-                                : "No tickets yet",
-                            style: TextStyle(color: profile.secondaryTextColor),
-                          ),
-                          TextButton.icon(
-                            onPressed: () => _showCreateTicketDialog(profile),
-                            icon: const Icon(Icons.add_circle_outline),
-                            label: const Text("Create Ticket"),
-                          ),
-                        ],
-                      ),
+                    return AppEmptyState(
+                      title: profile.licenseKey.isEmpty
+                          ? "License not found"
+                          : "No tickets yet",
+                      subtitle: "Raise a ticket for any help or queries",
+                      icon: Icons.confirmation_number_outlined,
+                      actionLabel: "Create Ticket",
+                      onActionPressed: () => _showCreateTicketDialog(profile),
                     );
                   }
 
@@ -2106,80 +1965,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final messageController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text("Create Support Ticket"),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: subjectController,
-                decoration: const InputDecoration(
-                  labelText: "Subject",
-                  hintText: "e.g., License not working",
-                ),
-                validator: (v) => v!.isEmpty ? "Required" : null,
+      profile: profile,
+      title: "Create Support Ticket",
+      child: Form(
+        key: formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: subjectController,
+              decoration: const InputDecoration(
+                labelText: "Subject",
+                hintText: "e.g., License not working",
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: messageController,
-                decoration: const InputDecoration(
-                  labelText: "Description",
-                  hintText: "Describe your issue",
-                ),
-                maxLines: 3,
-                validator: (v) => v!.isEmpty ? "Required" : null,
+              validator: (v) => v!.isEmpty ? "Required" : null,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: messageController,
+              decoration: const InputDecoration(
+                labelText: "Description",
+                hintText: "Describe your issue",
               ),
-            ],
-          ),
+              maxLines: 3,
+              validator: (v) => v!.isEmpty ? "Required" : null,
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("CANCEL"),
+      ),
+      footer: Row(
+        children: [
+          Expanded(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("CANCEL"),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              if (formKey.currentState!.validate()) {
-                final lKey = profile.licenseKey.trim();
-                if (lKey.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        "Error: Your license key is missing. Please contact support.",
-                      ),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                await LicenseService.createTicket(
-                  licenseKey: lKey,
-                  restaurantName: profile.displayBusinessName,
-                  phone: profile.displayPhone,
-                  subject: subjectController.text,
-                  message: messageController.text,
-                );
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                  if (mounted) {
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  final lKey = profile.licenseKey.trim();
+                  if (lKey.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text("Ticket created successfully!"),
-                        backgroundColor: Colors.green,
+                        content: Text(
+                          "Error: Your license key is missing. Please contact support.",
+                        ),
+                        backgroundColor: Colors.red,
                       ),
                     );
+                    return;
+                  }
+
+                  await LicenseService.createTicket(
+                    licenseKey: lKey,
+                    restaurantName: profile.displayBusinessName,
+                    phone: profile.displayPhone,
+                    subject: subjectController.text,
+                    message: messageController.text,
+                  );
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Ticket created successfully!"),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
                   }
                 }
-              }
-            },
-            child: const Text("SUBMIT"),
+              },
+              child: const Text("SUBMIT"),
+            ),
           ),
         ],
       ),
@@ -2194,39 +2057,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String ticketId,
     String replyId,
     ProfileProvider profile,
-  ) {
+  ) async {
     if (replyId.isEmpty) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          "Delete Message?",
-          style: TextStyle(color: profile.textColor),
-        ),
-        content: Text(
-          "This will permanently delete this message for everyone.",
-          style: TextStyle(color: profile.secondaryTextColor),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("CANCEL"),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await LicenseService.deleteTicketReply(ticketId, replyId);
-            },
-            child: const Text(
-              "DELETE",
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
+
+    bool confirm = await AppBottomSheet.showAction(
+          context: context,
+          profile: profile,
+          title: "Delete Message?",
+          message: "This will permanently delete this message for everyone.",
+          confirmLabel: "DELETE",
+          isDestructive: true,
+          icon: Icons.delete_forever_rounded,
+        ) ??
+        false;
+
+    if (confirm) {
+      await LicenseService.deleteTicketReply(ticketId, replyId);
+    }
   }
 
   void _showTicketChat(String ticketId, ProfileProvider profile) {
@@ -2673,37 +2520,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _confirmResolve(String ticketId, ProfileProvider profile) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Resolve Ticket?"),
-        content: const Text(
-          "Marking this as resolved will close the conversation.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("CANCEL"),
-          ),
-          TextButton(
-            onPressed: () {
-              LicenseService.resolveTicket(ticketId);
-              Navigator.pop(ctx);
-            },
-            child: const Text(
-              "YES, RESOLVE",
-              style: TextStyle(
-                color: Colors.green,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  void _confirmResolve(String ticketId, ProfileProvider profile) async {
+    bool confirm = await AppBottomSheet.showAction(
+          context: context,
+          profile: profile,
+          title: "Resolve Ticket?",
+          message: "Marking this as resolved will close the conversation.",
+          confirmLabel: "YES, RESOLVE",
+          confirmColor: Colors.green,
+          icon: Icons.check_circle_outline_rounded,
+        ) ??
+        false;
+
+    if (confirm) {
+      LicenseService.resolveTicket(ticketId);
+    }
   }
 
   void _showLicenseDetails(ProfileProvider profile) {
@@ -3070,6 +2901,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         controller: controller,
         keyboardType: keyboard,
         maxLines: maxLines,
+        expands: false, // Ensure it's not expanding
         style: TextStyle(
           color: profile.textColor,
           fontSize: 14,
@@ -3079,6 +2911,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           labelText: label,
           prefixIcon: Icon(icon, color: profile.themeColor),
           suffixText: suffix,
+          filled: true,
         ),
       ),
     );
@@ -3249,6 +3082,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onPickImage: () => _pickAndCropImage(profile),
                   ),
                   const SizedBox(height: 24),
+                  if (profile.licenseKey.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.check_rounded, color: Colors.white, size: 16),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Staff Access Enabled",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                                Text(
+                                  "Staff can login using your Connection ID",
+                                  style: TextStyle(fontSize: 11, color: Colors.green),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Text(
                     "SETTINGS",
                     style: TextStyle(

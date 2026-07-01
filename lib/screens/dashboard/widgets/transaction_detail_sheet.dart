@@ -9,6 +9,7 @@ import '../../../providers/transaction_provider.dart';
 import '../../../providers/staff_auth_provider.dart';
 import '../../../services/export_service.dart';
 import '../../daily_entry/entry_screen.dart';
+import '../../../core/widgets/app_bottom_sheet.dart';
 
 class TransactionDetailSheet extends StatelessWidget {
   final TransactionModel tx;
@@ -237,30 +238,64 @@ class TransactionDetailSheet extends StatelessWidget {
                                     fontSize: 14,
                                   ),
                                 ),
+                                if (s.variant.isNotEmpty && s.variant != 'Full' && !isSalary)
+                                  Text(
+                                    'Variant: ${s.variant}',
+                                    style: TextStyle(
+                                      color: profile.themeColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 Text(
                                   isDeduction
                                       ? 'Deduction'
                                       : (isSalary
                                             ? 'Base Component'
-                                            : '$qLabel x ${profile.currencySymbol}${s.price.toInt()}'),
+                                            : '$qLabel ${s.unit.isEmpty ? 'x' : s.unit} @ ${profile.currencySymbol}${s.price.toInt()}'),
                                   style: TextStyle(
                                     color: profile.secondaryTextColor,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
+                                if (s.extraQty > 0 || s.extraPrice > 0)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      '+ Extras: ${profile.currencySymbol}${((s.extraQty > 0 ? s.extraQty : 1) * s.extraPrice).toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                        color: Colors.orange,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
-                          Text(
-                            '${isDeduction ? "-" : ""}${profile.currencySymbol}${s.lineTotal.abs().toStringAsFixed(0)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: isDeduction
-                                  ? Colors.red
-                                  : profile.textColor,
-                              fontSize: 16,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '${isDeduction ? "-" : ""}${profile.currencySymbol}${s.lineTotal.abs().toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  color: isDeduction
+                                      ? Colors.red
+                                      : profile.textColor,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              if (!isSalary && (s.purchasePrice > 0 || s.transportCost > 0))
+                                Text(
+                                  'Cost: ${profile.currencySymbol}${(s.purchasePrice + s.transportCost).toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    color: profile.secondaryTextColor,
+                                    fontSize: 9,
+                                  ),
+                                ),
+                            ],
                           ),
                         ],
                       ),
@@ -329,6 +364,38 @@ class TransactionDetailSheet extends StatelessWidget {
                       'UPI Part',
                       '${profile.currencySymbol}${tx.upiAmount.toStringAsFixed(0)}',
                       profile,
+                    ),
+                  ],
+
+                  // Display Manual Note if exists
+                  if (_getManualNote(tx.description).isNotEmpty) ...[
+                    const Divider(height: 32),
+                    Text(
+                      'REMARKS / NOTES',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                        color: profile.secondaryTextColor,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.1)),
+                      ),
+                      child: Text(
+                        _getManualNote(tx.description),
+                        style: TextStyle(
+                          color: profile.textColor,
+                          fontSize: 13,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                     ),
                   ],
 
@@ -578,8 +645,20 @@ class TransactionDetailSheet extends StatelessWidget {
       return 'Salary: $namePart';
     }
     if (tx.itemSnapshots.isEmpty) return tx.category;
-    if (tx.itemSnapshots.length == 1) return tx.itemSnapshots.first.name;
+    if (tx.itemSnapshots.length == 1) {
+      String variant = tx.itemSnapshots.first.variant;
+      return '${tx.itemSnapshots.first.name}${variant != 'Full' ? ' ($variant)' : ''}';
+    }
     return '${tx.itemSnapshots.first.name} +${tx.itemSnapshots.length - 1} More';
+  }
+
+  String _getManualNote(String description) {
+    if (!description.contains('| Note:')) return "";
+    try {
+      return description.split('| Note:').last.split('|').first.trim();
+    } catch (e) {
+      return "";
+    }
   }
 
   void _launchURL(String url) async {
@@ -589,36 +668,26 @@ class TransactionDetailSheet extends StatelessWidget {
     }
   }
 
-  void _confirmDelete(BuildContext context, TransactionModel tx) {
-    showDialog(
+  void _confirmDelete(BuildContext context, TransactionModel tx) async {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    final itemProvider = Provider.of<ItemProvider>(context, listen: false);
+    final txProvider = Provider.of<TransactionProvider>(context, listen: false);
+
+    final confirmed = await AppBottomSheet.showAction(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Transaction?'),
-        content: const Text(
-          'This action cannot be undone. All related snapshots will be removed.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final itemProvider = Provider.of<ItemProvider>(
-                context,
-                listen: false,
-              );
-              Provider.of<TransactionProvider>(
-                context,
-                listen: false,
-              ).softDeleteTransaction(tx.id!, itemProvider);
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      profile: profile,
+      title: 'Delete Transaction',
+      message: 'This action cannot be undone. All related snapshots will be removed.',
+      confirmLabel: 'DELETE',
+      isDestructive: true,
+      icon: Icons.delete_forever_rounded,
     );
+
+    if (confirmed == true) {
+      txProvider.softDeleteTransaction(tx.id!, itemProvider);
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
+    }
   }
 }

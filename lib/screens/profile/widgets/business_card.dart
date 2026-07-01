@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../providers/profile_provider.dart';
 
 class BusinessCard extends StatelessWidget {
@@ -111,11 +112,67 @@ class BusinessCard extends StatelessWidget {
                     _infoItem(Icons.phone_android_rounded, profile.displayPhone),
                     const SizedBox(height: 12),
                     _infoItem(Icons.location_on_rounded, profile.address),
+                    if (profile.licenseKey.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _connectionIdItem(context, profile.licenseKey),
+                    ],
                   ],
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _connectionIdItem(BuildContext context, String id) {
+    return InkWell(
+      onTap: () {
+        Clipboard.setData(ClipboardData(text: id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Connection ID copied to clipboard"),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Icon(Icons.hub_rounded, size: 14, color: Colors.white70),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "STORE CONNECTION ID",
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: .6),
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  Text(
+                    id,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.copy_rounded, size: 14, color: Colors.white70),
+          ],
         ),
       ),
     );

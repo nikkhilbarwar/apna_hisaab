@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 import '../../models/purchase_reminder_model.dart';
 import '../../providers/purchase_reminder_provider.dart';
 import '../../providers/profile_provider.dart';
@@ -38,27 +39,23 @@ class PurchaseReminderScreenState extends State<PurchaseReminderScreen> with Sin
 
   void _showBulkDeleteConfirm(BuildContext context) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
-    final provider = Provider.of<PurchaseReminderProvider>(context, listen: false);
-    
-    showDialog(
+    final provider =
+        Provider.of<PurchaseReminderProvider>(context, listen: false);
+
+    AppBottomSheet.showAction(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        title: Text('Delete ${_selectedIds.length} items?'),
-        content: const Text('Are you sure you want to delete all selected items permanently?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
-          TextButton(
-            onPressed: () {
-              provider.deleteMultipleReminders(_selectedIds.toList());
-              setState(() => _selectedIds.clear());
-              Navigator.pop(ctx);
-            },
-            child: const Text('DELETE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
+      profile: profile,
+      title: 'Delete ${_selectedIds.length} items?',
+      message: 'Are you sure you want to delete all selected items permanently?',
+      confirmLabel: 'DELETE',
+      isDestructive: true,
+      icon: Icons.delete_sweep_rounded,
+    ).then((confirmed) {
+      if (confirmed == true) {
+        provider.deleteMultipleReminders(_selectedIds.toList());
+        setState(() => _selectedIds.clear());
+      }
+    });
   }
 
   @override
@@ -472,23 +469,18 @@ class _ReminderCard extends StatelessWidget {
 
   void _showDeleteConfirm(BuildContext context, PurchaseReminderProvider provider) {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
-    showDialog(
+    AppBottomSheet.showAction(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        title: const Text('Delete Reminder?'),
-        content: const Text('Are you sure you want to permanently delete this planning entry?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
-          TextButton(
-            onPressed: () {
-              provider.deleteReminder(reminder.id!);
-              Navigator.pop(ctx);
-            },
-            child: const Text('DELETE', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
+      profile: profile,
+      title: 'Delete Reminder?',
+      message: 'Are you sure you want to permanently delete this planning entry?',
+      confirmLabel: 'DELETE',
+      isDestructive: true,
+      icon: Icons.delete_outline,
+    ).then((confirmed) {
+      if (confirmed == true) {
+        provider.deleteReminder(reminder.id!);
+      }
+    });
   }
 }

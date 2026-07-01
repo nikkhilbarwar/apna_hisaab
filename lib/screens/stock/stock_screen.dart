@@ -6,6 +6,8 @@ import '../../providers/item_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/purchase_reminder_provider.dart';
 import '../../models/item_model.dart';
+import '../../core/widgets/app_empty_state.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 import '../items/item_management_screen.dart';
 import '../purchase_reminders/purchase_reminder_screen.dart';
 import 'category_management_screen.dart';
@@ -422,83 +424,89 @@ class _StockScreenState extends State<StockScreen> {
             .where((i) => itemProvider.isLowStock(i))
             .length;
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: profile.cardColor,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 10,
-              ),
-            ],
-            border: Border.all(
-              color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100,
-            ),
-          ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 8,
-            ),
-            leading: Container(
-              padding: const EdgeInsets.all(12),
+        return Hero(
+          tag: 'category_card_${catName}',
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: (isUncategorized ? Colors.grey : profile.themeColor)
-                    .withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(
-                isUncategorized
-                    ? Icons.help_outline_rounded
-                    : Icons.folder_rounded,
-                color: isUncategorized ? Colors.grey : profile.themeColor,
-                size: 24,
-              ),
-            ),
-            title: Text(
-              catName,
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                color: profile.textColor,
-                fontSize: 15,
-              ),
-            ),
-            subtitle: Text(
-              '${items.length} Items Total',
-              style: TextStyle(fontSize: 12, color: profile.secondaryTextColor),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (lowStockCount > 0)
-                  Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '$lowStockCount LOW',
-                      style: const TextStyle(
-                        color: Colors.red,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10,
-                      ),
-                    ),
+                color: profile.cardColor,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 10,
                   ),
-                Icon(
-                  Icons.chevron_right,
-                  color: profile.secondaryTextColor.withValues(alpha: 0.5),
+                ],
+                border: Border.all(
+                  color: profile.isDarkMode ? Colors.white10 : Colors.grey.shade100,
                 ),
-              ],
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: (isUncategorized ? Colors.grey : profile.themeColor)
+                        .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    isUncategorized
+                        ? Icons.help_outline_rounded
+                        : Icons.folder_rounded,
+                    color: isUncategorized ? Colors.grey : profile.themeColor,
+                    size: 24,
+                  ),
+                ),
+                title: Text(
+                  catName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: profile.textColor,
+                    fontSize: 15,
+                  ),
+                ),
+                subtitle: Text(
+                  '${items.length} Items Total',
+                  style: TextStyle(fontSize: 12, color: profile.secondaryTextColor),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (lowStockCount > 0)
+                      Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$lowStockCount LOW',
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: profile.secondaryTextColor.withValues(alpha: 0.5),
+                    ),
+                  ],
+                ),
+                onTap: () => setState(() => _selectedCategory = catName),
+              ),
             ),
-            onTap: () => setState(() => _selectedCategory = catName),
           ),
         );
       },
@@ -526,25 +534,21 @@ class _StockScreenState extends State<StockScreen> {
     }).toList();
 
     if (filteredItems.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.inventory_2_outlined,
-              size: 60,
-              color: profile.secondaryTextColor.withValues(alpha: 0.3),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No items found',
-              style: TextStyle(
-                color: profile.secondaryTextColor,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
+      return AppEmptyState(
+        title: 'No items found',
+        subtitle: _searchQuery.isNotEmpty
+            ? 'No items matching "$_searchQuery"'
+            : 'Try a different category or filter.',
+        icon: Icons.inventory_2_outlined,
+        actionLabel: _selectedCategory != null ? 'Add New Item' : null,
+        onActionPressed: _selectedCategory != null
+            ? () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (c) => ItemManagementScreen(category: _selectedCategory!),
+                  ),
+                )
+            : null,
       );
     }
 
@@ -555,112 +559,69 @@ class _StockScreenState extends State<StockScreen> {
         final item = filteredItems[index];
         final isLow = itemProvider.isLowStock(item);
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: profile.cardColor,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 10,
-              ),
-            ],
-            border: Border.all(
-              color: isLow
-                  ? Colors.red.withValues(alpha: 0.5)
-                  : (profile.isDarkMode
-                        ? Colors.white10
-                        : Colors.grey.shade100),
-              width: isLow ? 2 : 1,
-            ),
-          ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            title: Text(
-              item.name,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: profile.textColor,
-              ),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isLow
-                            ? Colors.red.withValues(alpha: 0.1)
-                            : Colors.green.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        isLow ? 'LOW STOCK' : 'IN STOCK',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: isLow ? Colors.red : Colors.green,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Min: ${item.minStock} ${item.unit}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: profile.secondaryTextColor,
-                      ),
-                    ),
-                  ],
+        return Hero(
+          tag: 'item_card_${item.id}',
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: profile.cardColor,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 10,
+                  ),
+                ],
+                border: Border.all(
+                  color: isLow
+                      ? Colors.red.withValues(alpha: 0.5)
+                      : (profile.isDarkMode
+                            ? Colors.white10
+                            : Colors.grey.shade100),
+                  width: isLow ? 2 : 1,
                 ),
-              ],
-            ),
-            trailing: Builder(
-              builder: (context) {
-                double displayStock = item.currentStock;
-                String extraInfo = "";
-                
-                // Logic: If purchase item with multiplier, convert pieces back to units
-                if (item.itemType == 'purchase' && item.fullQty != null && item.fullQty! > 1) {
-                  displayStock = item.currentStock / item.fullQty!;
-                  extraInfo = "(${item.currentStock.toInt()} Pcs)";
-                }
-
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(16),
+                title: Text(
+                  item.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: profile.textColor,
+                  ),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${displayStock % 1 == 0 ? displayStock.toInt() : displayStock.toStringAsFixed(1)}',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: isLow ? Colors.red : profile.textColor,
-                      ),
-                    ),
+                    const SizedBox(height: 8),
                     Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (extraInfo.isNotEmpty) ...[
-                          Text(
-                            extraInfo,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isLow
+                                ? Colors.red.withValues(alpha: 0.1)
+                                : Colors.green.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            isLow ? 'LOW STOCK' : 'IN STOCK',
                             style: TextStyle(
-                              fontSize: 9,
-                              color: profile.secondaryTextColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isLow ? Colors.red : Colors.green,
                             ),
                           ),
-                          const SizedBox(width: 4),
-                        ],
+                        ),
+                        const SizedBox(width: 8),
                         Text(
-                          item.unit,
+                          'Min: ${item.minStock} ${item.unit}',
                           style: TextStyle(
                             fontSize: 11,
                             color: profile.secondaryTextColor,
@@ -669,10 +630,59 @@ class _StockScreenState extends State<StockScreen> {
                       ],
                     ),
                   ],
-                );
-              },
+                ),
+                trailing: Builder(
+                  builder: (context) {
+                    double displayStock = item.currentStock;
+                    String extraInfo = "";
+                    
+                    // Logic: If purchase item with multiplier, convert pieces back to units
+                    if (item.itemType == 'purchase' && item.fullQty != null && item.fullQty! > 1) {
+                      displayStock = item.currentStock / item.fullQty!;
+                      extraInfo = "(${item.currentStock.toInt()} Pcs)";
+                    }
+
+                    return Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${displayStock % 1 == 0 ? displayStock.toInt() : displayStock.toStringAsFixed(1)}',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isLow ? Colors.red : profile.textColor,
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (extraInfo.isNotEmpty) ...[
+                              Text(
+                                extraInfo,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: profile.secondaryTextColor,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(
+                              item.unit,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: profile.secondaryTextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                onTap: () => _showItemActions(context, itemProvider, item, profile),
+              ),
             ),
-            onTap: () => _showItemActions(context, itemProvider, item, profile),
           ),
         );
       },
@@ -1190,39 +1200,18 @@ class _StockScreenState extends State<StockScreen> {
     ItemModel item,
     ProfileProvider profile,
   ) {
-    showDialog(
+    AppBottomSheet.showAction(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(
-          'Delete Item?',
-          style: TextStyle(
-            color: profile.textColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          'Are you sure you want to remove "${item.name}" from inventory?',
-          style: TextStyle(color: profile.secondaryTextColor),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () {
-              provider.softDeleteItem(item.id!);
-              Navigator.pop(context);
-            },
-            child: const Text(
-              'DELETE',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
+      profile: profile,
+      title: 'Delete Item?',
+      message: 'Are you sure you want to remove "${item.name}" from inventory?',
+      confirmLabel: 'DELETE',
+      isDestructive: true,
+      icon: Icons.delete_outline,
+    ).then((confirmed) {
+      if (confirmed == true) {
+        provider.softDeleteItem(item.id!);
+      }
+    });
   }
 }

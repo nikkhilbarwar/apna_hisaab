@@ -10,7 +10,7 @@ import 'dart:math';
 import 'dart:async';
 import '../../services/license_service.dart';
 import '../../providers/profile_provider.dart';
-import 'starter_pack_manager_screen.dart';
+
 import '../../utils/report_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -1305,10 +1305,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       try {
         final prefs = await SharedPreferences.getInstance();
         final adminId = prefs.getString('admin_id') ?? "Admin";
-        await LicenseService.firestore
-            .collection('support_tickets')
-            .doc(ticketId)
-            .delete();
+        // Use the service's delete method (Soft Delete) to avoid permission issues
+        await LicenseService.deleteTicket(ticketId);
         await LicenseService.logAdminAction(
           adminId,
           "DELETE_TICKET",
@@ -1319,16 +1317,21 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           if (shouldPop) Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("Ticket Deleted"),
-              backgroundColor: Colors.red,
+              content: Text("Ticket Deleted (Soft Delete)"),
+              backgroundColor: Colors.green,
             ),
           );
         }
       } catch (e) {
-        if (mounted)
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text("Error: $e")));
+        if (mounted) {
+          String errorMsg = e.toString();
+          if (errorMsg.contains("permission-denied")) {
+            errorMsg = "Permission Denied: Only System Admins can hard delete.";
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error: $errorMsg"), backgroundColor: Colors.red),
+          );
+        }
       }
     }
   }
@@ -1572,7 +1575,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                   if (value == 'staff') _showStaffManagement(profile);
                   if (value == 'cleanup') _performDataCleanup(profile);
                   if (value == 'logs') _showLogsModal(profile);
-                  if (value == 'templates') _showTemplateManager(profile);
+
                 },
                 itemBuilder: (context) => [
                   if (_adminRole == 'super_admin')
@@ -2487,18 +2490,27 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('support_tickets')
-                    .orderBy('createdAt', descending: true)
+                    .where('status', isNotEqualTo: 'deleted') // Filter at source
                     .snapshots(),
                 builder: (context, snapshot) {
-                  if (snapshot.hasError)
-                    return Center(child: Text("Error: ${snapshot.error}"));
+                  if (snapshot.hasError) {
+                    // Log to console instead of showing annoying snackbar for stream sync errors
+                    debugPrint("Admin Support Stream Error: ${snapshot.error}");
+                    return Center(child: Text("Unable to load some tickets. Check permissions."));
+                  }
                   if (snapshot.connectionState == ConnectionState.waiting)
                     return const Center(child: CircularProgressIndicator());
 
-                  final docs = (snapshot.data?.docs ?? []).where((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
-                    return data['status'] != 'deleted';
-                  }).toList();
+                  final docs = (snapshot.data?.docs ?? []).toList();
+
+                  // Sort in memory because Firestore requires index for multiple field filters/orders
+                  docs.sort((a, b) {
+                    final aData = a.data() as Map<String, dynamic>;
+                    final bData = b.data() as Map<String, dynamic>;
+                    final aTime = aData['createdAt'] as Timestamp? ?? Timestamp.now();
+                    final bTime = bData['createdAt'] as Timestamp? ?? Timestamp.now();
+                    return bTime.compareTo(aTime);
+                  });
 
                   if (docs.isEmpty) {
                     return Center(
@@ -2708,6 +2720,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text("Successfully purged $deletedCount old tickets."),
+              backgroundColor: Colors.green,
             ),
           );
         } else {
@@ -2716,9 +2729,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           );
         }
       } catch (e) {
+        String errorMsg = e.toString();
+        if (errorMsg.contains("permission-denied")) {
+          errorMsg = "Permission Denied: Server rules prevent permanent deletion.";
+        }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text("Cleanup Error: $e")));
+        ).showSnackBar(SnackBar(content: Text("Cleanup Error: $errorMsg"), backgroundColor: Colors.red));
       }
     }
   }
@@ -3200,12 +3217,5 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
     );
   }
 
-  void _showTemplateManager(ProfileProvider profile) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const StarterPackManagerScreen(),
-      ),
-    );
-  }
+
 }

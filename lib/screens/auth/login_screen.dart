@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../../core/widgets/app_bottom_sheet.dart';
 import '../../providers/profile_provider.dart';
 import 'staff_login_screen.dart';
 import 'auth_wrapper.dart';
@@ -26,43 +27,58 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isTermsAccepted = false;
 
   void _showTermsDialog() {
-    final themeColor = Provider.of<ProfileProvider>(context, listen: false).themeColor;
-    showDialog(
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+    AppBottomSheet.show(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text("Terms & Conditions", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTermItem("1. Data Retention:", "To maintain app performance, all Sales and Purchase records older than 365 days will be automatically deleted from the cloud."),
-              _buildTermItem("2. Privacy:", "Your business data and records are stored securely. We do not share your data with third parties."),
-              _buildTermItem("3. Image Storage:", "Staff and Business images are stored as encoded text within your database. High-resolution images are compressed to optimize space."),
-              _buildTermItem("4. User Responsibility:", "You are responsible for maintaining the confidentiality of your login credentials and ensuring the accuracy of your records."),
-              _buildTermItem("5. Modifications:", "Apna Hisaab reserves the right to update these terms to improve service quality."),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
+      profile: profile,
+      title: "Terms & Conditions",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTermItem("1. Data Retention:", "To maintain app performance, all Sales and Purchase records older than 365 days will be automatically deleted from the cloud.", profile),
+          _buildTermItem("2. Privacy:", "Your business data and records are stored securely. We do not share your data with third parties.", profile),
+          _buildTermItem("3. Image Storage:", "Staff and Business images are stored as encoded text within your database. High-resolution images are compressed to optimize space.", profile),
+          _buildTermItem("4. User Responsibility:", "You are responsible for maintaining the confidentiality of your login credentials and ensuring the accuracy of your records.", profile),
+          _buildTermItem("5. Modifications:", "Apna Hisaab reserves the right to update these terms to improve service quality.", profile),
+          const SizedBox(height: 16),
+          ElevatedButton(
             onPressed: () => Navigator.pop(context),
-            child: Text("CLOSE", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: profile.themeColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text("CLOSE", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTermItem(String title, String desc) {
+  Widget _buildTermItem(String title, String desc, ProfileProvider profile) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.only(bottom: 16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          const SizedBox(height: 4),
-          Text(desc, style: const TextStyle(fontSize: 13, color: Colors.black87)),
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+              color: profile.textColor,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            desc,
+            style: TextStyle(
+              fontSize: 13,
+              color: profile.secondaryTextColor,
+              height: 1.5,
+            ),
+          ),
         ],
       ),
     );
@@ -70,9 +86,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleEmailAuth() async {
     if (!_formKey.currentState!.validate()) return;
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
+
     if (!_isTermsAccepted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please accept the Terms & Conditions to proceed")),
+      AppBottomSheet.showAction(
+        context: context,
+        profile: profile,
+        title: "Terms Required",
+        message: "Please accept the Terms & Conditions to proceed",
+        confirmLabel: "OK",
+        icon: Icons.info_outline,
       );
       return;
     }
@@ -107,8 +130,14 @@ class _LoginScreenState extends State<LoginScreen> {
               message = e.message ?? "Authentication failed";
           }
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+        AppBottomSheet.showAction(
+          context: context,
+          profile: profile,
+          title: "Login Failed",
+          message: message,
+          confirmLabel: "RETRY",
+          icon: Icons.error_outline,
+          isDestructive: true,
         );
       }
     } finally {
@@ -117,9 +146,15 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
     if (!_isTermsAccepted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please accept the Terms & Conditions to proceed")),
+      AppBottomSheet.showAction(
+        context: context,
+        profile: profile,
+        title: "Terms Required",
+        message: "Please accept the Terms & Conditions to proceed",
+        confirmLabel: "OK",
+        icon: Icons.info_outline,
       );
       return;
     }
@@ -132,14 +167,24 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(builder: (context) => const AuthWrapper()),
         );
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Google Sign-In failed")),
+        AppBottomSheet.showAction(
+          context: context,
+          profile: profile,
+          title: "Google Sign-In Failed",
+          message: "Unable to complete Google authentication.",
+          confirmLabel: "RETRY",
+          icon: Icons.error_outline,
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Google Error: $e")),
+        AppBottomSheet.showAction(
+          context: context,
+          profile: profile,
+          title: "Google Error",
+          message: e.toString(),
+          confirmLabel: "OK",
+          icon: Icons.error_outline,
         );
       }
     } finally {
@@ -148,34 +193,32 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showForgotPasswordDialog() {
-    final themeColor = Provider.of<ProfileProvider>(context, listen: false).themeColor;
+    final profile = Provider.of<ProfileProvider>(context, listen: false);
     final TextEditingController resetEmailController = TextEditingController(text: _emailController.text);
 
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Forgot Password?", style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Enter your email address and we'll send you a link to reset your password."),
-            const SizedBox(height: 16),
-            TextField(
-              controller: resetEmailController,
-              decoration: const InputDecoration(
-                labelText: "Email Address",
-                prefixIcon: Icon(Icons.email_outlined),
-              ),
-              keyboardType: TextInputType.emailAddress,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+      profile: profile,
+      title: "Forgot Password?",
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            "Enter your email address and we'll send you a link to reset your password.",
+            textAlign: TextAlign.center,
+            style: TextStyle(height: 1.5),
           ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: resetEmailController,
+            decoration: InputDecoration(
+              labelText: "Email Address",
+              prefixIcon: const Icon(Icons.email_outlined),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            keyboardType: TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 32),
           ElevatedButton(
             onPressed: () async {
               final email = resetEmailController.text.trim();
@@ -187,8 +230,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 await _authService.sendPasswordResetEmail(email);
                 if (mounted) {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Password reset link sent to your email!")),
+                  AppBottomSheet.showAction(
+                    context: context,
+                    profile: profile,
+                    title: "Email Sent",
+                    message: "A password reset link has been sent to your email. Please check your inbox and also your SPAM folder.",
+                    confirmLabel: "OK",
+                    icon: Icons.mark_email_read,
+                    confirmColor: Colors.green,
                   );
                 }
               } catch (e) {
@@ -200,11 +249,21 @@ class _LoginScreenState extends State<LoginScreen> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: themeColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              minimumSize: const Size(100, 45),
+              backgroundColor: profile.themeColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              minimumSize: const Size(double.infinity, 54),
+              elevation: 0,
             ),
-            child: const Text("SEND LINK", style: TextStyle(color: Colors.white)),
+            child: const Text("SEND RESET LINK", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "CANCEL",
+              style: TextStyle(color: profile.secondaryTextColor, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),

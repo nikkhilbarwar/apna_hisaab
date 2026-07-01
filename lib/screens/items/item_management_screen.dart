@@ -162,306 +162,312 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
                     itemCount: filteredItems.length,
                     itemBuilder: (context, index) {
                       final item = filteredItems[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: profileProvider.cardColor,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                          border: Border.all(
-                            color: profileProvider.isDarkMode
-                                ? Colors.white10
-                                : Colors.grey.shade100,
-                          ),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          leading: Container(
-                            height: 50,
-                            width: 50,
+                      return Hero(
+                        tag: 'item_card_${item.id}',
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
-                              color:
-                                  (item.itemType == 'selling'
-                                          ? Colors.green
-                                          : Colors.orange)
-                                      .withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            alignment: Alignment.center,
-                            child: item.icon != null && item.icon!.isNotEmpty
-                                ? item.icon!.startsWith('base64:')
-                                      ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            15,
-                                          ),
-                                          child: Image.memory(
-                                            base64Decode(
-                                              item.icon!.substring(7),
-                                            ),
-                                            width: 50,
-                                            height: 50,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (
-                                                  context,
-                                                  error,
-                                                  stackTrace,
-                                                ) => const Icon(
-                                                  Icons.broken_image_outlined,
-                                                  size: 20,
-                                                ),
-                                          ),
-                                        )
-                                      : (item.icon!.startsWith('/') ||
-                                            item.icon!.contains(
-                                              'data/user',
-                                            ))
-                                      ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            15,
-                                          ),
-                                          child: Image.file(
-                                            File(item.icon!),
-                                            width: 50,
-                                            height: 50,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (
-                                                  context,
-                                                  error,
-                                                  stackTrace,
-                                                ) => const Icon(
-                                                  Icons.broken_image_outlined,
-                                                  size: 20,
-                                                ),
-                                          ),
-                                        )
-                                      : Text(
-                                          item.icon!,
-                                          style: const TextStyle(fontSize: 24),
-                                        )
-                                : Icon(
-                                    item.itemType == 'selling'
-                                        ? Icons.sell_outlined
-                                        : Icons.inventory_2_outlined,
-                                    color: item.itemType == 'selling'
-                                        ? Colors.green
-                                        : Colors.orange,
-                                    size: 24,
-                                  ),
-                          ),
-                          title: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  item.name,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    color: profileProvider.textColor,
-                                    fontSize: 16,
-                                  ),
+                              color: profileProvider.cardColor,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.03),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
                                 ),
+                              ],
+                              border: Border.all(
+                                color: profileProvider.isDarkMode
+                                    ? Colors.white10
+                                    : Colors.grey.shade100,
                               ),
-                              Builder(
-                                builder: (context) {
-                                  double displayStock = item.currentStock;
-                                  String unitLabel = item.unit;
-                                  
-                                  // Logic: If purchase item with multiplier, show converted units
-                                  if (item.itemType == 'purchase' && item.fullQty != null && item.fullQty! > 1) {
-                                    displayStock = item.currentStock / item.fullQty!;
-                                  }
-
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: profileProvider.scaffoldColor,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: profileProvider.isDarkMode ? Colors.white10 : Colors.grey.shade200),
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          '${displayStock % 1 == 0 ? displayStock.toInt() : displayStock.toStringAsFixed(1)}',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: (item.currentStock <= item.minStock) ? Colors.red : profileProvider.themeColor,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        Text(
-                                          unitLabel,
-                                          style: TextStyle(fontSize: 9, color: profileProvider.secondaryTextColor),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
                               ),
-                            ],
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          (item.itemType == 'selling'
-                                                  ? Colors.green
-                                                  : (item.itemType ==
-                                                            'readymade'
-                                                        ? Colors.blue
-                                                        : Colors.orange))
-                                              .withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color:
-                                            (item.itemType == 'selling'
-                                                    ? Colors.green
-                                                    : (item.itemType ==
-                                                              'readymade'
-                                                          ? Colors.blue
-                                                          : Colors.orange))
-                                                .withValues(alpha: 0.2),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      item.itemType == 'selling'
-                                          ? 'SALE ITEM'
-                                          : (item.itemType == 'readymade'
-                                                ? 'READYMADE'
-                                                : 'PURCHASE ITEM'),
-                                      style: TextStyle(
+                              leading: Container(
+                                height: 50,
+                                width: 50,
+                                decoration: BoxDecoration(
+                                  color:
+                                      (item.itemType == 'selling'
+                                              ? Colors.green
+                                              : Colors.orange)
+                                          .withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                alignment: Alignment.center,
+                                child: item.icon != null && item.icon!.isNotEmpty
+                                    ? item.icon!.startsWith('base64:')
+                                          ? ClipRRect(
+                                              borderRadius: BorderRadius.circular(
+                                                15,
+                                              ),
+                                              child: Image.memory(
+                                                base64Decode(
+                                                  item.icon!.substring(7),
+                                                ),
+                                                width: 50,
+                                                height: 50,
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) => const Icon(
+                                                      Icons.broken_image_outlined,
+                                                      size: 20,
+                                                    ),
+                                              ),
+                                            )
+                                          : (item.icon!.startsWith('/') ||
+                                                item.icon!.contains(
+                                                  'data/user',
+                                                ))
+                                          ? ClipRRect(
+                                              borderRadius: BorderRadius.circular(
+                                                15,
+                                              ),
+                                              child: Image.file(
+                                                File(item.icon!),
+                                                width: 50,
+                                                height: 50,
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) => const Icon(
+                                                      Icons.broken_image_outlined,
+                                                      size: 20,
+                                                    ),
+                                              ),
+                                            )
+                                          : Text(
+                                              item.icon!,
+                                              style: const TextStyle(fontSize: 24),
+                                            )
+                                    : Icon(
+                                        item.itemType == 'selling'
+                                            ? Icons.sell_outlined
+                                            : Icons.inventory_2_outlined,
                                         color: item.itemType == 'selling'
                                             ? Colors.green
-                                            : (item.itemType == 'readymade'
-                                                  ? Colors.blue
-                                                  : Colors.orange),
-                                        fontSize: 8,
+                                            : Colors.orange,
+                                        size: 24,
+                                      ),
+                              ),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item.name,
+                                      style: TextStyle(
                                         fontWeight: FontWeight.w900,
-                                        letterSpacing: 0.5,
+                                        color: profileProvider.textColor,
+                                        fontSize: 16,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    item.unit,
-                                    style: TextStyle(
-                                      color: profileProvider.secondaryTextColor
-                                          .withValues(alpha: 0.6),
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                  Builder(
+                                    builder: (context) {
+                                      double displayStock = item.currentStock;
+                                      String unitLabel = item.unit;
+                                      
+                                      // Logic: If purchase item with multiplier, show converted units
+                                      if (item.itemType == 'purchase' && item.fullQty != null && item.fullQty! > 1) {
+                                        displayStock = item.currentStock / item.fullQty!;
+                                      }
+
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: profileProvider.scaffoldColor,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: profileProvider.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              '${displayStock % 1 == 0 ? displayStock.toInt() : displayStock.toStringAsFixed(1)}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: (item.currentStock <= item.minStock) ? Colors.red : profileProvider.themeColor,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            Text(
+                                              unitLabel,
+                                              style: TextStyle(fontSize: 9, color: profileProvider.secondaryTextColor),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
-                              if (item.itemType == 'selling' ||
-                                  item.itemType == 'readymade') ...[
-                                const SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.payments_outlined,
-                                      size: 14,
-                                      color: profileProvider.secondaryTextColor
-                                          .withValues(alpha: 0.5),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      item.price != null
-                                          ? '${profileProvider.currencySymbol}${item.price}'
-                                          : 'Price not set',
-                                      style: TextStyle(
-                                        color: profileProvider.textColor,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    if (item.halfPrice != null) ...[
-                                      Text(
-                                        ' | Half: ',
-                                        style: TextStyle(
-                                          color: profileProvider
-                                              .secondaryTextColor,
-                                          fontSize: 11,
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color:
+                                              (item.itemType == 'selling'
+                                                      ? Colors.green
+                                                      : (item.itemType ==
+                                                                'readymade'
+                                                            ? Colors.blue
+                                                            : Colors.orange))
+                                                  .withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color:
+                                                (item.itemType == 'selling'
+                                                        ? Colors.green
+                                                        : (item.itemType ==
+                                                                  'readymade'
+                                                              ? Colors.blue
+                                                              : Colors.orange))
+                                                    .withValues(alpha: 0.2),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          item.itemType == 'selling'
+                                              ? 'SALE ITEM'
+                                              : (item.itemType == 'readymade'
+                                                    ? 'READYMADE'
+                                                    : 'PURCHASE ITEM'),
+                                          style: TextStyle(
+                                            color: item.itemType == 'selling'
+                                                ? Colors.green
+                                                : (item.itemType == 'readymade'
+                                                      ? Colors.blue
+                                                      : Colors.orange),
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.5,
+                                          ),
                                         ),
                                       ),
+                                      const SizedBox(width: 8),
                                       Text(
-                                        '${profileProvider.currencySymbol}${item.halfPrice}',
+                                        item.unit,
                                         style: TextStyle(
-                                          color: themeColor,
-                                          fontSize: 13,
+                                          color: profileProvider.secondaryTextColor
+                                              .withValues(alpha: 0.6),
+                                          fontSize: 10,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
                                     ],
+                                  ),
+                                  if (item.itemType == 'selling' ||
+                                      item.itemType == 'readymade') ...[
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.payments_outlined,
+                                          size: 14,
+                                          color: profileProvider.secondaryTextColor
+                                              .withValues(alpha: 0.5),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          item.price != null
+                                              ? '${profileProvider.currencySymbol}${item.price}'
+                                              : 'Price not set',
+                                          style: TextStyle(
+                                            color: profileProvider.textColor,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        if (item.halfPrice != null) ...[
+                                          Text(
+                                            ' | Half: ',
+                                            style: TextStyle(
+                                              color: profileProvider
+                                                  .secondaryTextColor,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${profileProvider.currencySymbol}${item.halfPrice}',
+                                            style: TextStyle(
+                                              color: themeColor,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              trailing: Container(
+                                decoration: BoxDecoration(
+                                  color: profileProvider.scaffoldColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit_rounded,
+                                        color: Colors.blue,
+                                        size: 18,
+                                      ),
+                                      onPressed: () => _showItemBottomSheet(
+                                        context,
+                                        itemProvider,
+                                        item: item,
+                                      ),
+                                      constraints: const BoxConstraints(
+                                        minWidth: 40,
+                                      ),
+                                    ),
+                                    Container(
+                                      width: 1,
+                                      height: 20,
+                                      color: Colors.grey.withValues(alpha: 0.1),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete_rounded,
+                                        color: Colors.red,
+                                        size: 18,
+                                      ),
+                                      onPressed: () => _showDeleteConfirm(
+                                        context,
+                                        itemProvider,
+                                        profileProvider,
+                                        item,
+                                      ),
+                                      constraints: const BoxConstraints(
+                                        minWidth: 40,
+                                      ),
+                                    ),
                                   ],
                                 ),
-                              ],
-                            ],
-                          ),
-                          trailing: Container(
-                            decoration: BoxDecoration(
-                              color: profileProvider.scaffoldColor,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.edit_rounded,
-                                    color: Colors.blue,
-                                    size: 18,
-                                  ),
-                                  onPressed: () => _showItemBottomSheet(
-                                    context,
-                                    itemProvider,
-                                    item: item,
-                                  ),
-                                  constraints: const BoxConstraints(
-                                    minWidth: 40,
-                                  ),
-                                ),
-                                Container(
-                                  width: 1,
-                                  height: 20,
-                                  color: Colors.grey.withValues(alpha: 0.1),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.delete_rounded,
-                                    color: Colors.red,
-                                    size: 18,
-                                  ),
-                                  onPressed: () => _showDeleteConfirm(
-                                    context,
-                                    itemProvider,
-                                    profileProvider,
-                                    item,
-                                  ),
-                                  constraints: const BoxConstraints(
-                                    minWidth: 40,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -1164,31 +1170,45 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
 
   Future<String?> _showAddUnitDialog(BuildContext context, UnitProvider unitProvider, ProfileProvider profile) async {
     final unitController = TextEditingController();
-    String? result;
-    await showDialog(
+    return AppBottomSheet.show<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: profile.cardColor,
-        title: Text('Add Unit', style: TextStyle(color: profile.textColor)),
-        content: TextField(
-          controller: unitController, autofocus: true,
-          style: TextStyle(color: profile.textColor),
-          decoration: InputDecoration(hintText: 'e.g. kg, gm, packet', hintStyle: TextStyle(color: profile.secondaryTextColor)),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('CANCEL', style: TextStyle(color: profile.themeColor))),
-          ElevatedButton(
-            onPressed: () async {
-              final newUnit = unitController.text.trim();
-              if (newUnit.isNotEmpty) { await unitProvider.addUnit(newUnit); result = newUnit; Navigator.pop(context); }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: profile.themeColor),
-            child: const Text('ADD'),
+      profile: profile,
+      title: 'Add Unit',
+      footer: SafeArea(
+        child: ElevatedButton(
+          onPressed: () async {
+            final newUnit = unitController.text.trim();
+            if (newUnit.isNotEmpty) {
+              await unitProvider.addUnit(newUnit);
+              if (context.mounted) Navigator.pop(context, newUnit);
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 56),
+            backgroundColor: profile.themeColor,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
-        ],
+          child: const Text('ADD UNIT', style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: TextField(
+          controller: unitController,
+          autofocus: true,
+          style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
+          decoration: InputDecoration(
+            hintText: 'e.g. kg, gm, packet',
+            hintStyle: TextStyle(color: profile.secondaryTextColor),
+            filled: true,
+            fillColor: profile.scaffoldColor,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            prefixIcon: const Icon(Icons.straighten_rounded),
+          ),
+        ),
       ),
     );
-    return result;
   }
 
   void _showMultiSelectBottomSheet(
@@ -1442,49 +1462,87 @@ class _ItemManagementScreenState extends State<ItemManagementScreen> {
   }
 
   void _showAddMaterialDialog(BuildContext context, ItemProvider provider, int productId, ProfileProvider profile, StateSetter parentSetState) {
-    final purchaseItems = provider.allItems.where((i) => i.itemType == 'purchase').toList();
+    final purchaseItems = provider.allItems.where((i) => i.itemType == 'purchase' && i.isDeleted == 0).toList();
     ItemModel? selectedMaterial;
     final qtyController = TextEditingController();
 
-    showDialog(
+    AppBottomSheet.show(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: profile.cardColor,
-          title: Text('Link Material', style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<ItemModel>(
-                value: selectedMaterial,
-                dropdownColor: profile.cardColor,
-                decoration: InputDecoration(labelText: 'Select Material', filled: true, fillColor: profile.scaffoldColor, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                items: purchaseItems.map((i) => DropdownMenuItem(value: i, child: Text(i.name, style: TextStyle(color: profile.textColor)))).toList(),
-                onChanged: (v) => setDialogState(() => selectedMaterial = v),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: qtyController, keyboardType: TextInputType.number,
-                style: TextStyle(color: profile.textColor),
-                decoration: InputDecoration(labelText: 'Quantity per unit', suffixText: selectedMaterial?.unit ?? '', filled: true, fillColor: profile.scaffoldColor, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: Text('CANCEL', style: TextStyle(color: profile.themeColor))),
-            ElevatedButton(
-              onPressed: () {
-                if (selectedMaterial != null && qtyController.text.isNotEmpty) {
-                  final recipe = provider.getRecipe(productId);
-                  final newRecipe = List<RecipeModel>.from(recipe)..add(RecipeModel(productId: productId, materialId: selectedMaterial!.id!, quantity: double.tryParse(qtyController.text) ?? 0));
-                  provider.saveRecipe(productId, newRecipe);
-                  parentSetState(() {});
-                  Navigator.pop(context);
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: profile.themeColor),
-              child: const Text('LINK'),
+      profile: profile,
+      title: 'Link Raw Material',
+      footer: StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: ElevatedButton(
+            onPressed: () {
+              if (selectedMaterial != null && qtyController.text.isNotEmpty) {
+                final recipe = provider.getRecipe(productId);
+                final newRecipe = List<RecipeModel>.from(recipe)
+                  ..add(RecipeModel(
+                    productId: productId,
+                    materialId: selectedMaterial!.id!,
+                    quantity: double.tryParse(qtyController.text) ?? 0,
+                  ));
+                provider.saveRecipe(productId, newRecipe);
+                parentSetState(() {});
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 56),
+              backgroundColor: profile.themeColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
+            child: const Text('LINK MATERIAL', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ),
+      child: StatefulBuilder(
+        builder: (context, setSheetState) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'SELECT MATERIAL',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+                color: profile.secondaryTextColor,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: profile.scaffoldColor,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<ItemModel>(
+                  value: selectedMaterial,
+                  isExpanded: true,
+                  hint: Text("Select Material", style: TextStyle(color: profile.secondaryTextColor)),
+                  dropdownColor: profile.cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  items: purchaseItems.map((i) => DropdownMenuItem(
+                    value: i,
+                    child: Text(i.name, style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold)),
+                  )).toList(),
+                  onChanged: (v) => setSheetState(() => selectedMaterial = v),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            _buildField(
+              qtyController,
+              'Quantity used per unit',
+              Icons.reorder_rounded,
+              profile,
+              isNumber: true,
+              prefix: selectedMaterial != null ? '${selectedMaterial!.unit} ' : null,
+            ),
+            const SizedBox(height: 12),
           ],
         ),
       ),
