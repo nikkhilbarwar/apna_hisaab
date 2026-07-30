@@ -5,12 +5,12 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:image/image.dart' as img;
-import '../models/transaction_model.dart';
-import '../models/printer_config.dart';
-import '../providers/printer_provider.dart';
-import '../providers/profile_provider.dart';
-import '../providers/item_provider.dart';
-import 'export_service.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
+import 'package:apna_hisaab/models/printer_config.dart';
+import 'package:apna_hisaab/providers/printer_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
+import 'package:apna_hisaab/services/export_service.dart';
 
 class PrintService {
   final PrinterManager _printerManager = PrinterManager.instance;
@@ -125,8 +125,9 @@ class PrintService {
   List<int> _generateBillBytes(Generator generator, TransactionModel tx, String businessName, String address, String contact, List<dynamic> masterItems, String qrPath, String qrLabel, int paperWidth) {
     List<int> bytes = [];
     String token = tx.token;
+    PosTextSize headerSize = businessName.length > 20 ? PosTextSize.size1 : PosTextSize.size2;
     bytes += generator.text(businessName.toUpperCase(), 
-        styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2));
+        styles: PosStyles(align: PosAlign.center, bold: true, height: headerSize, width: headerSize));
     if (address.isNotEmpty) bytes += generator.text(address, styles: const PosStyles(align: PosAlign.center));
     if (contact.isNotEmpty) bytes += generator.text("PH: $contact", styles: const PosStyles(align: PosAlign.center));
     
@@ -255,8 +256,9 @@ class PrintService {
     List<int> bytes = [];
     
     // Header: Restaurant Details (Idea 4 inspired)
+    PosTextSize headerSize = businessName.length > 20 ? PosTextSize.size1 : PosTextSize.size2;
     bytes += generator.text(businessName.toUpperCase(), 
-        styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2));
+        styles: PosStyles(align: PosAlign.center, bold: true, height: headerSize, width: headerSize));
     if (address.isNotEmpty) bytes += generator.text(address, styles: const PosStyles(align: PosAlign.center));
     if (contact.isNotEmpty) bytes += generator.text("PH: $contact", styles: const PosStyles(align: PosAlign.center));
     bytes += generator.hr();
@@ -338,8 +340,9 @@ class PrintService {
   List<int> _generatePurchaseBytes(Generator generator, TransactionModel tx, String businessName, String address, String contact) {
     List<int> bytes = [];
     
+    PosTextSize headerSize = businessName.length > 20 ? PosTextSize.size1 : PosTextSize.size2;
     bytes += generator.text(businessName.toUpperCase(), 
-        styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2));
+        styles: PosStyles(align: PosAlign.center, bold: true, height: headerSize, width: headerSize));
     if (address.isNotEmpty) bytes += generator.text(address, styles: const PosStyles(align: PosAlign.center));
     if (contact.isNotEmpty) bytes += generator.text("PH: $contact", styles: const PosStyles(align: PosAlign.center));
     

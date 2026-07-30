@@ -1,6 +1,7 @@
 import 'dart:ui';
+import 'dart:io';
 import 'dart:developer' as dev;
-import 'package:apna_hisaab/services/firebase_service.dart';
+import 'package:apna_hisaab/services/firebase_service.dart' as app_fs;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,29 +10,30 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'firebase_options.dart';
-import 'models/category_model.dart';
-import 'models/item_model.dart';
-import 'models/staff_model.dart';
-import 'providers/transaction_provider.dart';
-import 'providers/item_provider.dart';
-import 'providers/profile_provider.dart';
-import 'providers/category_provider.dart';
-import 'providers/staff_provider.dart';
-import 'providers/staff_auth_provider.dart';
-import 'providers/supplier_provider.dart';
-import 'providers/sync_provider.dart';
-import 'providers/unit_provider.dart';
-import 'providers/purchase_reminder_provider.dart';
-import 'providers/printer_provider.dart';
-import 'screens/splash_screen.dart';
-import 'services/export_service.dart';
-import 'services/notification_service.dart';
-import 'core/database/database_helper.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:apna_hisaab/firebase_options.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/models/staff_model.dart';
+import 'package:apna_hisaab/providers/transaction_provider.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/category_provider.dart';
+import 'package:apna_hisaab/providers/staff_provider.dart';
+import 'package:apna_hisaab/providers/staff_auth_provider.dart';
+import 'package:apna_hisaab/providers/supplier_provider.dart';
+import 'package:apna_hisaab/providers/sync_provider.dart';
+import 'package:apna_hisaab/providers/unit_provider.dart';
+import 'package:apna_hisaab/providers/purchase_reminder_provider.dart';
+import 'package:apna_hisaab/providers/printer_provider.dart';
+import 'package:apna_hisaab/core/app_root.dart';
+import 'package:apna_hisaab/screens/splash_screen.dart';
+import 'package:apna_hisaab/services/export_service.dart';
+import 'package:apna_hisaab/services/notification_service.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
 
 final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -104,7 +106,7 @@ void callbackDispatcher() {
     if (task == "syncTask") {
       try {
         final db = DatabaseHelper.instance;
-        final firebaseService = FirebaseService();
+        final firebaseService = app_fs.FirebaseService();
         final prefs = await SharedPreferences.getInstance();
         final uid = FirebaseAuth.instance.currentUser?.uid;
         
@@ -175,6 +177,11 @@ void callbackDispatcher() {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (Platform.isWindows || Platform.isLinux) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
   // Handle Flutter-level errors
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -203,43 +210,46 @@ void main() async {
       NotificationService.firebaseMessagingBackgroundHandler,
     );
 
-    Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+    if (Platform.isAndroid || Platform.isIOS) {
+      Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
 
-    Workmanager().registerPeriodicTask(
-      "1",
-      "dailyBackupTask",
-      frequency: const Duration(hours: 24),
-      initialDelay: const Duration(minutes: 30),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
-    );
+      Workmanager().registerPeriodicTask(
+        "1",
+        "dailyBackupTask",
+        frequency: const Duration(hours: 24),
+        initialDelay: const Duration(minutes: 30),
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+      );
 
-    Workmanager().registerPeriodicTask(
-      "pending_order_reminder",
-      "pendingOrdersCheck",
-      frequency: const Duration(minutes: 10),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
-    );
+      Workmanager().registerPeriodicTask(
+        "pending_order_reminder",
+        "pendingOrdersCheck",
+        frequency: const Duration(minutes: 10),
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+      );
 
-    Workmanager().registerPeriodicTask(
-      "3",
-      "dailySalesSummary",
-      frequency: const Duration(hours: 24),
-      initialDelay: const Duration(hours: 10),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
-    );
+      Workmanager().registerPeriodicTask(
+        "3",
+        "dailySalesSummary",
+        frequency: const Duration(hours: 24),
+        initialDelay: const Duration(hours: 10),
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+      );
 
-    Workmanager().registerPeriodicTask(
-      "cloud_sync",
-      "syncTask",
-      frequency: const Duration(minutes: 5),
-      constraints: Constraints(networkType: NetworkType.connected),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
-    );
+      Workmanager().registerPeriodicTask(
+        "cloud_sync",
+        "syncTask",
+        frequency: const Duration(minutes: 5),
+        constraints: Constraints(networkType: NetworkType.connected),
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+      );
+    }
 
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
     runApp(
       RestartWidget(
+        key: restartKey,
         child: MultiProvider(
           providers: [
             ChangeNotifierProvider(
@@ -285,25 +295,6 @@ void main() async {
   }
 }
 
-class RestartWidget extends StatefulWidget {
-  const RestartWidget({super.key, required this.child});
-  final Widget child;
-
-  static void restartApp(BuildContext context) {
-    context.findAncestorStateOfType<_RestartWidgetState>()?.restartApp();
-  }
-
-  @override
-  State<RestartWidget> createState() => _RestartWidgetState();
-}
-
-class _RestartWidgetState extends State<RestartWidget> {
-  Key key = UniqueKey();
-  void restartApp() => setState(() => key = UniqueKey());
-  @override
-  Widget build(BuildContext context) =>
-      KeyedSubtree(key: key, child: widget.child);
-}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

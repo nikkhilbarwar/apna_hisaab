@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../providers/profile_provider.dart';
-import '../../services/auth_service.dart';
-import '../../services/license_service.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/services/auth_service.dart';
+import 'package:apna_hisaab/services/license_service.dart';
+import 'package:apna_hisaab/screens/auth/login_screen.dart';
 
 class LicenseRequestScreen extends StatefulWidget {
   const LicenseRequestScreen({super.key});
@@ -227,10 +228,50 @@ class _LicenseRequestScreenState extends State<LicenseRequestScreen> {
                 ),
                 TextButton(
                   onPressed: () async {
-                    await AuthService().signOut();
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (ctx) => const Center(
+                        child: Card(
+                          child: Padding(
+                            padding: EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(height: 16),
+                                Text("Logging out...",
+                                    style: TextStyle(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+
+                    try {
+                      await AuthService().signOut();
+                      
+                      await Future.delayed(const Duration(milliseconds: 500));
+                      
+                      if (mounted) {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (context) => const LoginScreen()),
+                          (route) => false,
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        Navigator.of(context, rootNavigator: true).pop(); // Close loader
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Logout failed: $e")),
+                        );
+                      }
+                    }
                   },
                   child: const Text("Logout"),
                 ),
+                const SizedBox(height: 20),
               ],
             ),
           ),

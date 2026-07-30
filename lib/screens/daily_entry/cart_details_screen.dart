@@ -4,16 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../providers/staff_auth_provider.dart';
-import '../../models/category_model.dart';
-import '../../models/transaction_model.dart';
-import '../../providers/transaction_provider.dart';
-import '../../providers/item_provider.dart';
-import '../../providers/profile_provider.dart';
-import '../../models/cart_item.dart';
-import '../../models/item_model.dart';
-import '../../services/print_service.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/providers/staff_auth_provider.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
+import 'package:apna_hisaab/providers/transaction_provider.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/models/cart_item.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/services/print_service.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
 
 class CartDetailsScreen extends StatefulWidget {
   final List<CartItem> cart;

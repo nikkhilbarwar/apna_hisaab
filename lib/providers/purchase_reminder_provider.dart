@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../models/purchase_reminder_model.dart';
-import '../core/database/database_helper.dart';
+import 'package:apna_hisaab/models/purchase_reminder_model.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
 
 class PurchaseReminderProvider with ChangeNotifier {
   List<PurchaseReminderModel> _reminders = [];

@@ -2,30 +2,32 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../main.dart';
-import '../models/purchase_reminder_model.dart';
-import '../models/staff_model.dart'; // Added missing imports
-import '../models/recipe_model.dart'; // Added missing imports
-import '../services/firebase_service.dart';
-import '../core/database/database_helper.dart';
-import 'transaction_provider.dart';
-import 'item_provider.dart';
-import 'category_provider.dart';
-import 'staff_provider.dart';
-import 'supplier_provider.dart';
-import 'unit_provider.dart';
-import 'purchase_reminder_provider.dart';
-import '../models/item_model.dart';
-import '../models/category_model.dart';
-import '../models/supplier_model.dart';
-import '../models/transaction_model.dart';
-import 'profile_provider.dart';
+import 'package:apna_hisaab/main.dart';
+import 'package:apna_hisaab/models/purchase_reminder_model.dart';
+import 'package:apna_hisaab/models/staff_model.dart';
+import 'package:apna_hisaab/models/recipe_model.dart';
+import 'package:apna_hisaab/services/firebase_service.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
+import 'package:apna_hisaab/providers/transaction_provider.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
+import 'package:apna_hisaab/providers/category_provider.dart';
+import 'package:apna_hisaab/providers/staff_provider.dart';
+import 'package:apna_hisaab/providers/supplier_provider.dart';
+import 'package:apna_hisaab/providers/unit_provider.dart';
+import 'package:apna_hisaab/providers/purchase_reminder_provider.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/models/supplier_model.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:connectivity_plus/connectivity_plus.dart';
+
+import '../core/app_root.dart';
 
 class SyncProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
@@ -71,7 +73,9 @@ class SyncProvider with ChangeNotifier {
         
         // Pass global navigator context if available to refresh UI after silent pull
         final context = navigatorKey.currentContext;
-        await syncCloudToLocalSilently(context: context);
+        if (context != null && context.mounted) {
+          await syncCloudToLocalSilently(context: context);
+        }
       }
     });
   }
@@ -98,41 +102,53 @@ class SyncProvider with ChangeNotifier {
       final unsyncedItems = await db.getUnsyncedData('items');
       if (unsyncedItems.isNotEmpty) {
         await _firebaseService.syncBatch('items', unsyncedItems);
-        for (var map in unsyncedItems) await db.updateSyncStatus('items', map['id'], 1);
+        for (var map in unsyncedItems) {
+          await db.updateSyncStatus('items', map['id'], 1);
+        }
       }
 
       // 2. Categories
       final unsyncedCats = await db.getUnsyncedData('categories');
       if (unsyncedCats.isNotEmpty) {
         await _firebaseService.syncBatch('categories', unsyncedCats);
-        for (var map in unsyncedCats) await db.updateSyncStatus('categories', map['id'], 1);
+        for (var map in unsyncedCats) {
+          await db.updateSyncStatus('categories', map['id'], 1);
+        }
       }
 
       // 3. Recipes
       final unsyncedRecipes = await db.getUnsyncedData('recipes');
       if (unsyncedRecipes.isNotEmpty) {
         await _firebaseService.syncBatch('recipes', unsyncedRecipes);
-        for (var map in unsyncedRecipes) await db.updateSyncStatus('recipes', map['id'], 1);
+        for (var map in unsyncedRecipes) {
+          await db.updateSyncStatus('recipes', map['id'], 1);
+        }
       }
 
       // 4. Staff
       final unsyncedStaff = await db.getUnsyncedData('staff');
       if (unsyncedStaff.isNotEmpty) {
         await _firebaseService.syncBatch('staff', unsyncedStaff);
-        for (var map in unsyncedStaff) await db.updateSyncStatus('staff', map['id'], 1);
+        for (var map in unsyncedStaff) {
+          await db.updateSyncStatus('staff', map['id'], 1);
+        }
       }
 
       // 5. Staff Advances & Leaves
       final unsyncedAdvances = await db.getUnsyncedData('staff_advance');
       if (unsyncedAdvances.isNotEmpty) {
         await _firebaseService.syncBatch('staff_advance', unsyncedAdvances);
-        for (var map in unsyncedAdvances) await db.updateSyncStatus('staff_advance', map['id'], 1);
+        for (var map in unsyncedAdvances) {
+          await db.updateSyncStatus('staff_advance', map['id'], 1);
+        }
       }
 
       final unsyncedLeaves = await db.getUnsyncedData('staff_leave');
       if (unsyncedLeaves.isNotEmpty) {
         await _firebaseService.syncBatch('staff_leave', unsyncedLeaves);
-        for (var map in unsyncedLeaves) await db.updateSyncStatus('staff_leave', map['id'], 1);
+        for (var map in unsyncedLeaves) {
+          await db.updateSyncStatus('staff_leave', map['id'], 1);
+        }
       }
 
       // 6. Transactions
@@ -141,7 +157,9 @@ class SyncProvider with ChangeNotifier {
         // Individual sync for transactions to handle larger objects and safety
         for (var tx in unsyncedTxs) {
           final success = await _firebaseService.syncTransaction(tx);
-          if (success) await db.updateTransactionSyncStatus(tx.id!, 1);
+          if (success) {
+            await db.updateTransactionSyncStatus(tx.id!, 1);
+          }
         }
       }
 
@@ -149,13 +167,17 @@ class SyncProvider with ChangeNotifier {
       final unsyncedSuppliers = await db.getUnsyncedData('suppliers');
       if (unsyncedSuppliers.isNotEmpty) {
         await _firebaseService.syncBatch('suppliers', unsyncedSuppliers);
-        for (var map in unsyncedSuppliers) await db.updateSyncStatus('suppliers', map['id'], 1);
+        for (var map in unsyncedSuppliers) {
+          await db.updateSyncStatus('suppliers', map['id'], 1);
+        }
       }
 
       final unsyncedReminders = await db.getUnsyncedData('purchase_reminders');
       if (unsyncedReminders.isNotEmpty) {
         await _firebaseService.syncBatch('purchase_reminders', unsyncedReminders);
-        for (var map in unsyncedReminders) await db.updateSyncStatus('purchase_reminders', map['id'], 1);
+        for (var map in unsyncedReminders) {
+          await db.updateSyncStatus('purchase_reminders', map['id'], 1);
+        }
       }
       
       debugPrint("Auto-sync (Push) completed at ${DateTime.now()}");
@@ -272,13 +294,17 @@ class SyncProvider with ChangeNotifier {
       _progress(0.15, "Uploading categories...");
       final allCats = await db.getAllCategories();
       await _firebaseService.syncBatch('categories', allCats.map((e) => e.toMap()).toList());
-      for (var c in allCats) await db.updateSyncStatus('categories', c.id!, 1);
+      for (var c in allCats) {
+        await db.updateSyncStatus('categories', c.id!, 1);
+      }
 
       // 3. Items
       _progress(0.35, "Uploading all items...");
       final allItems = await db.getAllItems();
       await _firebaseService.syncBatch('items', allItems.map((e) => e.toMap()).toList());
-      for (var i in allItems) await db.updateSyncStatus('items', i.id!, 1);
+      for (var i in allItems) {
+        await db.updateSyncStatus('items', i.id!, 1);
+      }
 
       // 3.1 Recipes
       _progress(0.40, "Uploading recipes...");
@@ -298,7 +324,9 @@ class SyncProvider with ChangeNotifier {
           final file = File(staff.imagePath!);
           if (await file.exists()) {
             final imageUrl = await _firebaseService.uploadStaffImage(file, staff.id.toString());
-            if (imageUrl != null) staff.imageUrl = imageUrl;
+            if (imageUrl != null) {
+              staff.imageUrl = imageUrl;
+            }
           }
         }
         await _firebaseService.syncStaff(staff);
@@ -312,7 +340,7 @@ class SyncProvider with ChangeNotifier {
         await _firebaseService.syncTransaction(allTxs[i]);
         await db.updateTransactionSyncStatus(allTxs[i].id!, 1);
         if (i % 20 == 0) {
-           _progress(0.70 + (0.30 * (i / allTxs.length)), "Uploading transactions (${i}/${allTxs.length})...");
+           _progress(0.70 + (0.30 * (i / allTxs.length)), "Uploading transactions ($i/${allTxs.length})...");
         }
       }
 
@@ -336,187 +364,232 @@ class SyncProvider with ChangeNotifier {
 
     try {
       // PHASE 1: Restore Identity (Profile & License)
-      // This is critical because business data path depends on licenseKey
       _progress(0.05, "Restoring identity...");
-      
-      // Try fetching profile from UID-based path first (where it's always stored for discovery)
-      Map<String, dynamic>? identityProfile = await _firebaseService.fetchProfileFromUserPath();
-      
-      if (identityProfile == null) {
-        // Fallback to active license path if already set (unlikely in fresh install)
-        identityProfile = await _firebaseService.fetchProfile();
+      Map<String, dynamic>? identityProfile;
+      try {
+        identityProfile = await _firebaseService.fetchProfileFromUserPath();
+        identityProfile ??= await _firebaseService.fetchProfile();
+      } catch (e) {
+        debugPrint("🔥 RESTORE: Identity fetch failed: $e");
       }
 
-      if (identityProfile != null) {
+      if (identityProfile != null && context.mounted) {
         final profile = Provider.of<ProfileProvider>(context, listen: false);
         await profile.loadFromMap(identityProfile);
         
-        // Ensure FirebaseService and DatabaseHelper are updated with the newly restored license
-        final restoredLicense = identityProfile['license_key']?.toString() ?? 'NONE';
+        // Use sanitized license from provider
+        final restoredLicense = profile.licenseKey;
         FirebaseService.activeLicenseKey = restoredLicense;
-        DatabaseHelper.resetDatabase(); // Force reload database with new license context
-        debugPrint("Identity Restored: License Key = $restoredLicense");
+        DatabaseHelper.resetDatabase(); 
+        debugPrint("✅ Identity Restored: License Key = $restoredLicense");
       } else {
-        debugPrint("No identity profile found in cloud.");
+        debugPrint("⚠️ No identity profile found in cloud.");
       }
 
-      // PHASE 2: Fetch Business Data using the correct License context
+      // PHASE 2: Fetch Business Data
       _progress(0.1, "Fetching business data...");
-      
-      // CRITICAL FIX: Update the static license key one last time before fetching
-      final String currentLicense = FirebaseService.activeLicenseKey ?? 'NONE';
+      final String currentLicense = FirebaseService.activeLicenseKey;
       debugPrint("🚀 RESTORE: Fetching data for License: $currentLicense");
 
-      final cloudData = await _firebaseService.fetchAllUserData();
-      
-      final List<ItemModel> fetchedItems = cloudData['items'] as List<ItemModel>;
-      final List<CategoryModel> fetchedCategories = cloudData['categories'] as List<CategoryModel>;
-      
-      debugPrint("📦 RESTORE: Cloud Data Received -> Items: ${fetchedItems.length}, Categories: ${fetchedCategories.length}");
-
-      if (fetchedItems.isEmpty && fetchedCategories.isEmpty) {
-        debugPrint("⚠️ RESTORE: No data found in cloud for license $currentLicense. Checking User path as fallback...");
+      Map<String, dynamic> cloudData;
+      try {
+        cloudData = await _firebaseService.fetchAllUserData();
+      } catch (e) {
+        debugPrint("🔥 RESTORE: Fetch All User Data FAILED: $e");
+        rethrow;
       }
-
+      
       _progress(0.15, "Securing local database...");
       await DatabaseHelper.instance.clearAllData();
 
       final db = DatabaseHelper.instance;
 
-      // Restore Categories (MUST BE FIRST)
-      _progress(0.2, "Restoring categories...");
-      if (fetchedCategories.isNotEmpty) {
-        int catCount = await db.batchInsert('categories', fetchedCategories.map((c) {
-          c.isSynced = 1;
-          c.licenseId = currentLicense;
-          return c.toMap();
-        }).toList());
-        debugPrint("✅ RESTORE: Inserted $catCount/${fetchedCategories.length} categories.");
+      // Restore Categories
+      try {
+        _progress(0.2, "Restoring categories...");
+        final fetchedCategories = cloudData['categories'] as List<CategoryModel>? ?? [];
+        debugPrint("📦 RESTORE: Found ${fetchedCategories.length} categories.");
+        if (fetchedCategories.isNotEmpty) {
+          await db.batchInsert('categories', fetchedCategories.map((c) {
+            c.isSynced = 1;
+            c.isDeleted = 0; // FORCE: Ensure items aren't hidden in Trash
+            c.licenseId = currentLicense;
+            return c.toMap();
+          }).toList());
+        }
+      } catch (e) {
+        debugPrint("🔥 RESTORE Error [Categories]: $e");
       }
 
       // Restore Items
-      _progress(0.3, "Restoring items...");
-      if (fetchedItems.isNotEmpty) {
-        int itemCount = await db.batchInsert('items', fetchedItems.map((i) {
-          i.isSynced = 1;
-          // CRITICAL FIX: Ensure license_id is set to the correct context even if null in model
-          i.licenseId = (currentLicense.isEmpty || currentLicense == 'NONE') ? 'NONE' : currentLicense;
-          return i.toMap();
-        }).toList());
-        debugPrint("✅ RESTORE: Inserted $itemCount/${fetchedItems.length} items.");
-      } else {
-        debugPrint("❌ RESTORE: No items to insert (List was empty).");
+      try {
+        _progress(0.3, "Restoring items...");
+        final List<ItemModel> fetchedItems = cloudData['items'] as List<ItemModel>? ?? [];
+        debugPrint("📦 RESTORE: Total items to insert: ${fetchedItems.length} (License Context: $currentLicense)");
+        if (fetchedItems.isNotEmpty) {
+          int count = await db.batchInsert('items', fetchedItems.map((i) {
+            i.isSynced = 1;
+            i.isDeleted = 0; // FORCE: Ensure items aren't hidden in Trash
+            i.licenseId = currentLicense;
+            return i.toMap();
+          }).toList());
+          debugPrint("✅ RESTORE: Finished Items Batch. Inserted $count rows.");
+        } else {
+          debugPrint("⚠️ RESTORE: No items found to restore.");
+        }
+      } catch (e) {
+        debugPrint("🔥 RESTORE Error [Items]: $e");
       }
 
       // Restore Staff
-      _progress(0.4, "Restoring staff & photos...");
-      final staffList = cloudData['staff'] as List<StaffModel>;
-      if (staffList.isNotEmpty) {
-        // Process staff images if any
-        for (var staff in staffList) {
-          if (staff.imageUrl != null && staff.imageUrl!.startsWith('base64:')) {
-            final path = await _saveBase64ToFile(staff.imageUrl!, "staff_${staff.id}");
-            if (path != null) staff.imagePath = path;
+      try {
+        _progress(0.4, "Restoring staff & photos...");
+        final List<StaffModel> staffList = cloudData['staff'] as List<StaffModel>? ?? [];
+        if (staffList.isNotEmpty) {
+          for (var staff in staffList) {
+            if (staff.imageUrl != null && staff.imageUrl!.startsWith('base64:')) {
+              final path = await _saveBase64ToFile(staff.imageUrl!, "staff_${staff.id}");
+              if (path != null) staff.imagePath = path;
+            }
+            staff.isSynced = 1;
+            staff.isDeleted = 0; // FORCE: Ensure items aren't hidden in Trash
+            staff.licenseId = currentLicense;
           }
-          staff.isSynced = 1;
-          staff.licenseId = currentLicense;
+          await db.batchInsert('staff', staffList.map((s) => s.toMap()).toList());
         }
-        await db.batchInsert('staff', staffList.map((s) => s.toMap()).toList());
+      } catch (e) {
+        debugPrint("🔥 RESTORE Error [Staff]: $e");
       }
 
       // Restore Staff Advances
-      final advances = cloudData['staff_advances'] as List<StaffAdvanceModel>;
-      if (advances.isNotEmpty) {
-        await db.batchInsert('staff_advance', advances.map((a) {
-          a.isSynced = 1;
-          a.licenseId = currentLicense;
-          return a.toMap();
-        }).toList());
+      try {
+        final List<StaffAdvanceModel> advances = cloudData['staff_advances'] as List<StaffAdvanceModel>? ?? [];
+        if (advances.isNotEmpty) {
+          await db.batchInsert('staff_advance', advances.map((a) {
+            a.isSynced = 1;
+            a.licenseId = currentLicense;
+            return a.toMap();
+          }).toList());
+        }
+      } catch (e) {
+        debugPrint("🔥 RESTORE Error [Advances]: $e");
       }
 
       // Restore Staff Leaves
-      final leaves = cloudData['staff_leaves'] as List<StaffLeaveModel>;
-      if (leaves.isNotEmpty) {
-        await db.batchInsert('staff_leave', leaves.map((l) {
-          l.isSynced = 1;
-          l.licenseId = currentLicense;
-          return l.toMap();
-        }).toList());
+      try {
+        final List<StaffLeaveModel> leaves = cloudData['staff_leaves'] as List<StaffLeaveModel>? ?? [];
+        if (leaves.isNotEmpty) {
+          await db.batchInsert('staff_leave', leaves.map((l) {
+            l.isSynced = 1;
+            l.licenseId = currentLicense;
+            return l.toMap();
+          }).toList());
+        }
+      } catch (e) {
+        debugPrint("🔥 RESTORE Error [Leaves]: $e");
       }
 
       // Restore Suppliers
-      _progress(0.5, "Restoring suppliers...");
-      final suppliers = cloudData['suppliers'] as List<SupplierModel>;
-      if (suppliers.isNotEmpty) {
-        await db.batchInsert('suppliers', suppliers.map((s) {
-          s.isSynced = 1;
-          s.licenseId = currentLicense;
-          return s.toMap();
-        }).toList());
+      try {
+        _progress(0.5, "Restoring suppliers...");
+        final List<SupplierModel> suppliers = cloudData['suppliers'] as List<SupplierModel>? ?? [];
+        if (suppliers.isNotEmpty) {
+          await db.batchInsert('suppliers', suppliers.map((s) {
+            s.isSynced = 1;
+            s.isDeleted = 0; // FORCE: Ensure items aren't hidden in Trash
+            s.licenseId = currentLicense;
+            return s.toMap();
+          }).toList());
+        }
+      } catch (e) {
+        debugPrint("🔥 RESTORE Error [Suppliers]: $e");
       }
 
       // Restore Units
-      final units = cloudData['units'] as List<Map<String, dynamic>>;
-      if (units.isNotEmpty) {
-        for (var unit in units) {
-          unit['is_synced'] = 1;
-          unit['license_id'] = currentLicense;
-          await db.insertUnit(unit['name'] ?? "", id: unit['id'], isSynced: 1);
+      try {
+        final List<Map<String, dynamic>> units = cloudData['units'] as List<Map<String, dynamic>>? ?? [];
+        if (units.isNotEmpty) {
+          for (var unit in units) {
+            await db.insertUnit(unit['name'] ?? "", id: unit['id'], isSynced: 1);
+          }
         }
+      } catch (e) {
+        debugPrint("🔥 RESTORE Error [Units]: $e");
       }
 
       // Restore Purchase Reminders
-      _progress(0.6, "Restoring reminders...");
-      final reminders = cloudData['purchase_reminders'] as List<PurchaseReminderModel>;
-      if (reminders.isNotEmpty) {
-        await db.batchInsert('purchase_reminders', reminders.map((r) {
-          r.isSynced = 1;
-          r.licenseId = currentLicense;
-          return r.toMap();
-        }).toList());
+      try {
+        _progress(0.6, "Restoring reminders...");
+        final List<PurchaseReminderModel> reminders = cloudData['purchase_reminders'] as List<PurchaseReminderModel>? ?? [];
+        if (reminders.isNotEmpty) {
+          await db.batchInsert('purchase_reminders', reminders.map((r) {
+            r.isSynced = 1;
+            r.isDeleted = 0; // FORCE: Ensure items aren't hidden in Trash
+            r.licenseId = currentLicense;
+            return r.toMap();
+          }).toList());
+        }
+      } catch (e) {
+        debugPrint("🔥 RESTORE Error [Reminders]: $e");
       }
 
       // Restore Recipes
-      _progress(0.7, "Restoring recipes...");
-      final recipes = cloudData['recipes'] as List<RecipeModel>;
-      if (recipes.isNotEmpty) {
-        await db.batchInsert('recipes', recipes.map((r) {
-          r.isSynced = 1;
-          r.licenseId = currentLicense;
-          return r.toMap();
-        }).toList());
+      try {
+        _progress(0.7, "Restoring recipes...");
+        final List<RecipeModel> recipes = cloudData['recipes'] as List<RecipeModel>? ?? [];
+        if (recipes.isNotEmpty) {
+          await db.batchInsert('recipes', recipes.map((r) {
+            r.isSynced = 1;
+            r.licenseId = currentLicense;
+            return r.toMap();
+          }).toList());
+        }
+      } catch (e) {
+        debugPrint("🔥 RESTORE Error [Recipes]: $e");
       }
 
       // Restore Transactions
-      _progress(0.8, "Restoring transactions...");
-      final txs = cloudData['transactions'] as List<TransactionModel>;
-      if (txs.isNotEmpty) {
-        await db.batchInsert('transactions', txs.map((t) {
-          t.isSynced = 1;
-          t.licenseId = currentLicense;
-          return t.toMap();
-        }).toList());
+      try {
+        _progress(0.8, "Restoring transactions...");
+        final List<TransactionModel> txs = cloudData['transactions'] as List<TransactionModel>? ?? [];
+        if (txs.isNotEmpty) {
+          await db.batchInsert('transactions', txs.map((t) {
+            t.isSynced = 1;
+            t.isDeleted = 0; // FORCE: Ensure items aren't hidden in Trash
+            t.licenseId = currentLicense;
+            return t.toMap();
+          }).toList());
+        }
+      } catch (e) {
+        debugPrint("🔥 RESTORE Error [Transactions]: $e");
       }
 
       // Refresh UI
       if (context.mounted) {
-        _progress(0.95, "Refreshing app data...");
-        await Future.wait([
-          Provider.of<ItemProvider>(context, listen: false).refreshData(),
-          Provider.of<CategoryProvider>(context, listen: false).fetchCategories(),
-          Provider.of<TransactionProvider>(context, listen: false).fetchTransactions(),
-          Provider.of<StaffProvider>(context, listen: false).fetchStaff(),
-          Provider.of<SupplierProvider>(context, listen: false).fetchSuppliers(),
-          Provider.of<UnitProvider>(context, listen: false).fetchUnits(),
-          Provider.of<PurchaseReminderProvider>(context, listen: false).fetchReminders(),
-          Provider.of<ProfileProvider>(context, listen: false).loadProfile(),
-        ]);
+        _progress(0.95, "Finalizing database...");
+        await Future.delayed(const Duration(milliseconds: 500)); // Give SQLite a moment to breath
+        
+        if (context.mounted) {
+          debugPrint("🔄 RESTORE: Triggering UI Refresh for all providers...");
+          await Future.wait([
+            Provider.of<ItemProvider>(context, listen: false).refreshData(),
+            Provider.of<CategoryProvider>(context, listen: false).fetchCategories(),
+            Provider.of<TransactionProvider>(context, listen: false).fetchTransactions(),
+            Provider.of<StaffProvider>(context, listen: false).fetchStaff(),
+            Provider.of<SupplierProvider>(context, listen: false).fetchSuppliers(),
+            Provider.of<UnitProvider>(context, listen: false).fetchUnits(),
+            Provider.of<PurchaseReminderProvider>(context, listen: false).fetchReminders(),
+            Provider.of<ProfileProvider>(context, listen: false).loadProfile(),
+          ]);
+          debugPrint("✅ RESTORE: All providers refreshed.");
+        }
       }
 
       _progress(1.0, "Restore completed successfully!");
       return true;
-    } catch (e) {
-      debugPrint("Restore Error: $e");
+    } catch (e, stack) {
+      debugPrint("🔥 FATAL RESTORE ERROR: $e");
+      debugPrint(stack.toString());
       _progress(0.0, "Restore failed: $e");
       return false;
     } finally {

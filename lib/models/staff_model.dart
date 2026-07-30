@@ -68,10 +68,23 @@ class StaffModel {
   }
 
   factory StaffModel.fromMap(Map<String, dynamic> map) {
+    // Helper to safely parse boolean from various types (int, bool, string)
+    bool toBool(dynamic value, {bool defaultValue = false}) {
+      if (value == null) return defaultValue;
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      if (value is String) {
+        final lower = value.toLowerCase();
+        return lower == 'true' || lower == '1' || lower == 'yes';
+      }
+      return defaultValue;
+    }
+
     // Helper to safely parse int from various types
     int? parseInt(dynamic value) {
       if (value == null) return null;
       if (value is num) return value.toInt();
+      if (value is bool) return value ? 1 : 0;
       return int.tryParse(value.toString());
     }
 
@@ -84,25 +97,25 @@ class StaffModel {
 
     return StaffModel(
       id: parseInt(map['id']),
-      name: map['name']?.toString() ?? 'Unknown',
-      role: map['role']?.toString() ?? 'Staff',
-      monthlySalary: parseDouble(map['monthly_salary'], 0.0),
-      joinDate: map['join_date'] != null
-          ? DateTime.tryParse(map['join_date'].toString()) ?? DateTime.now()
+      name: (map['name'] ?? 'Unknown').toString().trim(),
+      role: (map['role'] ?? 'Staff').toString().trim(),
+      monthlySalary: parseDouble(map['monthly_salary'] ?? map['monthlySalary'], 0.0),
+      joinDate: (map['join_date'] ?? map['joinDate']) != null
+          ? DateTime.tryParse((map['join_date'] ?? map['joinDate']).toString()) ?? DateTime.now()
           : DateTime.now(),
-      contact: map['contact']?.toString() ?? '',
-      totalLeaves: parseDouble(map['total_leaves'], 0.0),
-      imagePath: map['image_path']?.toString(),
-      imageUrl: map['image_url']?.toString(),
-      isSynced: parseInt(map['is_synced'] ?? 0) ?? 0,
+      contact: (map['contact'] ?? '').toString().trim(),
+      totalLeaves: parseDouble(map['total_leaves'] ?? map['totalLeaves'], 0.0),
+      imagePath: (map['image_path'] ?? map['imagePath'])?.toString(),
+      imageUrl: (map['image_url'] ?? map['imageUrl'])?.toString(),
+      isSynced: parseInt(map['is_synced'] ?? map['isSynced'] ?? 0) ?? 0,
       advance: 0,
-      isDeleted: parseInt(map['is_deleted'] ?? 0) ?? 0,
-      deletedAt: map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'].toString()) : null,
-      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
-      licenseId: map['license_id']?.toString(),
-      isLoginEnabled: (parseInt(map['is_login_enabled'] ?? 0) ?? 0) == 1,
-      staffCode: map['staff_code']?.toString() ?? '',
-      loginPin: map['login_pin']?.toString() ?? '',
+      isDeleted: parseInt(map['is_deleted'] ?? map['isDeleted'] ?? 0) ?? 0,
+      deletedAt: (map['deleted_at'] ?? map['deletedAt']) != null ? DateTime.tryParse((map['deleted_at'] ?? map['deletedAt']).toString()) : null,
+      updatedAt: (map['updated_at'] ?? map['updatedAt']) != null ? DateTime.tryParse((map['updated_at'] ?? map['updatedAt']).toString()) : null,
+      licenseId: (map['license_id'] ?? map['licenseId'])?.toString(),
+      isLoginEnabled: toBool(map['is_login_enabled'] ?? map['isLoginEnabled'] ?? map['login_enabled'] ?? map['loginEnabled']),
+      staffCode: (map['staff_code'] ?? map['staffCode'] ?? map['staff_id'] ?? map['staffId'] ?? '').toString().trim(),
+      loginPin: (map['login_pin'] ?? map['loginPin'] ?? map['pin'] ?? '').toString().trim(),
       permissions: map['permissions']?.toString() ?? '{"can_sale":true,"can_stock":false,"can_reports":false,"can_manage_staff":false}',
     );
   }

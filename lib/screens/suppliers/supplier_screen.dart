@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/supplier_provider.dart';
-import '../../models/supplier_model.dart';
-import '../../providers/profile_provider.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/providers/supplier_provider.dart';
+import 'package:apna_hisaab/models/supplier_model.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
 
 class SupplierScreen extends StatelessWidget {
   const SupplierScreen({super.key});

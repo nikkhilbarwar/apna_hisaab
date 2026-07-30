@@ -48,10 +48,23 @@ class CategoryModel {
   }
 
   factory CategoryModel.fromMap(Map<String, dynamic> map) {
+    // Helper to safely parse boolean from various types
+    bool toBool(dynamic value, {bool defaultValue = false}) {
+      if (value == null) return defaultValue;
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      if (value is String) {
+        final lower = value.toLowerCase();
+        return lower == 'true' || lower == '1' || lower == 'yes';
+      }
+      return defaultValue;
+    }
+
     // Helper to safely parse int from various types
     int? parseInt(dynamic value) {
       if (value == null) return null;
       if (value is num) return value.toInt();
+      if (value is bool) return value ? 1 : 0;
       return int.tryParse(value.toString());
     }
 
@@ -68,7 +81,7 @@ class CategoryModel {
       iconName: map['icon_name']?.toString() ?? 'category',
       type: map['type']?.toString() ?? 'selling',
       displayOrder: parseInt(map['display_order'] ?? 0) ?? 0,
-      useCategoryStock: parseInt(map['use_category_stock'] ?? 0) ?? 0,
+      useCategoryStock: toBool(map['use_category_stock']) ? 1 : 0,
       stockQty: parseDouble(map['stock_qty'], 0.0),
       lowStockLimit: parseDouble(map['low_stock_limit'], 10.0),
       isSynced: parseInt(map['is_synced'] ?? 0) ?? 0,

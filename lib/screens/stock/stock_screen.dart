@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../models/category_model.dart';
-import '../../providers/profile_provider.dart';
-import '../../providers/item_provider.dart';
-import '../../providers/category_provider.dart';
-import '../../providers/purchase_reminder_provider.dart';
-import '../../models/item_model.dart';
-import '../../core/widgets/app_empty_state.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
-import '../items/item_management_screen.dart';
-import '../purchase_reminders/purchase_reminder_screen.dart';
-import 'category_management_screen.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
+import 'package:apna_hisaab/providers/category_provider.dart';
+import 'package:apna_hisaab/providers/purchase_reminder_provider.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/core/widgets/app_empty_state.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/screens/items/item_management_screen.dart';
+import 'package:apna_hisaab/screens/purchase_reminders/purchase_reminder_screen.dart';
+import 'package:apna_hisaab/screens/stock/category_management_screen.dart';
 
 class StockScreen extends StatefulWidget {
   final String? initialCategory;
@@ -72,67 +72,16 @@ class _StockScreenState extends State<StockScreen> {
       },
       child: Scaffold(
         backgroundColor: profileProvider.scaffoldColor,
-        appBar: _selectedCategory == null
-            ? null
-            : AppBar(
-                title: Text(
-                  _selectedCategory!.toUpperCase(),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: Colors.white,
-                  ),
-                ),
-                flexibleSpace: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [themeColor.withValues(alpha: 0.8), themeColor],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                ),
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: () {
-                    setState(() {
-                      _selectedCategory = null;
-                    });
-                  },
-                ),
-                centerTitle: true,
-                actions: [
-                  IconButton(
-                    icon: Icon(
-                      _onlyShowLowStock
-                          ? Icons.filter_list_off
-                          : Icons.filter_list,
-                      color: Colors.white,
-                    ),
-                    onPressed: () =>
-                        setState(() => _onlyShowLowStock = !_onlyShowLowStock),
-                    tooltip: 'Low Stock Filter',
-                  ),
-                ],
-                elevation: 0,
-                iconTheme: const IconThemeData(color: Colors.white),
-              ),
+        appBar: null,
         body: SafeArea(
           child: Column(
             children: [
-              _buildSearchBar(profileProvider),
+              _buildHeader(profileProvider, itemProvider),
               if (reminderProvider.reminders.any((r) => r.status == 'pending'))
                 _buildReminderBanner(reminderProvider, profileProvider),
               Expanded(
-                child:
-                    _selectedCategory == null &&
-                        _searchQuery.isEmpty &&
-                        !_onlyShowLowStock
-                    ? _buildCategoryList(
-                        catProvider,
-                        itemProvider,
-                        profileProvider,
-                      )
+                child: _selectedCategory == null && _searchQuery.isEmpty && !_onlyShowLowStock
+                    ? _buildCategoryList(catProvider, itemProvider, profileProvider)
                     : _buildFilteredItemList(itemProvider, profileProvider),
               ),
               _buildBottomActionBar(profileProvider, catProvider),
@@ -143,7 +92,7 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
-  Widget _buildSearchBar(ProfileProvider profile) {
+  Widget _buildHeader(ProfileProvider profile, ItemProvider itemProvider) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
@@ -156,33 +105,65 @@ class _StockScreenState extends State<StockScreen> {
           ),
         ],
       ),
-      child: TextField(
-        controller: _searchController,
-        onChanged: (v) => setState(() => _searchQuery = v),
-        style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
-        decoration: InputDecoration(
-          hintText: 'Search items by name...',
-          prefixIcon: const Icon(Icons.search, size: 20),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                  },
-                )
-              : null,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              if (_selectedCategory != null)
+                IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => setState(() => _selectedCategory = null),
+                ),
+              Expanded(
+                child: Text(
+                  (_selectedCategory ?? 'Inventory').toUpperCase(),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                    color: profile.textColor,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(_onlyShowLowStock ? Icons.filter_list_off : Icons.filter_list),
+                onPressed: () => setState(() => _onlyShowLowStock = !_onlyShowLowStock),
+                tooltip: "Low Stock Filter",
+                color: _onlyShowLowStock ? Colors.red : profile.secondaryTextColor,
+              ),
+            ],
           ),
-          filled: true,
-          fillColor: profile.scaffoldColor,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+          const SizedBox(height: 8),
+          TextField(
+            controller: _searchController,
+            onChanged: (v) => setState(() => _searchQuery = v),
+            style: TextStyle(color: profile.textColor, fontWeight: FontWeight.bold),
+            decoration: InputDecoration(
+              hintText: 'Search items...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              filled: true,
+              fillColor: profile.scaffoldColor,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

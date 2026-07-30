@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../models/unit_model.dart';
-import '../core/database/database_helper.dart';
+import 'package:apna_hisaab/models/unit_model.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
 
 class UnitProvider with ChangeNotifier {
   List<UnitModel> _units = [];

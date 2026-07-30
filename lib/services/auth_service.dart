@@ -4,7 +4,9 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../core/database/database_helper.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
+
+import 'package:apna_hisaab/services/firebase_service.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -73,20 +75,33 @@ class AuthService {
 
   Future<void> signOut() async {
     try {
+      debugPrint("🚪 Starting Sign-Out Process...");
+      
       // 1. Reset Database instances (closes old DB and resets currentUserId)
-      DatabaseHelper.resetDatabase();
+      try {
+        DatabaseHelper.resetDatabase();
+        FirebaseService.activeLicenseKey = 'NONE';
+      } catch (e) { debugPrint("DB Reset Skip: $e"); }
       
       // 2. Clear all local storage
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+      } catch (e) { debugPrint("Prefs Clear Skip: $e"); }
       
-      // 3. Sign out from Firebase and Google
-      await _googleSignIn.signOut();
-      await _auth.signOut();
+      // 3. Sign out from Google
+      try {
+        await _googleSignIn.signOut();
+      } catch (e) { debugPrint("Google Sign-Out Skip: $e"); }
+
+      // 4. Sign out from Firebase
+      try {
+        await _auth.signOut();
+      } catch (e) { debugPrint("Firebase Sign-Out Skip: $e"); }
       
       debugPrint("✅ Full Sign-out and data cleanup complete.");
     } catch (e) {
-      debugPrint("Sign-Out Error: $e");
+      debugPrint("Sign-Out Fatal Error: $e");
     }
   }
 

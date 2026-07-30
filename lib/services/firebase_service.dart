@@ -1,59 +1,72 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
-import 'dart:io';
-import 'dart:typed_data';
-import 'dart:convert';
 import 'package:image/image.dart' as img;
-import '../models/transaction_model.dart';
-import '../models/staff_model.dart';
-import '../models/item_model.dart';
-import '../models/supplier_model.dart';
-import '../models/category_model.dart';
-import '../models/purchase_reminder_model.dart';
-import '../models/recipe_model.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
+import 'package:apna_hisaab/models/staff_model.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/models/supplier_model.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/models/purchase_reminder_model.dart';
+import 'package:apna_hisaab/models/recipe_model.dart';
 
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  static String? activeLicenseKey;
+  static String? _activeLicenseKey;
+  static String get activeLicenseKey => (_activeLicenseKey == null || _activeLicenseKey!.trim().isEmpty) ? 'NONE' : _activeLicenseKey!;
+  static set activeLicenseKey(String? value) => _activeLicenseKey = value;
+
+  bool get _isLicenseValid => activeLicenseKey != 'NONE';
 
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
   CollectionReference _collection(String name) {
-    if (activeLicenseKey != null && activeLicenseKey != 'NONE') {
-      // Check if it's a license or a direct User ID
-      if (activeLicenseKey!.startsWith('USR_') || activeLicenseKey!.length > 20) {
-        final uid = activeLicenseKey!.startsWith('USR_') ? activeLicenseKey!.substring(4) : activeLicenseKey!;
-        return _firestore.collection('users').doc(uid).collection(name);
-      }
-      return _firestore.collection('licenses').doc(activeLicenseKey).collection(name);
+    if (_isLicenseValid) {
+      bool isUID = activeLicenseKey.length > 20 || activeLicenseKey.startsWith('USR_');
+      final String id = activeLicenseKey.startsWith('USR_') ? activeLicenseKey.substring(4) : activeLicenseKey;
+      
+      final col = isUID 
+        ? _firestore.collection('users').doc(id).collection(name)
+        : _firestore.collection('licenses').doc(id).collection(name);
+        
+      debugPrint("🔍 FIREBASE: Path resolved -> ${col.path}");
+      return col;
     }
-    if (_uid == null) throw Exception("User not logged in");
-    return _firestore.collection('users').doc(_uid).collection(name);
+    
+    final uid = _uid;
+    if (uid == null) {
+      throw Exception("Authentication Required: Please enter a Store ID or Login.");
+    }
+    return _firestore.collection('users').doc(uid).collection(name);
   }
 
   DocumentReference _profileDoc() {
-    if (activeLicenseKey != null && activeLicenseKey != 'NONE') {
-      if (activeLicenseKey!.startsWith('USR_') || activeLicenseKey!.length > 20) {
-        final uid = activeLicenseKey!.startsWith('USR_') ? activeLicenseKey!.substring(4) : activeLicenseKey!;
-        return _firestore.collection('users').doc(uid).collection('profile').doc('business_info');
-      }
-      return _firestore.collection('licenses').doc(activeLicenseKey).collection('profile').doc('business_info');
+    if (_isLicenseValid) {
+      bool isUID = activeLicenseKey.length > 20 || activeLicenseKey.startsWith('USR_');
+      final String id = activeLicenseKey.startsWith('USR_') ? activeLicenseKey.substring(4) : activeLicenseKey;
+      
+      final doc = isUID
+        ? _firestore.collection('users').doc(id).collection('profile').doc('business_info')
+        : _firestore.collection('licenses').doc(id).collection('profile').doc('business_info');
+        
+      debugPrint("🔍 FIREBASE: Profile path resolved -> ${doc.path}");
+      return doc;
     }
-    if (_uid == null) throw Exception("User not logged in");
-    return _firestore.collection('users').doc(_uid).collection('profile').doc('business_info');
+    
+    final uid = _uid;
+    if (uid == null) throw Exception("Authentication Required.");
+    return _firestore.collection('users').doc(uid).collection('profile').doc('business_info');
   }
 
   // --- High-Speed Batch Sync with Compression ---
-  Future<void> syncBatch(String collectionName, List<Map<String, dynamic>> dataList) async {
+    Future<void> syncBatch(String collectionName, List<Map<String, dynamic>> dataList) async {
     if (dataList.isEmpty) return;
     
     final col = _collection(collectionName);
-
-    // 1. Compression: Convert list to Base64 GZip
-    final String compressedData = _compressData(dataList);
 
     // 2. We push in batches of 500 to optimize Firestore writes
     for (var i = 0; i < dataList.length; i += 500) {
@@ -67,16 +80,6 @@ class FirebaseService {
         }
       }
       await batch.commit();
-    }
-  }
-
-  String _compressData(List<dynamic> data) {
-    try {
-      final jsonString = jsonEncode(data);
-      final compressed = GZipCodec().encode(utf8.encode(jsonString));
-      return base64Encode(compressed);
-    } catch (e) {
-      return jsonEncode(data); // Fallback
     }
   }
 
@@ -121,7 +124,7 @@ class FirebaseService {
 
     // 2. DISCOVERY FIX: Always save a copy to the User path if we are in License mode
     // This allows a fresh install to find the license key via fetchProfileFromUserPath()
-    if (activeLicenseKey != null && activeLicenseKey != 'NONE' && _uid != null) {
+    if (activeLicenseKey != 'NONE' && _uid != null) {
       await _firestore.collection('users').doc(_uid).collection('profile').doc('business_info').set({
         'license_key': activeLicenseKey,
         'updated_at': FieldValue.serverTimestamp(),
@@ -133,19 +136,29 @@ class FirebaseService {
   }
 
   Future<Map<String, dynamic>?> fetchProfile() async {
-    final doc = await _profileDoc().get();
-    return doc.data() as Map<String, dynamic>?;
+    try {
+      final doc = await _profileDoc().get();
+      return doc.data() as Map<String, dynamic>?;
+    } catch (e) {
+      debugPrint("🔥 FIREBASE: Error fetching profile: $e");
+      return null;
+    }
   }
 
   Future<Map<String, dynamic>?> fetchProfileFromUserPath() async {
-    if (_uid == null) return null;
-    final doc = await _firestore.collection('users').doc(_uid).collection('profile').doc('business_info').get();
-    return doc.data();
+    try {
+      if (_uid == null) return null;
+      final doc = await _firestore.collection('users').doc(_uid).collection('profile').doc('business_info').get();
+      return doc.data();
+    } catch (e) {
+      debugPrint("🔥 FIREBASE: Error fetching profile from user path: $e");
+      return null;
+    }
   }
 
   Future<bool> syncTransaction(TransactionModel tx) async {
     try {
-      if (activeLicenseKey != null && activeLicenseKey != 'NONE') {
+      if (_isLicenseValid) {
         final licenseRef = _firestore.collection('licenses').doc(activeLicenseKey);
         final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
         final statsRef = licenseRef.collection('daily_stats').doc(today);
@@ -207,7 +220,7 @@ class FirebaseService {
       List<QuerySnapshot> snapshots = [];
 
       // Attempt A: License Path
-      if (activeLicenseKey != null && activeLicenseKey != 'NONE') {
+      if (_isLicenseValid) {
         snapshots.add(await _firestore.collection('licenses').doc(activeLicenseKey).collection('items').get());
       }
 
@@ -233,6 +246,9 @@ class FirebaseService {
             } catch (e) {
               debugPrint("🔥 Item Parse Error [ID: ${doc.id}]: $e");
             }
+          }
+          if (items.isNotEmpty) {
+             debugPrint("📦 FIREBASE: Sample items: ${items.take(3).map((e) => e.name).join(', ')}...");
           }
           // We found items, we return them here
           return items;
@@ -381,7 +397,9 @@ class FirebaseService {
   Future<void> deleteRecipesByProductId(int productId) async {
     final snap = await _collection('recipes').where('product_id', isEqualTo: productId).get();
     final batch = _firestore.batch();
-    for (var doc in snap.docs) batch.delete(doc.reference);
+    for (var doc in snap.docs) {
+      batch.delete(doc.reference);
+    }
     await batch.commit();
   }
 
@@ -401,7 +419,7 @@ class FirebaseService {
 
   // --- Fetch All Data for SyncProvider Restore ---
   Future<Map<String, dynamic>> fetchAllUserData() async {
-    final String currentLicense = activeLicenseKey ?? 'NONE';
+    final String currentLicense = activeLicenseKey;
     debugPrint("☁️ FIREBASE: Starting full data fetch. Active License: $currentLicense");
 
     // Helper to safely execute a fetch future
@@ -445,6 +463,8 @@ class FirebaseService {
       safeFetch(_collection('staff_advance').get(), "staff_advances", null),
       safeFetch(_collection('staff_leave').get(), "staff_leaves", null),
       safeFetch(_profileDoc().get(), "profile", null),
+      safeFetch(fetchAllStaffAdvances(), "staff_advances_v2", <StaffAdvanceModel>[]),
+      safeFetch(fetchAllStaffLeaves(), "staff_leaves_v2", <StaffLeaveModel>[]),
     ]);
 
     return {
@@ -456,20 +476,24 @@ class FirebaseService {
       'units': results[4],
       'purchase_reminders': results[5],
       'recipes': results[6],
-      'staff_advances': results[7] != null
-          ? (results[7] as QuerySnapshot).docs.map((d) {
-              final data = d.data() as Map<String, dynamic>;
-              if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-              return StaffAdvanceModel.fromMap(data);
-            }).toList()
-          : <StaffAdvanceModel>[],
-      'staff_leaves': results[8] != null
-          ? (results[8] as QuerySnapshot).docs.map((d) {
-              final data = d.data() as Map<String, dynamic>;
-              if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-              return StaffLeaveModel.fromMap(data);
-            }).toList()
-          : <StaffLeaveModel>[],
+      'staff_advances': (results[10] as List<StaffAdvanceModel>).isNotEmpty 
+          ? results[10] 
+          : (results[7] != null
+              ? (results[7] as QuerySnapshot).docs.map((d) {
+                  final data = d.data() as Map<String, dynamic>;
+                  if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
+                  return StaffAdvanceModel.fromMap(data);
+                }).toList()
+              : <StaffAdvanceModel>[]),
+      'staff_leaves': (results[11] as List<StaffLeaveModel>).isNotEmpty
+          ? results[11]
+          : (results[8] != null
+              ? (results[8] as QuerySnapshot).docs.map((d) {
+                  final data = d.data() as Map<String, dynamic>;
+                  if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
+                  return StaffLeaveModel.fromMap(data);
+                }).toList()
+              : <StaffLeaveModel>[]),
       'profile': results[9] != null ? (results[9] as DocumentSnapshot).data() : null,
     };
   }

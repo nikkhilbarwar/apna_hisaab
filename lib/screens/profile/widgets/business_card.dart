@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
 
 class BusinessCard extends StatelessWidget {
   final ProfileProvider profile;
@@ -64,9 +64,10 @@ class BusinessCard extends StatelessWidget {
                                     fontSize: 18,
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: 0.5,
+                                    height: 1.1,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2,
+                                  textAlign: TextAlign.left,
                                 ),
                               ),
                               Container(
@@ -112,9 +113,9 @@ class BusinessCard extends StatelessWidget {
                     _infoItem(Icons.phone_android_rounded, profile.displayPhone),
                     const SizedBox(height: 12),
                     _infoItem(Icons.location_on_rounded, profile.address),
-                    if (profile.licenseKey.isNotEmpty) ...[
+                    if (profile.storeConnectionId != 'NONE') ...[
                       const SizedBox(height: 12),
-                      _connectionIdItem(context, profile.licenseKey),
+                      _connectionIdItem(context, profile.storeConnectionId),
                     ],
                   ],
                 ),

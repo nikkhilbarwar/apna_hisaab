@@ -5,20 +5,21 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
-import '../main.dart';
-import '../core/widgets/app_bottom_sheet.dart';
-import '../providers/profile_provider.dart';
-import '../providers/staff_provider.dart';
-import '../providers/transaction_provider.dart';
-import '../providers/sync_provider.dart';
-import '../providers/staff_auth_provider.dart';
-import '../services/export_service.dart';
-import 'dashboard/dashboard_screen.dart';
-import 'stock/stock_screen.dart';
-import 'reports/reports_screen.dart';
-import 'staff/staff_screen.dart';
-import 'profile/profile_screen.dart';
-import 'admin/admin_panel_screen.dart';
+import 'package:apna_hisaab/core/app_root.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/staff_provider.dart';
+import 'package:apna_hisaab/providers/transaction_provider.dart';
+import 'package:apna_hisaab/providers/sync_provider.dart';
+import 'package:apna_hisaab/providers/staff_auth_provider.dart';
+import 'package:apna_hisaab/services/export_service.dart';
+import 'package:apna_hisaab/screens/dashboard/dashboard_screen.dart';
+import 'package:apna_hisaab/screens/stock/stock_screen.dart';
+import 'package:apna_hisaab/screens/reports/reports_screen.dart';
+import 'package:apna_hisaab/screens/staff/staff_screen.dart';
+import 'package:apna_hisaab/screens/profile/profile_screen.dart';
+import 'package:apna_hisaab/screens/admin/admin_panel_screen.dart';
+import 'package:apna_hisaab/screens/auth/login_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -57,9 +58,37 @@ class _MainNavigationState extends State<MainNavigation>
       );
 
       if (!latestStaff.isLoginEnabled) {
-        await staffAuth.logoutStaff();
         if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => const Center(
+              child: Card(
+                child: Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text("Session Expired", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        await staffAuth.logoutStaff();
+        
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+            (route) => false,
+          );
         }
       }
     }
@@ -743,11 +772,14 @@ class _MainNavigationState extends State<MainNavigation>
           ),
           title: Text(
             profile.displayBusinessName.toUpperCase(),
+            textAlign: TextAlign.center,
+            maxLines: 2,
             style: TextStyle(
-              fontSize: 16,
+              fontSize: profile.displayBusinessName.length > 20 ? 13 : 16,
               fontWeight: FontWeight.w900,
               letterSpacing: 1,
               color: appBarContentColor,
+              height: 1.1,
             ),
           ),
           actions: appBarActions,

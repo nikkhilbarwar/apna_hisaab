@@ -1,27 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
-import '../models/item_model.dart';
-import '../models/transaction_model.dart';
-import '../core/database/database_helper.dart';
-import '../services/firebase_service.dart';
-import '../services/notification_service.dart';
-import 'item_provider.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
+import 'package:apna_hisaab/services/firebase_service.dart';
+import 'package:apna_hisaab/services/notification_service.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
 import 'dart:convert';
-import '../models/category_model.dart';
-import '../models/staff_model.dart';
-import '../models/supplier_model.dart';
-import '../models/purchase_reminder_model.dart';
-import '../models/recipe_model.dart';
-import '../main.dart'; // To access navigatorKey
-import 'category_provider.dart';
-import 'staff_provider.dart';
-import 'supplier_provider.dart';
-import 'unit_provider.dart';
-import 'purchase_reminder_provider.dart';
-import 'profile_provider.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/models/staff_model.dart';
+import 'package:apna_hisaab/models/supplier_model.dart';
+import 'package:apna_hisaab/models/purchase_reminder_model.dart';
+import 'package:apna_hisaab/models/recipe_model.dart';
+import 'package:apna_hisaab/main.dart'; // To access navigatorKey
+import 'package:apna_hisaab/providers/category_provider.dart';
+import 'package:apna_hisaab/providers/staff_provider.dart';
+import 'package:apna_hisaab/providers/supplier_provider.dart';
+import 'package:apna_hisaab/providers/unit_provider.dart';
+import 'package:apna_hisaab/providers/purchase_reminder_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
 import 'package:provider/provider.dart';
+
+import '../core/app_root.dart';
 
 class TransactionProvider with ChangeNotifier {
   List<TransactionModel> _allTransactions = [];
@@ -73,6 +75,7 @@ class TransactionProvider with ChangeNotifier {
 
       try {
         debugPrint("🚀 STARTING FAST MASTER RESTORE...");
+        String currentLicense = FirebaseService.activeLicenseKey;
 
         final results = await Future.wait([
           _firebaseService.fetchAllCategories(),
@@ -83,88 +86,102 @@ class TransactionProvider with ChangeNotifier {
           _firebaseService.fetchAllPurchaseReminders(),
           _firebaseService.fetchAllUnits(),
           _firebaseService.fetchAllRecipes(),
+          _firebaseService.fetchAllStaffAdvances(),
+          _firebaseService.fetchAllStaffLeaves(),
         ]);
-
-        final cloudCategories = results[0] as List<CategoryModel>;
-        final cloudItems = results[1] as List<ItemModel>;
-        final cloudTxs = results[2] as List<TransactionModel>;
-        final cloudStaff = results[3] as List<StaffModel>;
-        final cloudSuppliers = results[4] as List<SupplierModel>;
-        final cloudReminders = results[5] as List<PurchaseReminderModel>;
-        final cloudUnits = results[6] as List<Map<String, dynamic>>;
-        final cloudRecipes = results[7] as List<RecipeModel>;
 
         final db = DatabaseHelper.instance;
         await db.clearAllData();
 
-        if (cloudCategories.isNotEmpty) {
-          await db.batchInsert(
-            'categories',
-            cloudCategories.map((c) => (c..isSynced = 1).toMap()).toList(),
-          );
-        }
-
-        if (cloudItems.isNotEmpty) {
-          await db.batchInsert(
-            'items',
-            cloudItems.map((i) => (i..isSynced = 1).toMap()).toList(),
-          );
-        }
-
-        if (cloudTxs.isNotEmpty) {
-          await db.batchInsert(
-            'transactions',
-            cloudTxs.map((t) => (t..isSynced = 1).toMap()).toList(),
-          );
-        }
-
-        if (cloudStaff.isNotEmpty) {
-          await db.batchInsert(
-            'staff',
-            cloudStaff.map((s) => (s..isSynced = 1).toMap()).toList(),
-          );
-        }
-        
-        if (cloudSuppliers.isNotEmpty) {
-          await db.batchInsert(
-            'suppliers',
-            cloudSuppliers.map((s) => (s..isSynced = 1).toMap()).toList(),
-          );
-        }
-
-        if (cloudReminders.isNotEmpty) {
-          await db.batchInsert(
-            'purchase_reminders',
-            cloudReminders.map((r) => (r..isSynced = 1).toMap()).toList(),
-          );
-        }
-
-        if (cloudUnits.isNotEmpty) {
-          for (var unitData in cloudUnits) {
-            String? name = unitData['name'];
-            if (name != null) await db.insertUnit(name, isSynced: 1);
+        // 1. Categories
+        try {
+          final cloudCategories = results[0] as List<CategoryModel>;
+          if (cloudCategories.isNotEmpty) {
+            await db.batchInsert('categories', cloudCategories.map((c) => (c..isSynced = 1..licenseId = currentLicense).toMap()).toList());
           }
-        }
+        } catch (e) { debugPrint("🔥 Master Restore Error [Categories]: $e"); }
 
-        if (cloudRecipes.isNotEmpty) {
-          await db.batchInsert(
-            'recipes',
-            cloudRecipes.map((r) => (r..isSynced = 1).toMap()).toList(),
-          );
-        }
+        // 2. Items
+        try {
+          final cloudItems = results[1] as List<ItemModel>;
+          if (cloudItems.isNotEmpty) {
+            await db.batchInsert('items', cloudItems.map((i) => (i..isSynced = 1..licenseId = currentLicense).toMap()).toList());
+          }
+        } catch (e) { debugPrint("🔥 Master Restore Error [Items]: $e"); }
+
+        // 3. Transactions
+        try {
+          final cloudTxs = results[2] as List<TransactionModel>;
+          if (cloudTxs.isNotEmpty) {
+            await db.batchInsert('transactions', cloudTxs.map((t) => (t..isSynced = 1..licenseId = currentLicense).toMap()).toList());
+          }
+        } catch (e) { debugPrint("🔥 Master Restore Error [Transactions]: $e"); }
+
+        // 4. Staff & Advances/Leaves
+        try {
+          final cloudStaff = results[3] as List<StaffModel>;
+          if (cloudStaff.isNotEmpty) {
+            await db.batchInsert('staff', cloudStaff.map((s) => (s..isSynced = 1..licenseId = currentLicense).toMap()).toList());
+          }
+          final cloudAdvances = results[8] as List<StaffAdvanceModel>;
+          if (cloudAdvances.isNotEmpty) {
+            await db.batchInsert('staff_advance', cloudAdvances.map((a) => (a..isSynced = 1..licenseId = currentLicense).toMap()).toList());
+          }
+          final cloudLeaves = results[9] as List<StaffLeaveModel>;
+          if (cloudLeaves.isNotEmpty) {
+            await db.batchInsert('staff_leave', cloudLeaves.map((l) => (l..isSynced = 1..licenseId = currentLicense).toMap()).toList());
+          }
+        } catch (e) { debugPrint("🔥 Master Restore Error [Staff]: $e"); }
+        
+        // 5. Suppliers
+        try {
+          final cloudSuppliers = results[4] as List<SupplierModel>;
+          if (cloudSuppliers.isNotEmpty) {
+            await db.batchInsert('suppliers', cloudSuppliers.map((s) => (s..isSynced = 1..licenseId = currentLicense).toMap()).toList());
+          }
+        } catch (e) { debugPrint("🔥 Master Restore Error [Suppliers]: $e"); }
+
+        // 6. Reminders
+        try {
+          final cloudReminders = results[5] as List<PurchaseReminderModel>;
+          if (cloudReminders.isNotEmpty) {
+            await db.batchInsert('purchase_reminders', cloudReminders.map((r) => (r..isSynced = 1..licenseId = currentLicense).toMap()).toList());
+          }
+        } catch (e) { debugPrint("🔥 Master Restore Error [Reminders]: $e"); }
+
+        // 7. Units
+        try {
+          final cloudUnits = results[6] as List<Map<String, dynamic>>;
+          if (cloudUnits.isNotEmpty) {
+            for (var unitData in cloudUnits) {
+              String? name = unitData['name'];
+              if (name != null) await db.insertUnit(name, isSynced: 1);
+            }
+          }
+        } catch (e) { debugPrint("🔥 Master Restore Error [Units]: $e"); }
+
+        // 8. Recipes
+        try {
+          final cloudRecipes = results[7] as List<RecipeModel>;
+          if (cloudRecipes.isNotEmpty) {
+            await db.batchInsert('recipes', cloudRecipes.map((r) => (r..isSynced = 1..licenseId = currentLicense).toMap()).toList());
+          }
+        } catch (e) { debugPrint("🔥 Master Restore Error [Recipes]: $e"); }
 
         // Refresh all providers after restore
         if (navigatorKey.currentContext != null) {
           final context = navigatorKey.currentContext!;
-          await Future.wait([
-            Provider.of<ItemProvider>(context, listen: false).refreshData(),
-            Provider.of<CategoryProvider>(context, listen: false).fetchCategories(),
-            Provider.of<StaffProvider>(context, listen: false).fetchStaff(),
-            Provider.of<SupplierProvider>(context, listen: false).fetchSuppliers(),
-            Provider.of<UnitProvider>(context, listen: false).fetchUnits(),
-            Provider.of<PurchaseReminderProvider>(context, listen: false).fetchReminders(),
-            Provider.of<ProfileProvider>(context, listen: false).loadProfile(),
-          ]);
+          if (context.mounted) {
+            await Future.wait([
+              Provider.of<ItemProvider>(context, listen: false).refreshData(),
+              Provider.of<CategoryProvider>(context, listen: false).fetchCategories(),
+              Provider.of<StaffProvider>(context, listen: false).fetchStaff(),
+              Provider.of<SupplierProvider>(context, listen: false).fetchSuppliers(),
+              Provider.of<UnitProvider>(context, listen: false).fetchUnits(),
+              Provider.of<PurchaseReminderProvider>(context, listen: false).fetchReminders(),
+              Provider.of<ProfileProvider>(context, listen: false).loadProfile(),
+            ]);
+          }
         }
 
         await fetchTransactions();
@@ -441,8 +458,9 @@ class TransactionProvider with ChangeNotifier {
 
       await _ensureToken(tx, oldTx: oldTx);
 
-      if (oldTx != null)
+      if (oldTx != null) {
         await _applyStockEffect(oldTx, itemProvider, isAddingEffect: false);
+      }
       await DatabaseHelper.instance.updateTransaction(tx);
 
       final index = _allTransactions.indexWhere((t) => t.id == tx.id);

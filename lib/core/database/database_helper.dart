@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:apna_hisaab/models/transaction_model.dart';
@@ -9,7 +12,7 @@ import 'package:apna_hisaab/models/staff_model.dart';
 import 'package:apna_hisaab/models/category_model.dart';
 import 'package:apna_hisaab/models/purchase_reminder_model.dart';
 
-import '../../services/firebase_service.dart';
+import 'package:apna_hisaab/services/firebase_service.dart' as app_fs;
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -20,6 +23,7 @@ class DatabaseHelper {
   DatabaseHelper._init();
 
   static void resetDatabase() {
+    debugPrint("🔄 DB: Resetting database singleton...");
     _database = null;
     _currentUserId = null;
     _currentLicenseId = null;
@@ -27,22 +31,22 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception("User not logged in");
+    // Decoupled: Use GUEST if not logged in to Firebase (needed for Staff login phase)
+    final String userId = user?.uid ?? "GUEST";
     
-    // We get licenseId from some global state. 
-    // For now assuming it is set in ProfileProvider.activeLicenseKey
-    // We use licenseId to partition database files
-    final String licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    // Normalize licenseId for DB partitioning
+    final String licenseId = app_fs.FirebaseService.activeLicenseKey;
 
-    if (_currentUserId != user.uid || _currentLicenseId != licenseId) {
+    if (_currentUserId != userId || _currentLicenseId != licenseId) {
       await closeDatabase();
-      _currentUserId = user.uid;
+      _currentUserId = userId;
       _currentLicenseId = licenseId;
-      _database = await _initDB('food_cart_${user.uid}_$licenseId.db');
+      debugPrint("📂 DB: Opening Partitioned DB -> food_cart_${userId}_$licenseId.db");
+      _database = await _initDB('food_cart_${userId}_$licenseId.db');
     }
 
     if (_database != null) return _database!;
-    _database = await _initDB('food_cart_${user.uid}_$licenseId.db');
+    _database = await _initDB('food_cart_${userId}_$licenseId.db');
     return _database!;
   }
 
@@ -56,6 +60,20 @@ class DatabaseHelper {
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
+
+    if (Platform.isWindows || Platform.isLinux) {
+      return await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 40,
+          onCreate: _createDB,
+          onUpgrade: (db, oldVersion, newVersion) async {
+            debugPrint("MIGRATION: Upgrading from $oldVersion to $newVersion");
+            await _onUpgrade(db, oldVersion, newVersion);
+          },
+        ),
+      );
+    }
 
     return await openDatabase(
       path, 
@@ -439,23 +457,28 @@ class DatabaseHelper {
 
   Future<void> clearAllData() async {
     final db = await database;
+    debugPrint("🧹 DB: Clearing all tables...");
     await db.transaction((txn) async {
-      await txn.delete('transactions');
-      await txn.delete('items');
-      await txn.delete('categories');
-      await txn.delete('staff');
-      await txn.delete('staff_advance');
-      await txn.delete('staff_leave');
-      await txn.delete('suppliers');
-      await txn.delete('units');
-      await txn.delete('purchase_reminders');
-      await txn.delete('recipes');
+      final tables = [
+        'transactions', 'items', 'categories', 'staff', 
+        'staff_advance', 'staff_leave', 'suppliers', 
+        'units', 'purchase_reminders', 'recipes'
+      ];
+      for (var table in tables) {
+        try {
+          await txn.delete(table);
+          debugPrint("✅ DB: Cleared table $table");
+        } catch (e) {
+          debugPrint("⚠️ DB: Failed to clear table $table: $e");
+        }
+      }
     });
   }
 
   Future<int> batchInsert(String table, List<Map<String, dynamic>> dataList) async {
     if (dataList.isEmpty) return 0;
     final db = await instance.database;
+    debugPrint("📂 DB: Batch Insert into $table [Path: ${db.path}]");
 
     // Self-healing: Ensure columns exist before batch insert
     final firstEntry = dataList.first;
@@ -468,14 +491,22 @@ class DatabaseHelper {
       await _ensureTableColumn(db, table, columnName, columnType);
     }
 
+    int count = 0;
     await db.transaction((txn) async {
       final batch = txn.batch();
       for (var data in dataList) {
         batch.insert(table, data, conflictAlgorithm: ConflictAlgorithm.replace);
       }
-      await batch.commit(noResult: true);
+      try {
+        final results = await batch.commit(noResult: false);
+        count = results.length;
+        debugPrint("✅ DB: Batch insert successful for $table ($count/${dataList.length} rows)");
+      } catch (e) {
+        debugPrint("🔥 DB: Batch insert FAILED for $table: $e");
+        rethrow;
+      }
     });
-    return dataList.length;
+    return count;
   }
 
   /// Implementation of "Last Write Wins" (LWW) for Delta Sync.
@@ -548,7 +579,7 @@ class DatabaseHelper {
     final db = await instance.database;
     tx.updatedAt = DateTime.now();
     final map = tx.toMap();
-    map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    map['license_id'] = app_fs.FirebaseService.activeLicenseKey ?? 'NONE';
     return await db.insert('transactions', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -559,7 +590,7 @@ class DatabaseHelper {
       'material_id': materialId,
       'quantity': quantity,
       'is_synced': isSynced ?? 0,
-      'license_id': FirebaseService.activeLicenseKey ?? 'NONE',
+      'license_id': app_fs.FirebaseService.activeLicenseKey ?? 'NONE',
     });
   }
 
@@ -594,13 +625,22 @@ class DatabaseHelper {
   }
   Future<List<TransactionModel>> getAllTransactions() async {
     final db = await instance.database;
-    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final licenseId = app_fs.FirebaseService.activeLicenseKey;
+
+    // 🚑 ATTEMPT RESCUE
+    try {
+      final check = await db.rawQuery("SELECT COUNT(*) as c FROM transactions WHERE license_id = ?", [licenseId]);
+      if ((Sqflite.firstIntValue(check) ?? 0) == 0) {
+        await db.execute("UPDATE transactions SET license_id = ? WHERE license_id = '' OR license_id IS NULL OR license_id = 'NONE' OR license_id = 'null'", [licenseId]);
+      }
+    } catch (_) {}
+
     final result = await db.query('transactions', where: 'license_id = ?', whereArgs: [licenseId], orderBy: 'date DESC');
     return result.map((json) => TransactionModel.fromMap(json)).toList();
   }
   Future<List<TransactionModel>> getUnsyncedTransactions() async {
     final db = await instance.database;
-    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final licenseId = app_fs.FirebaseService.activeLicenseKey ?? 'NONE';
     final result = await db.query('transactions', where: 'is_synced = ? AND license_id = ?', whereArgs: [0, licenseId]);
     return result.map((json) => TransactionModel.fromMap(json)).toList();
   }
@@ -614,7 +654,7 @@ class DatabaseHelper {
       debugPrint("DB: Inserting item: ${item.name} (ID: ${item.id})");
       item.updatedAt = DateTime.now();
       final map = item.toMap();
-      map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+      map['license_id'] = app_fs.FirebaseService.activeLicenseKey ?? 'NONE';
       
       // Self-healing for single insert
       for (var col in map.keys) {
@@ -659,7 +699,25 @@ class DatabaseHelper {
   }
   Future<List<ItemModel>> getAllItems() async {
     final db = await instance.database;
-    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final licenseId = app_fs.FirebaseService.activeLicenseKey;
+    
+    // 1. ATTEMPT RESCUE: If items exist with "" but we want "NONE"
+    try {
+      final rawResult = await db.rawQuery("SELECT COUNT(*) as total FROM items");
+      final total = Sqflite.firstIntValue(rawResult) ?? 0;
+      
+      final licenseResult = await db.rawQuery("SELECT COUNT(*) as total FROM items WHERE license_id = ?", [licenseId]);
+      final licTotal = Sqflite.firstIntValue(licenseResult) ?? 0;
+
+      if (licTotal == 0 && total > 0) {
+        debugPrint("🚑 DB_RESCUE: Found $total orphaned items. Migrating to license [$licenseId]...");
+        await db.execute("UPDATE items SET license_id = ? WHERE license_id = '' OR license_id IS NULL OR license_id = 'NONE' OR license_id = 'null'", [licenseId]);
+        debugPrint("✅ DB_RESCUE: Migration complete.");
+      }
+    } catch (e) {
+      debugPrint("⚠️ DB_RESCUE: Error during item rescue: $e");
+    }
+
     final result = await db.query('items', where: 'license_id = ?', whereArgs: [licenseId]);
     return result.map((json) => ItemModel.fromMap(json)).toList();
   }
@@ -703,7 +761,7 @@ class DatabaseHelper {
   Future<int> insertCategory(CategoryModel category) async {
     final db = await instance.database;
     final map = category.toMap();
-    map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    map['license_id'] = app_fs.FirebaseService.activeLicenseKey ?? 'NONE';
 
     // Self-healing for categories
     for (var col in map.keys) {
@@ -718,7 +776,16 @@ class DatabaseHelper {
   }
   Future<List<CategoryModel>> getAllCategories() async {
     final db = await instance.database;
-    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final licenseId = app_fs.FirebaseService.activeLicenseKey;
+
+    // 🚑 ATTEMPT RESCUE
+    try {
+      final check = await db.rawQuery("SELECT COUNT(*) as c FROM categories WHERE license_id = ?", [licenseId]);
+      if ((Sqflite.firstIntValue(check) ?? 0) == 0) {
+        await db.execute("UPDATE categories SET license_id = ? WHERE license_id = '' OR license_id IS NULL OR license_id = 'NONE' OR license_id = 'null'", [licenseId]);
+      }
+    } catch (_) {}
+
     final result = await db.query('categories', where: 'license_id = ?', whereArgs: [licenseId], orderBy: 'display_order ASC');
     return result.map((json) => CategoryModel.fromMap(json)).toList();
   }
@@ -746,7 +813,7 @@ class DatabaseHelper {
   Future<int> insertStaff(StaffModel staff) async {
     final db = await instance.database;
     final map = staff.toMap();
-    map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    map['license_id'] = app_fs.FirebaseService.activeLicenseKey ?? 'NONE';
     
     // Self-healing for staff
     for (var col in map.keys) {
@@ -761,7 +828,15 @@ class DatabaseHelper {
   }
   Future<List<StaffModel>> getAllStaff() async {
     final db = await instance.database;
-    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final licenseId = app_fs.FirebaseService.activeLicenseKey;
+
+    try {
+      final check = await db.rawQuery("SELECT COUNT(*) as c FROM staff WHERE license_id = ?", [licenseId]);
+      if ((Sqflite.firstIntValue(check) ?? 0) == 0) {
+        await db.execute("UPDATE staff SET license_id = ? WHERE license_id = '' OR license_id IS NULL OR license_id = 'NONE'", [licenseId]);
+      }
+    } catch (_) {}
+
     final result = await db.query('staff', where: 'license_id = ?', whereArgs: [licenseId]);
     return result.map((json) => StaffModel.fromMap(json)).toList();
   }
@@ -785,7 +860,7 @@ class DatabaseHelper {
   Future<int> insertSupplier(SupplierModel supplier) async {
     final db = await instance.database;
     final map = supplier.toMap();
-    map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    map['license_id'] = app_fs.FirebaseService.activeLicenseKey ?? 'NONE';
     
     // Self-healing for suppliers
     for (var col in map.keys) {
@@ -800,7 +875,15 @@ class DatabaseHelper {
   }
   Future<List<SupplierModel>> getAllSuppliers() async {
     final db = await instance.database;
-    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final licenseId = app_fs.FirebaseService.activeLicenseKey;
+
+    try {
+      final check = await db.rawQuery("SELECT COUNT(*) as c FROM suppliers WHERE license_id = ?", [licenseId]);
+      if ((Sqflite.firstIntValue(check) ?? 0) == 0) {
+        await db.execute("UPDATE suppliers SET license_id = ? WHERE license_id = '' OR license_id IS NULL OR license_id = 'NONE'", [licenseId]);
+      }
+    } catch (_) {}
+
     final result = await db.query('suppliers', where: 'license_id = ?', whereArgs: [licenseId]);
     return result.map((json) => SupplierModel.fromMap(json)).toList();
   }
@@ -834,7 +917,7 @@ class DatabaseHelper {
         'is_synced': isSynced,
         'is_deleted': 0,
         'updated_at': now,
-        'license_id': FirebaseService.activeLicenseKey ?? 'NONE',
+        'license_id': app_fs.FirebaseService.activeLicenseKey ?? 'NONE',
       }, 
       conflictAlgorithm: ConflictAlgorithm.replace
     );
@@ -856,7 +939,15 @@ class DatabaseHelper {
   }
   Future<List<Map<String, dynamic>>> getAllUnits() async {
     final db = await instance.database;
-    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final licenseId = app_fs.FirebaseService.activeLicenseKey;
+
+    try {
+      final check = await db.rawQuery("SELECT COUNT(*) as c FROM units WHERE license_id = ?", [licenseId]);
+      if ((Sqflite.firstIntValue(check) ?? 0) == 0) {
+        await db.execute("UPDATE units SET license_id = ? WHERE license_id = '' OR license_id IS NULL OR license_id = 'NONE'", [licenseId]);
+      }
+    } catch (_) {}
+
     return await db.query('units', where: 'license_id = ?', whereArgs: [licenseId]);
   }
   Future<int> softDeleteUnit(int id) async {
@@ -880,7 +971,7 @@ class DatabaseHelper {
     reminder.updatedAt = DateTime.now();
     reminder.isSynced = 0;
     final map = reminder.toMap();
-    map['license_id'] = FirebaseService.activeLicenseKey ?? 'NONE';
+    map['license_id'] = app_fs.FirebaseService.activeLicenseKey ?? 'NONE';
     
     // Self-healing for purchase_reminders
     for (var col in map.keys) {
@@ -930,7 +1021,15 @@ class DatabaseHelper {
 
   Future<List<PurchaseReminderModel>> getAllPurchaseReminders() async {
     final db = await instance.database;
-    final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+    final licenseId = app_fs.FirebaseService.activeLicenseKey;
+
+    try {
+      final check = await db.rawQuery("SELECT COUNT(*) as c FROM purchase_reminders WHERE license_id = ?", [licenseId]);
+      if ((Sqflite.firstIntValue(check) ?? 0) == 0) {
+        await db.execute("UPDATE purchase_reminders SET license_id = ? WHERE license_id = '' OR license_id IS NULL OR license_id = 'NONE'", [licenseId]);
+      }
+    } catch (_) {}
+
     final result = await db.query('purchase_reminders', where: 'is_deleted = 0 AND license_id = ?', whereArgs: [licenseId], orderBy: 'due_date ASC');
     return result.map((json) => PurchaseReminderModel.fromMap(json)).toList();
   }

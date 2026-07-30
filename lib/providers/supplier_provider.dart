@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import '../models/supplier_model.dart';
-import '../core/database/database_helper.dart';
-import '../services/firebase_service.dart';
+import 'package:apna_hisaab/models/supplier_model.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
+import 'package:apna_hisaab/services/firebase_service.dart';
 
 class SupplierProvider with ChangeNotifier {
   List<SupplierModel> _suppliers = [];

@@ -8,16 +8,16 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:async';
-import '../../services/license_service.dart';
-import '../../providers/profile_provider.dart';
+import 'package:apna_hisaab/services/license_service.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
 
-import '../../utils/report_helper.dart';
+import 'package:apna_hisaab/utils/report_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../services/export_service.dart';
-import '../../services/firebase_service.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/services/export_service.dart';
+import 'package:apna_hisaab/services/firebase_service.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -655,6 +655,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 data['restaurantName'] ?? "N/A",
                 Icons.storefront_rounded,
                 profile,
+              ),
+              _detailRow(
+                "Owner UID (Store ID)",
+                data['activatedBy'] ?? "Not Activated",
+                Icons.badge_rounded,
+                profile,
+                valueColor: data['activatedBy'] == null ? Colors.orange : null,
+                isSelectable: true,
               ),
               Row(
                 children: [
@@ -1441,7 +1449,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
       context,
       initial,
       profile.themeColor,
-      lastDate: DateTime(2030),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
     );
     if (picked != null) {
       await LicenseService.firestore
@@ -1575,7 +1583,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                   if (value == 'staff') _showStaffManagement(profile);
                   if (value == 'cleanup') _performDataCleanup(profile);
                   if (value == 'logs') _showLogsModal(profile);
-
+                  if (value == 'user_directory') _showUserDirectory(profile);
                 },
                 itemBuilder: (context) => [
                   if (_adminRole == 'super_admin')
@@ -1607,6 +1615,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                         iconColor: Colors.amber,
                       ),
                     ),
+                  PopupMenuItem(
+                    value: 'user_directory',
+                    child: _buildPopupItem(
+                      Icons.badge_rounded,
+                      "User Directory",
+                      profile,
+                    ),
+                  ),
                   PopupMenuItem(
                     value: 'logs',
                     child: _buildPopupItem(
@@ -2436,6 +2452,104 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           },
         ),
       ),
+    );
+  }
+
+  void _showUserDirectory(ProfileProvider profile) {
+    final TextEditingController searchController = TextEditingController();
+
+    AppBottomSheet.show(
+      context: context,
+      profile: profile,
+      title: "USER DIRECTORY",
+      child: StatefulBuilder(
+        builder: (context, setModalState) => SizedBox(
+          height: MediaQuery.of(context).size.height * 0.75,
+          child: Column(
+            children: [
+              TextField(
+                controller: searchController,
+                onChanged: (_) => setModalState(() {}),
+                style: TextStyle(color: profile.textColor),
+                decoration: InputDecoration(
+                  hintText: "Search Name or UID...",
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  filled: true,
+                  fillColor: profile.scaffoldColor.withValues(alpha: 0.5),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              Expanded(
+                child: _buildLicenseBasedDir(searchController.text, profile),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLicenseBasedDir(String query, ProfileProvider profile) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: LicenseService.firestore.collection('licenses').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final docs = snapshot.data!.docs;
+        final q = query.toLowerCase();
+
+        final filtered = docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final name = (data['restaurantName'] ?? '').toString().toLowerCase();
+          final uid = (data['activatedBy'] ?? '').toString().toLowerCase();
+          return name.contains(q) || uid.contains(q);
+        }).toList();
+
+        if (filtered.isEmpty) return Center(child: Text("No licenses found", style: TextStyle(color: profile.secondaryTextColor)));
+
+        return ListView.builder(
+          itemCount: filtered.length,
+          itemBuilder: (context, index) {
+            final data = filtered[index].data() as Map<String, dynamic>;
+            final uid = data['activatedBy'] ?? "Not Activated";
+            final name = data['restaurantName'] ?? "N/A";
+            final key = data['licenseKey'] ?? "N/A";
+
+            return Card(
+              color: profile.scaffoldColor,
+              margin: const EdgeInsets.only(bottom: 12),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: profile.themeColor.withValues(alpha: 0.1)),
+              ),
+              child: ListTile(
+                title: Text(name, style: TextStyle(fontWeight: FontWeight.bold, color: profile.textColor)),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Text("UID: $uid", style: TextStyle(color: profile.secondaryTextColor, fontSize: 11)),
+                    Text("Key: $key", style: TextStyle(color: profile.secondaryTextColor, fontSize: 11)),
+                  ],
+                ),
+                trailing: uid != "Not Activated" ? IconButton(
+                  icon: Icon(Icons.copy_rounded, color: profile.themeColor, size: 20),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: uid.toString()));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("UID Copied!"), duration: Duration(seconds: 1)));
+                  },
+                ) : null,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

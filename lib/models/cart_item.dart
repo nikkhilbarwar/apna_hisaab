@@ -1,4 +1,4 @@
-import 'item_model.dart';
+import 'package:apna_hisaab/models/item_model.dart';
 
 class CartItem {
   final ItemModel item;

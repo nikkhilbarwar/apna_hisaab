@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -14,6 +15,11 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      debugPrint("Notifications: Initializing placeholder for desktop...");
+      return;
+    }
+
     tz.initializeTimeZones();
     
     // Request permission for FCM
@@ -80,6 +86,8 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       'pending_orders',

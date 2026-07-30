@@ -3,13 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../providers/profile_provider.dart';
-import '../../services/license_service.dart';
-import '../../services/auth_service.dart';
-import '../../providers/transaction_provider.dart';
-import '../../main.dart';
-import 'login_screen.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/services/license_service.dart';
+import 'package:apna_hisaab/services/auth_service.dart';
+import 'package:apna_hisaab/providers/transaction_provider.dart';
+import 'package:apna_hisaab/core/app_root.dart';
+import 'package:apna_hisaab/screens/auth/login_screen.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
+
+// Removed SplashScreen import as it was unused and causing conflicts
 
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key});
@@ -97,7 +99,10 @@ class _ActivationScreenState extends State<ActivationScreen> {
 
               if (mounted) {
                 // Restart app to refresh all providers and navigation state
-                RestartWidget.restartApp(context);
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
               }
             }
           }
@@ -128,12 +133,44 @@ class _ActivationScreenState extends State<ActivationScreen> {
     );
 
     if (confirm == true) {
-      await AuthService().signOut();
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-          (route) => false,
-        );
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text("Logging out...", style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      
+      try {
+        await AuthService().signOut();
+        
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+            (route) => false,
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop(); // Close loader
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Logout Error: $e")),
+          );
+        }
       }
     }
   }
@@ -158,6 +195,8 @@ class _ActivationScreenState extends State<ActivationScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Account Deleted Successfully")),
           );
+          
+          // Redirect to login screen
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (context) => const LoginScreen()),
             (route) => false,

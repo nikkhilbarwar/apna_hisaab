@@ -1,11 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../services/auth_service.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
-import '../../providers/profile_provider.dart';
-import 'staff_login_screen.dart';
-import 'auth_wrapper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:apna_hisaab/services/auth_service.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/screens/auth/staff_login_screen.dart';
+import 'package:apna_hisaab/screens/auth/auth_wrapper.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -25,6 +26,35 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _isTermsAccepted = false;
+  bool _rememberMe = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _emailController.text = prefs.getString('saved_email') ?? '';
+      _passwordController.text = prefs.getString('saved_password') ?? '';
+      _rememberMe = prefs.getBool('remember_me') ?? false;
+    });
+  }
+
+  Future<void> _saveCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberMe) {
+      await prefs.setString('saved_email', _emailController.text.trim());
+      await prefs.setString('saved_password', _passwordController.text.trim());
+      await prefs.setBool('remember_me', true);
+    } else {
+      await prefs.remove('saved_email');
+      await prefs.remove('saved_password');
+      await prefs.setBool('remember_me', false);
+    }
+  }
 
   void _showTermsDialog() {
     final profile = Provider.of<ProfileProvider>(context, listen: false);
@@ -107,6 +137,10 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         await _authService.registerWithEmail(_emailController.text.trim(), _passwordController.text.trim());
       }
+      
+      // Save credentials if Remember Me is checked
+      await _saveCredentials();
+
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const AuthWrapper()),
@@ -360,6 +394,26 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Text("Forgot Password?", style: TextStyle(color: themeColor, fontSize: 12, fontWeight: FontWeight.bold)),
                                 ),
                               ),
+                            
+                            // Remember Me Checkbox
+                            Row(
+                              children: [
+                                SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: Checkbox(
+                                    value: _rememberMe,
+                                    activeColor: themeColor,
+                                    onChanged: (val) => setState(() => _rememberMe = val ?? false),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "Remember Me",
+                                  style: TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 12),
                             Padding(
                               padding: const EdgeInsets.only(bottom: 16.0),

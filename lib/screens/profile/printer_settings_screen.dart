@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
 import 'package:provider/provider.dart';
-import '../../providers/printer_provider.dart';
-import '../../providers/profile_provider.dart';
-import '../../models/printer_config.dart';
+import 'package:apna_hisaab/providers/printer_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/models/printer_config.dart';
 
 class PrinterSettingsScreen extends StatefulWidget {
   const PrinterSettingsScreen({super.key});

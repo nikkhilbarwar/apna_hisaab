@@ -11,13 +11,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:printing/printing.dart';
-import '../core/database/database_helper.dart';
-import '../models/staff_model.dart';
-import '../models/transaction_model.dart';
-import '../models/item_model.dart';
-
-import '../models/staff_model.dart';
-import '../providers/staff_provider.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
+import 'package:apna_hisaab/models/staff_model.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/providers/staff_provider.dart';
 
 class ExportService {
   Future<Directory> _getAppDirectory() async {
@@ -293,9 +291,9 @@ class ExportService {
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.blue900),
                 cellAlignment: pw.Alignment.centerLeft,
                 columnWidths: {
-                  0: const pw.FlexColumnWidth(4),
-                  1: const pw.FlexColumnWidth(2),
-                  2: const pw.FlexColumnWidth(2),
+                  0: const pw.FlexColumnWidth(5),
+                  1: const pw.FlexColumnWidth(1.5),
+                  2: const pw.FlexColumnWidth(1.5),
                 },
                 headers: ['DESCRIPTION / LICENSE KEY', 'VALIDITY', 'AMOUNT'],
                 data: [
@@ -779,7 +777,13 @@ class ExportService {
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.roll80,
+        // Fix: Reduced height from 500cm to 300mm to prevent "Blank Paper" print issues.
+        // If the bill is longer, it will automatically overflow to a second page.
+        pageFormat: const PdfPageFormat(80 * PdfPageFormat.mm, 300 * PdfPageFormat.mm, marginAll: 5 * PdfPageFormat.mm),
+        theme: pw.ThemeData.withFont(
+          base: pw.Font.helvetica(),
+          bold: pw.Font.helveticaBold(),
+        ),
         build: (context) => [
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -794,10 +798,12 @@ class ExportService {
                         margin: const pw.EdgeInsets.only(bottom: 5),
                         child: pw.Image(logoImage),
                       ),
-                    pw.Text(
-                      businessName.toUpperCase(), 
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
-                      textAlign: pw.TextAlign.center,
+                    pw.Center(
+                      child: pw.Text(
+                        businessName.toUpperCase(), 
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                        textAlign: pw.TextAlign.center,
+                      ),
                     ),
                     if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
                     if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7)),
@@ -838,10 +844,10 @@ class ExportService {
 
               pw.Row(
                 children: [
-                  pw.Expanded(flex: 4, child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                  pw.Expanded(flex: 1, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
-                  pw.Expanded(flex: 2, child: pw.Text("RATE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
-                  pw.Expanded(flex: 2, child: pw.Text("TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                  pw.Expanded(flex: 5, child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                  pw.Expanded(flex: 2, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.center)),
+                  pw.Expanded(flex: 2, child: pw.Text("RATE", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                  pw.Expanded(flex: 3, child: pw.Text("TOTAL", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
                 ],
               ),
               pw.SizedBox(height: 4),
@@ -850,10 +856,10 @@ class ExportService {
                   padding: const pw.EdgeInsets.symmetric(vertical: 2),
                   child: pw.Row(
                     children: [
-                      pw.Expanded(flex: 4, child: pw.Text(tx.category, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-                      pw.Expanded(flex: 1, child: pw.Text("1", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                      pw.Expanded(flex: 2, child: pw.Text(subtotal.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                      pw.Expanded(flex: 5, child: pw.Text(tx.category, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+                      pw.Expanded(flex: 2, child: pw.Text("1", style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
                       pw.Expanded(flex: 2, child: pw.Text(subtotal.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                      pw.Expanded(flex: 3, child: pw.Text(subtotal.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
                     ],
                   ),
                 )
@@ -884,10 +890,10 @@ class ExportService {
                         pw.Row(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
-                            pw.Expanded(flex: 4, child: pw.Text(displayName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
-                            pw.Expanded(flex: 1, child: pw.Text(qtyStr, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                            pw.Expanded(flex: 2, child: pw.Text(item.price.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
-                            pw.Expanded(flex: 2, child: pw.Text(item.lineTotal.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                            pw.Expanded(flex: 5, child: pw.Text(displayName, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+                            pw.Expanded(flex: 2, child: pw.Text(qtyStr, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                            pw.Expanded(flex: 2, child: pw.Text(item.price.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                            pw.Expanded(flex: 3, child: pw.Text(item.lineTotal.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
                           ],
                         ),
                         if (detailString.isNotEmpty)
@@ -918,17 +924,26 @@ class ExportService {
 
               pw.SizedBox(height: 8),
               pw.Container(
-                padding: const pw.EdgeInsets.all(4),
-                decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                decoration: const pw.BoxDecoration(
+                  border: pw.Border(
+                    top: pw.BorderSide(width: 1, color: PdfColors.black),
+                    bottom: pw.BorderSide(width: 1, color: PdfColors.black),
+                  ),
+                ),
+                child: pw.Column(
                   children: [
-                    pw.Text("ITEM COUNT: ${snapshots.length}", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
                     pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text("GRAND TOTAL: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                        pw.Text("${tx.amount.toStringAsFixed(2)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
-                      ]
+                        pw.Text("ITEM COUNT: ${snapshots.isEmpty ? 1 : snapshots.length}", style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Row(
+                          children: [
+                            pw.Text("GRAND TOTAL: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                            pw.Text("${tx.amount.toStringAsFixed(2)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                          ]
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1032,7 +1047,13 @@ class ExportService {
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.roll80,
+        // Fix: Reduced height from 500cm to 300mm to prevent "Blank Paper" print issues.
+        // If the bill is longer, it will automatically overflow to a second page.
+        pageFormat: const PdfPageFormat(80 * PdfPageFormat.mm, 300 * PdfPageFormat.mm, marginAll: 5 * PdfPageFormat.mm),
+        theme: pw.ThemeData.withFont(
+          base: pw.Font.helvetica(),
+          bold: pw.Font.helveticaBold(),
+        ),
         build: (context) => [
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1042,9 +1063,11 @@ class ExportService {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.Text(businessName.toUpperCase(), 
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
-                      textAlign: pw.TextAlign.center,
+                    pw.Center(
+                      child: pw.Text(businessName.toUpperCase(), 
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                        textAlign: pw.TextAlign.center,
+                      ),
                     ),
                     if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
                     if (contact.isNotEmpty) pw.Text("PH: $contact", style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
@@ -1078,6 +1101,13 @@ class ExportService {
               ],
 
               pw.Divider(thickness: 0.5),
+              pw.Row(
+                children: [
+                  pw.Expanded(flex: 7, child: pw.Text("ITEM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                  pw.Expanded(flex: 3, child: pw.Text("QTY", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8), textAlign: pw.TextAlign.right)),
+                ],
+              ),
+              pw.SizedBox(height: 4),
               ...snapshots.map((item) {
                 // Handle 0.5 for Half items
                 String qtyStr;
@@ -1095,28 +1125,35 @@ class ExportService {
                 String variantDisplay = hideV ? "" : "(${item.variant})";
 
                 return pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 3),
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Row(
                         children: [
                           pw.Expanded(
-                            child: pw.Text("[ ] $qtyStr x $cleanName $variantDisplay",
-                              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                            flex: 7,
+                            child: pw.Text("$cleanName $variantDisplay",
+                              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                          ),
+                          pw.Expanded(
+                            flex: 3,
+                            child: pw.Text(qtyStr,
+                              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+                              textAlign: pw.TextAlign.right),
                           ),
                         ],
                       ),
                       if (item.extraQty > 0)
                         pw.Padding(
-                          padding: const pw.EdgeInsets.only(left: 15),
+                          padding: const pw.EdgeInsets.only(top: 2),
                           child: pw.Text("+ EXTRA PC'S: ${item.extraQty % 1 == 0 ? item.extraQty.toInt() : item.extraQty}",
-                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
                         ),
                       if (item.servingMethod.toLowerCase() == 'takeaway')
                         pw.Padding(
-                          padding: const pw.EdgeInsets.only(left: 15),
-                          child: pw.Text("[ TAKEAWAY ]", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                          padding: const pw.EdgeInsets.only(top: 2),
+                          child: pw.Text("[ TAKEAWAY ]", style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
                         ),
                     ],
                   ),

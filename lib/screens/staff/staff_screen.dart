@@ -5,13 +5,13 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/rendering.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../../providers/staff_provider.dart';
-import '../../models/staff_model.dart';
-import '../../providers/profile_provider.dart';
-import '../../utils/report_helper.dart';
-import '../../utils/image_helper.dart';
-import '../../services/export_service.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/providers/staff_provider.dart';
+import 'package:apna_hisaab/models/staff_model.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/utils/report_helper.dart';
+import 'package:apna_hisaab/utils/image_helper.dart';
+import 'package:apna_hisaab/services/export_service.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
 
 class StaffScreen extends StatefulWidget {
   const StaffScreen({super.key});
@@ -1517,6 +1517,7 @@ class _StaffScreenState extends State<StaffScreen> {
                   profileProvider,
                   themeColor,
                   _loginEnabled,
+                  (v) => _loginEnabled = v,
                   _codeController,
                   _pinController,
                   _tempPermissions,
@@ -1577,7 +1578,8 @@ class _StaffScreenState extends State<StaffScreen> {
     StateSetter setStateSheet,
     ProfileProvider profileProvider,
     Color themeColor,
-    bool loginEnabled,
+    bool isEnabled,
+    Function(bool) onToggleEnabled,
     TextEditingController codeController,
     TextEditingController pinController,
     Map<String, dynamic> permissions,
@@ -1604,13 +1606,13 @@ class _StaffScreenState extends State<StaffScreen> {
                 ],
               ),
               Switch.adaptive(
-                value: loginEnabled,
+                value: isEnabled,
                 activeColor: themeColor,
-                onChanged: (val) => setStateSheet(() => loginEnabled = val),
+                onChanged: (val) => setStateSheet(() => onToggleEnabled(val)),
               ),
             ],
           ),
-          if (loginEnabled) ...[
+          if (isEnabled) ...[
             const Divider(height: 24),
             Row(
               children: [

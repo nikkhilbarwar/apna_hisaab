@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/staff_model.dart';
-import '../services/firebase_service.dart';
+import 'package:apna_hisaab/models/staff_model.dart';
+import 'package:apna_hisaab/services/firebase_service.dart';
 
 class StaffAuthProvider with ChangeNotifier {
   StaffModel? _currentStaff;
@@ -46,7 +46,9 @@ class StaffAuthProvider with ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('current_staff_session', jsonEncode(staff.toMap()));
-      await prefs.setString('staff_license_key', licenseKey); // Save license key
+      await prefs.setString('staff_license_key', licenseKey); 
+      
+      FirebaseService.activeLicenseKey = licenseKey;
       _currentStaff = staff;
       _isStaffLoggedIn = true;
       notifyListeners();
@@ -59,7 +61,9 @@ class StaffAuthProvider with ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('current_staff_session');
-      await prefs.remove('staff_license_key'); // Remove license key
+      await prefs.remove('staff_license_key'); 
+      
+      FirebaseService.activeLicenseKey = 'NONE';
       _currentStaff = null;
       _isStaffLoggedIn = false;
       notifyListeners();

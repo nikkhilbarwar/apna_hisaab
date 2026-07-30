@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:intl/intl.dart';
-import '../core/database/database_helper.dart';
-import '../models/item_model.dart';
-import '../models/category_model.dart';
-import '../models/recipe_model.dart';
-import '../services/firebase_service.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/models/recipe_model.dart';
+import 'package:apna_hisaab/services/firebase_service.dart';
 
 class ItemProvider with ChangeNotifier {
   List<ItemModel> _items = [];
@@ -209,7 +209,9 @@ class ItemProvider with ChangeNotifier {
 
   Future<void> fetchItems() async {
     try {
+      final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
       _items = await DatabaseHelper.instance.getAllItems();
+      debugPrint("📦 ITEM_PROVIDER: Loaded ${_items.length} items from local DB (Active License: $licenseId)");
       await _fetchRecipes();
       notifyListeners();
     } catch (e) {

@@ -1,0 +1,5 @@
+- `[ ]` Enhance `FirebaseService` with better error handling and logging
+- `[ ]` Improve `DatabaseHelper` logging and resilience
+- `[ ]` Refactor `SyncProvider.fullRestoreFromServer` for robustness
+- `[ ]` Synchronize `TransactionProvider.masterRestoreFromCloud` logic
+- `[ ]` Verify restore functionality with the user

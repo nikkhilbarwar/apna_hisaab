@@ -2,13 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../models/staff_model.dart';
-import '../../providers/profile_provider.dart';
-import '../../providers/staff_auth_provider.dart';
-import '../../providers/staff_provider.dart';
-import '../../services/firebase_service.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
-import '../main_navigation.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
+import 'package:apna_hisaab/models/staff_model.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/staff_auth_provider.dart';
+import 'package:apna_hisaab/providers/staff_provider.dart';
+import 'package:apna_hisaab/services/firebase_service.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/screens/main_navigation.dart';
 
 class StaffLoginScreen extends StatefulWidget {
   const StaffLoginScreen({super.key});
@@ -51,28 +52,61 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     });
 
     try {
+      debugPrint("🔍 STAFF_LOGIN: Verifying ID: $inputKey");
+      
       // 1. First, try as a License Key
       final licenseDoc = await FirebaseFirestore.instance.collection('licenses').doc(inputKey.toUpperCase()).get();
       
       String finalKey;
       if (licenseDoc.exists) {
         finalKey = inputKey.toUpperCase();
+        debugPrint("✅ STAFF_LOGIN: Matched as License Key");
       } else {
-        // 2. If not a license, try as a Store ID (User UID)
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(inputKey).get();
-        if (userDoc.exists) {
+        // 2. If not a license, try as a Store ID (Check business_info doc which definitely exists)
+        final bizDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(inputKey)
+            .collection('profile')
+            .doc('business_info')
+            .get();
+
+        if (bizDoc.exists) {
           finalKey = inputKey;
+          debugPrint("✅ STAFF_LOGIN: Matched as Store ID (UID)");
         } else {
+          debugPrint("❌ STAFF_LOGIN: No license or user profile found for $inputKey");
           throw "Invalid Store ID or License Key. Please check with your manager.";
         }
       }
 
       // 3. Set the global key for partitioning
       FirebaseService.activeLicenseKey = finalKey;
+      DatabaseHelper.resetDatabase(); // Ensure we use the correct partitioned DB
       
       // 4. Store locally for future quick login
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('staff_license_key', finalKey);
+
+      // 5. BOOTSTRAP: Fetch authorized staff list from cloud immediately
+      setState(() => _isLoading = true); 
+      try {
+        final cloudStaff = await FirebaseService().fetchAllStaff();
+        if (cloudStaff.isNotEmpty) {
+          await DatabaseHelper.instance.batchInsert('staff', cloudStaff.map((s) {
+            s.isSynced = 1;
+            s.licenseId = finalKey;
+            return s.toMap();
+          }).toList());
+          debugPrint("✅ STAFF_LOGIN: Bootstrapped ${cloudStaff.length} staff members.");
+          
+          // CRITICAL: Refresh Provider so Step 2 can find the staff
+          if (mounted) {
+            await Provider.of<StaffProvider>(context, listen: false).fetchStaff();
+          }
+        }
+      } catch (e) {
+        debugPrint("⚠️ STAFF_LOGIN: Staff bootstrap failed: $e");
+      }
       
       setState(() {
         _step = 1;
@@ -88,7 +122,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
 
   Future<void> _attemptLogin() async {
     final code = _staffCodeController.text.trim();
-    final pin = _pinControllers.map((c) => c.text).join();
+    final pin = _pinControllers.map((c) => c.text.trim()).join();
 
     if (code.isEmpty || pin.length < 4) {
       _showError("Login Required", "Enter Staff Code and 4-digit PIN");
@@ -98,18 +132,44 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Fetch staff from local/sync provider
+      // 1. Refresh Data & Check Local
       final staffProvider = Provider.of<StaffProvider>(context, listen: false);
-      await staffProvider.fetchStaff(); // Ensure data is loaded
+      await staffProvider.fetchStaff(); 
       
-      final staff = await staffProvider.getStaffByCode(code);
+      debugPrint("🔍 STAFF_LOGIN: Searching for '$code' in ${staffProvider.allStaff.length} local staff.");
+      
+      StaffModel? staff = await staffProvider.getStaffByCode(code);
 
+      // 2. If not found, do an AGGRESSIVE Cloud Search
       if (staff == null) {
-        throw "Invalid Staff Code or Login Disabled";
+        debugPrint("🔍 STAFF_LOGIN: Not found locally, attempting direct cloud fetch...");
+        final cloudStaff = await FirebaseService().fetchAllStaff();
+        debugPrint("📊 STAFF_LOGIN: Found ${cloudStaff.length} staff in cloud.");
+        
+        for (var s in cloudStaff) {
+          debugPrint("   - Code: '${s.staffCode}' Name: '${s.name}' Enabled: ${s.isLoginEnabled}");
+        }
+
+        final match = cloudStaff.where((s) => s.staffCode.toUpperCase() == code.toUpperCase());
+        if (match.isNotEmpty) {
+          staff = match.first;
+          debugPrint("✅ STAFF_LOGIN: Cloud match found: ${staff.name}");
+        }
       }
 
-      if (staff.loginPin != pin) {
-        throw "Incorrect PIN. Please try again.";
+      if (staff == null) {
+        debugPrint("❌ STAFF_LOGIN: Code '$code' not found anywhere.");
+        throw "Staff Code '$code' not found. Please verify with your manager.";
+      }
+
+      if (!staff.isLoginEnabled) {
+         throw "Login is disabled for '${staff.name}'. Please contact manager.";
+      }
+
+      final storedPin = staff.loginPin.trim();
+      if (storedPin != pin) {
+        debugPrint("❌ STAFF_LOGIN: PIN mismatch for ${staff.name}. Input: '$pin' vs Stored: '$storedPin'");
+        throw "Incorrect PIN for ${staff.name}. Please try again.";
       }
 
       // 2. Save session in StaffAuthProvider
@@ -160,9 +220,11 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                _step == 0 
-                    ? "Enter the store license key provided by your manager." 
-                    : "Enter your unique staff code and security PIN.",
+                _isLoading 
+                    ? "Please wait while we connect to the store..."
+                    : (_step == 0 
+                        ? "Enter the store license key provided by your manager." 
+                        : "Enter your unique staff code and security PIN."),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey[600]),
               ),

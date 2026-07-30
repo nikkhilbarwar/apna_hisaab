@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import '../screens/items/icon_crop_screen.dart';
+import 'package:apna_hisaab/screens/items/icon_crop_screen.dart';
 
 class ImageHelper {
   static Future<String?> pickAndCropItemIcon({
@@ -46,5 +46,16 @@ class ImageHelper {
       debugPrint("Error saving permanent image: $e");
       return croppedPath;
     }
+  }
+
+  static Future<File?> pickImageFromGallery() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
+    if (image == null) return null;
+    return File(image.path);
   }
 }

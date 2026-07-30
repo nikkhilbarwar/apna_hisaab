@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
 
 class AppBottomSheet extends StatelessWidget {
   final Widget child;

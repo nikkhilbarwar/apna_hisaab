@@ -6,10 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:path_provider/path_provider.dart';
-import '../services/license_service.dart';
-import '../services/local_auth_service.dart';
-import '../services/firebase_service.dart';
-import '../core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/services/license_service.dart';
+import 'package:apna_hisaab/services/local_auth_service.dart';
+import 'package:apna_hisaab/services/firebase_service.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
 
 class ProfileProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
@@ -57,6 +57,7 @@ class ProfileProvider with ChangeNotifier {
   String _adminRole = 'user';
   bool _isLoading = true;
   bool _hasUnreadSupportReply = false;
+  bool _isTimeManipulated = false; // समय के साथ छेड़छाड़ का पता लगाने के लिए
   StreamSubscription? _authSub;
   StreamSubscription? _licenseSub;
   StreamSubscription? _supportSub;
@@ -89,9 +90,20 @@ class ProfileProvider with ChangeNotifier {
   int get themeColorValue => _themeColorValue;
   int get customThemeColor => _customThemeColors.isNotEmpty ? _customThemeColors.first : 0xFF5E35B1;
   double get taxPercentage => _taxPercentage;
-  bool get isActivated => _isActivated;
+  bool get isActivated => _isActivated && licenseKey != 'NONE';
   DateTime? get expiryDate => _expiryDate;
-  String get licenseKey => _licenseKey;
+  String get licenseKey => (_licenseKey.trim().isEmpty) ? 'NONE' : _licenseKey;
+
+  String get storeConnectionId {
+    // 1. If a staff member is logged in, they are connected via a specific key
+    // We can't access StaffAuthProvider here directly without context, 
+    // but the licenseKey getter already returns the active partition key.
+    if (licenseKey != 'NONE') return licenseKey;
+    
+    // 2. If it's an owner with no license, their UID is their Store ID
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return uid ?? 'NONE';
+  }
   bool get isLifetime => _isLifetime;
   double get amountPaid => _amountPaid;
   String get planType => _planType;
@@ -129,8 +141,9 @@ class ProfileProvider with ChangeNotifier {
 
   bool get isDarkMode => _isDarkMode;
   bool get isReminderEnabled => _isReminderEnabled;
-  bool get saleBlocked => _saleBlocked;
-  bool get expenseBlocked => _expenseBlocked;
+  bool get saleBlocked => _saleBlocked || _isTimeManipulated;
+  bool get expenseBlocked => _expenseBlocked || _isTimeManipulated;
+  bool get isTimeManipulated => _isTimeManipulated;
   bool get isLoading => _isLoading;
 
   Color get scaffoldColor => _isDarkMode ? const Color(0xFF0F111A) : const Color(0xFFF8F9FE);
@@ -147,7 +160,7 @@ class ProfileProvider with ChangeNotifier {
 
   int get remainingDays {
     if (_isLifetime) return 9999;
-    if (_expiryDate == null) return 0;
+    if (_expiryDate == null || _isTimeManipulated) return 0;
     try {
       final diff = _expiryDate!.difference(DateTime.now()).inDays;
       return diff > 0 ? diff : 0;
@@ -210,7 +223,7 @@ class ProfileProvider with ChangeNotifier {
       final hasLocalData = prefs.containsKey(_getUKey('business_name'));
       
       // Update active license key in FirebaseService for partitioning
-      FirebaseService.activeLicenseKey = _licenseKey.isNotEmpty ? _licenseKey : 'NONE';
+      FirebaseService.activeLicenseKey = (_licenseKey.trim().isNotEmpty) ? _licenseKey : 'NONE';
       
       if (!hasLocalData && _isCloudSyncEnabled) {
         await fetchProfileFromCloud();
@@ -243,6 +256,22 @@ class ProfileProvider with ChangeNotifier {
         _customPin = prefs.getString(_getUKey('custom_pin')) ?? '';
         _isPinEnabled = prefs.getBool(_getUKey('is_pin_enabled')) ?? false;
         _isBiometricEnabled = prefs.getBool(_getUKey('is_biometric_enabled')) ?? false;
+
+        // --- Time Manipulation Check ---
+        final now = DateTime.now();
+        String? lastKnownStr = prefs.getString(_getUKey('last_known_date'));
+        if (lastKnownStr != null) {
+          final lastKnown = DateTime.tryParse(lastKnownStr);
+          if (lastKnown != null && now.isBefore(lastKnown.subtract(const Duration(minutes: 5)))) {
+            // अगर वर्तमान समय पिछली बार के समय से 5 मिनट से ज्यादा पीछे है
+            _isTimeManipulated = true;
+          }
+        }
+        
+        // अगर समय सही है, तो इसे अपडेट करें
+        if (!_isTimeManipulated) {
+          await prefs.setString(_getUKey('last_known_date'), now.toIso8601String());
+        }
 
         _isLifetime = prefs.getBool(_getUKey('is_lifetime')) ?? false;
         
@@ -386,6 +415,11 @@ class ProfileProvider with ChangeNotifier {
 
       _licenseSub = LicenseService.firestore.collection('licenses').doc(_licenseKey).snapshots().listen((doc) async {
         if (doc.exists) {
+          // जब ऑनलाइन डेटा मिल जाए, तो Time Manipulation को रिसेट करें
+          _isTimeManipulated = false;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_getUKey('last_known_date'), DateTime.now().toIso8601String());
+
           final data = doc.data()!;
           bool newActivated = data['status'] == 'active';
           
@@ -468,7 +502,7 @@ class ProfileProvider with ChangeNotifier {
 
   Future<bool> activateLicense(String key) async {
     _licenseKey = key.trim();
-    FirebaseService.activeLicenseKey = _licenseKey;
+    FirebaseService.activeLicenseKey = (_licenseKey.isNotEmpty) ? _licenseKey : 'NONE';
     _isActivated = true; // Set locally first to allow navigation
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_getUKey('license_key'), _licenseKey);
@@ -588,9 +622,25 @@ class ProfileProvider with ChangeNotifier {
     if (_isCloudSyncEnabled) _syncToFirebase();
   }
 
-  Future<void> updateProfile({String? businessName, String? ownerName, String? contact, String? address, String? logoPath, String? qrPath, String? qrLabel, String? footerNote, bool? isCloudSyncEnabled, String? currencySymbol, double? taxPercentage, int? totalTables}) async {
+  Future<void> updateProfile({
+    String? businessName,
+    String? ownerName,
+    String? contact,
+    String? address,
+    String? logoPath,
+    String? qrPath,
+    String? qrLabel,
+    String? footerNote,
+    bool? isCloudSyncEnabled,
+    String? currencySymbol,
+    double? taxPercentage,
+    int? totalTables,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    if (businessName != null) { _businessName = businessName; await prefs.setString(_getUKey('business_name'), businessName); }
+    if (businessName != null) {
+      _businessName = businessName;
+      await prefs.setString(_getUKey('business_name'), businessName);
+    }
     if (ownerName != null) { _ownerName = ownerName; await prefs.setString(_getUKey('owner_name'), ownerName); }
     if (contact != null) { _contact = contact; await prefs.setString(_getUKey('contact'), contact); }
     if (address != null) { _address = address; await prefs.setString(_getUKey('address'), address); }
@@ -723,6 +773,7 @@ class ProfileProvider with ChangeNotifier {
     if (map['license_key'] != null) { 
       _licenseKey = map['license_key'].toString().trim(); 
       await prefs.setString(_getUKey('license_key'), _licenseKey); 
+      FirebaseService.activeLicenseKey = (_licenseKey.isNotEmpty) ? _licenseKey : 'NONE';
     }
     if (map['is_app_activated'] != null) { _isActivated = _toBool(map['is_app_activated']); await prefs.setBool(_getUKey('is_app_activated'), _isActivated); }
     if (map['is_lifetime'] != null) { _isLifetime = _toBool(map['is_lifetime']); await prefs.setBool(_getUKey('is_lifetime'), _isLifetime); }

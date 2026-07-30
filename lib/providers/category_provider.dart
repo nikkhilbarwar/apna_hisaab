@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../models/category_model.dart';
-import '../core/database/database_helper.dart';
-import '../services/firebase_service.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
+import 'package:apna_hisaab/services/firebase_service.dart';
 
 class CategoryProvider with ChangeNotifier {
   List<CategoryModel> _categories = [];

@@ -4,7 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:excel/excel.dart';
 import 'package:printing/printing.dart';
-import '../models/transaction_model.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
 import 'package:intl/intl.dart';
 
 class ReportHelper {

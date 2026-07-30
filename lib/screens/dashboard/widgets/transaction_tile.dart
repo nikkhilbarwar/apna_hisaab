@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../../models/transaction_model.dart';
-import '../../../providers/profile_provider.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
 
 class TransactionTile extends StatelessWidget {
   final TransactionModel tx;

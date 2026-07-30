@@ -8,29 +8,31 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
-import '../../main.dart';
-import '../../providers/sync_provider.dart';
-import '../../providers/profile_provider.dart';
-import '../../providers/purchase_reminder_provider.dart';
-import '../../providers/supplier_provider.dart';
-import '../../providers/transaction_provider.dart';
-import '../../providers/item_provider.dart';
-import '../../providers/category_provider.dart';
-import '../../providers/staff_provider.dart';
-import '../../providers/staff_auth_provider.dart';
-import '../../providers/unit_provider.dart';
-import '../../services/auth_service.dart';
-import '../../services/export_service.dart';
-import '../../services/license_service.dart';
-import '../../core/widgets/app_empty_state.dart';
-import '../../utils/app_strings.dart';
-import '../../utils/image_helper.dart';
-import '../auth/login_screen.dart';
-import '../auth/activation_screen.dart';
-import 'printer_settings_screen.dart';
-import 'widgets/business_card.dart';
-import 'widgets/profile_action_card.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/main.dart';
+import 'package:apna_hisaab/providers/sync_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/purchase_reminder_provider.dart';
+import 'package:apna_hisaab/providers/supplier_provider.dart';
+import 'package:apna_hisaab/providers/transaction_provider.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
+import 'package:apna_hisaab/providers/category_provider.dart';
+import 'package:apna_hisaab/providers/staff_provider.dart';
+import 'package:apna_hisaab/providers/staff_auth_provider.dart';
+import 'package:apna_hisaab/providers/unit_provider.dart';
+import 'package:apna_hisaab/services/auth_service.dart';
+import 'package:apna_hisaab/services/export_service.dart';
+import 'package:apna_hisaab/services/license_service.dart';
+import 'package:apna_hisaab/core/widgets/app_empty_state.dart';
+import 'package:apna_hisaab/utils/app_strings.dart';
+import 'package:apna_hisaab/utils/image_helper.dart';
+import 'package:apna_hisaab/screens/auth/login_screen.dart';
+import 'package:apna_hisaab/screens/auth/activation_screen.dart';
+import 'package:apna_hisaab/screens/profile/printer_settings_screen.dart';
+import 'package:apna_hisaab/screens/profile/widgets/business_card.dart';
+import 'package:apna_hisaab/screens/profile/widgets/profile_action_card.dart';
+
+import '../splash_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -477,6 +479,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _confirmLogout() async {
+    debugPrint("🚪 Logout button pressed");
     final profile = Provider.of<ProfileProvider>(context, listen: false);
     final staffAuth = Provider.of<StaffAuthProvider>(context, listen: false);
 
@@ -494,16 +497,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
         false;
 
     if (confirm) {
-      if (staffAuth.isStaffLoggedIn) {
-        await staffAuth.logoutStaff();
-      } else {
-        await _authService.signOut();
+      // 1. Show persistent loader
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text("Logging out...", style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      try {
+        // 2. Perform logout
+        if (staffAuth.isStaffLoggedIn) {
+          await staffAuth.logoutStaff();
+        } else {
+          await _authService.signOut();
+        }
+
+        // 3. Small delay to ensure sync/firebase state is propagated
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        if (!mounted) return;
+        
+        // Redirect to login screen
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false,
+        );
+      } catch (e) {
+        debugPrint("Logout Error: $e");
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop(); // Close loader
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Logout failed: $e")),
+          );
+        }
       }
-
-      if (!mounted) return;
-
-      // Poori app ko restart karein taaki fresh state load ho
-      RestartWidget.restartApp(context);
     }
   }
 

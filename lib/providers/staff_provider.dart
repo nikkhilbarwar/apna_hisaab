@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import '../models/staff_model.dart';
-import '../core/database/database_helper.dart';
-import '../services/firebase_service.dart';
+import 'package:apna_hisaab/models/staff_model.dart';
+import 'package:apna_hisaab/core/database/database_helper.dart';
+import 'package:apna_hisaab/services/firebase_service.dart';
 
 class StaffProvider with ChangeNotifier {
   List<StaffModel> _staffList = [];
@@ -524,13 +524,42 @@ class StaffProvider with ChangeNotifier {
   }
 
   Future<StaffModel?> getStaffByCode(String code) async {
+    final searchCode = code.trim().toUpperCase();
     try {
-      // Ensure we have fresh data
+      // 1. Local Search
       await fetchStaff();
-      return _staffList.firstWhere(
-        (s) => s.staffCode.toUpperCase() == code.toUpperCase() && s.isLoginEnabled && s.isDeleted == 0,
+      final localStaff = _staffList.where(
+        (s) => s.staffCode.trim().toUpperCase() == searchCode && s.isLoginEnabled && s.isDeleted == 0,
       );
-    } catch (_) {
+      if (localStaff.isNotEmpty) {
+        debugPrint("✅ STAFF_PROVIDER: Found staff locally: ${localStaff.first.name}");
+        return localStaff.first;
+      }
+
+      // 2. Cloud Fallback
+      debugPrint("🔍 STAFF_PROVIDER: Checking Cloud for Code: $searchCode");
+      final cloudStaff = await _firebaseService.fetchAllStaff();
+      
+      if (cloudStaff.isNotEmpty) {
+        debugPrint("📊 STAFF_PROVIDER: Found ${cloudStaff.length} staff in cloud. Codes: ${cloudStaff.map((s) => s.staffCode).toList()}");
+        
+        final match = cloudStaff.where(
+          (s) => s.staffCode.trim().toUpperCase() == searchCode && s.isLoginEnabled && s.isDeleted == 0
+        );
+
+        if (match.isNotEmpty) {
+          final staff = match.first;
+          debugPrint("✅ STAFF_PROVIDER: Match found in cloud: ${staff.name}");
+          // Save to local for next time
+          await DatabaseHelper.instance.insertStaff(staff..isSynced = 1);
+          await fetchStaff();
+          return staff;
+        }
+      }
+      debugPrint("❌ STAFF_PROVIDER: No match found for $searchCode");
+      return null;
+    } catch (e) {
+      debugPrint("🔥 STAFF_PROVIDER: Error finding staff: $e");
       return null;
     }
   }

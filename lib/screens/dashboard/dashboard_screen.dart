@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
-import '../../models/category_model.dart';
-import '../../providers/staff_auth_provider.dart';
-import '../../providers/transaction_provider.dart';
-import '../../providers/profile_provider.dart';
-import '../../models/transaction_model.dart';
-import '../../models/item_model.dart';
-import '../../providers/item_provider.dart';
-import '../../providers/purchase_reminder_provider.dart';
-import '../../providers/sync_provider.dart';
-import '../../core/widgets/app_empty_state.dart';
-import '../../utils/app_strings.dart';
-import '../../utils/report_helper.dart';
-import '../daily_entry/entry_screen.dart';
-import '../purchase_reminders/purchase_reminder_screen.dart';
-import '../stock/stock_screen.dart';
-import 'widgets/stat_card.dart';
-import 'widgets/transaction_detail_sheet.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/providers/staff_auth_provider.dart';
+import 'package:apna_hisaab/providers/transaction_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
+import 'package:apna_hisaab/providers/purchase_reminder_provider.dart';
+import 'package:apna_hisaab/providers/sync_provider.dart';
+import 'package:apna_hisaab/core/widgets/app_empty_state.dart';
+import 'package:apna_hisaab/utils/app_strings.dart';
+import 'package:apna_hisaab/utils/report_helper.dart';
+import 'package:apna_hisaab/screens/daily_entry/entry_screen.dart';
+import 'package:apna_hisaab/screens/purchase_reminders/purchase_reminder_screen.dart';
+import 'package:apna_hisaab/screens/stock/stock_screen.dart';
+import 'package:apna_hisaab/screens/dashboard/widgets/stat_card.dart';
+import 'package:apna_hisaab/screens/dashboard/widgets/transaction_detail_sheet.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -34,7 +34,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTimeRange? _selectedDateRange;
 
   bool _isDialogShowing = false;
-
+  
   @override
   void initState() {
     super.initState();
@@ -401,6 +401,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       },
       child: Scaffold(
         backgroundColor: profileProvider.scaffoldColor,
+
         appBar: isSelectionMode
             ? AppBar(
                 backgroundColor: Colors.red.shade700,
@@ -424,38 +425,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ],
               )
-            : AppBar(
-                backgroundColor: profileProvider.scaffoldColor,
-                elevation: 0,
-                title: Row(
-                  children: [
-                    Text(
-                      'LIST MAKER',
-                      style: TextStyle(
-                        color: profileProvider.textColor,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const Spacer(),
-                    _buildSyncIndicator(syncProvider, profileProvider),
-                  ],
-                ),
-              ),
+            : null,
         body: RefreshIndicator(
           onRefresh: () async {
             await syncProvider.syncAllToCloudSilently();
-            await syncProvider.syncCloudToLocalSilently(context: context);
+            if (mounted) {
+              await syncProvider.syncCloudToLocalSilently(context: context);
+            }
           },
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(
               parent: BouncingScrollPhysics(),
             ),
           slivers: [
+
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.only(
-                  top: 16.0,
+                padding: EdgeInsets.only(
+                  top: isSelectionMode ? 16.0 : 12,
                   left: 16,
                   right: 16,
                   bottom: 16,
@@ -594,19 +581,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
 
+
             if (filteredTransactions.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: AppEmptyState(
-                  title: 'No activity found',
-                  subtitle: _activeFilter == 'Pending'
-                      ? 'You have no pending orders at the moment.'
-                      : 'Try changing the filter or date range.',
-                  icon: _activeFilter == 'Pending'
-                      ? Icons.timer_off_outlined
-                      : Icons.history_toggle_off_rounded,
-                ),
-              )
+              const SliverToBoxAdapter(child: SizedBox.shrink())
             else
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1177,10 +1154,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildEmptyState(ProfileProvider profile) {
-    return const Center(child: Text('No Activity Found'));
-  }
-
   bool _isToday(DateTime date) {
     final now = DateTime.now();
     return date.year == now.year &&
@@ -1279,6 +1252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           AppStrings.newSale,
           Icons.add_shopping_cart_rounded,
           Colors.green,
+          isLeft: true,
           () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -1292,6 +1266,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'PURCHASE',
           Icons.shopping_bag_rounded,
           Colors.orangeAccent.shade700,
+          isLeft: false,
           () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -1308,36 +1283,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String label,
     IconData icon,
     Color color,
-    VoidCallback onTap,
-  ) {
+    VoidCallback onTap, {
+    bool isLeft = true,
+  }) {
     return Expanded(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(30),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
+          height: 60,
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(30),
             boxShadow: [
               BoxShadow(
-                color: color.withValues(alpha: 0.4),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
+                color: color.withValues(alpha: 0.35),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: Colors.white, size: 22),
-              const SizedBox(width: 12),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 14,
+              Icon(icon, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    letterSpacing: 0.8,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

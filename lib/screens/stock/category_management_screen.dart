@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/category_provider.dart';
-import '../../models/category_model.dart';
-import '../../providers/item_provider.dart';
-import '../../providers/profile_provider.dart';
-import '../../providers/unit_provider.dart';
-import '../../utils/app_formatter.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
-import '../items/item_management_screen.dart';
+import 'package:apna_hisaab/providers/category_provider.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/unit_provider.dart';
+import 'package:apna_hisaab/utils/app_formatter.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/screens/items/item_management_screen.dart';
 
 class CategoryManagementScreen extends StatefulWidget {
   const CategoryManagementScreen({super.key});

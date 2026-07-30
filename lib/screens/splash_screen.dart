@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../providers/profile_provider.dart';
-import '../services/auth_service.dart';
-import 'auth/auth_wrapper.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/services/auth_service.dart';
+import 'package:apna_hisaab/screens/auth/auth_wrapper.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -85,15 +85,17 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 24),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Text(
                 profile.displayBusinessName.toUpperCase(),
                 textAlign: TextAlign.center,
+                maxLines: 2,
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                   letterSpacing: 1.2,
+                  height: 1.1,
                 ),
               ),
             ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../providers/transaction_provider.dart';
-import '../../../providers/profile_provider.dart';
-import '../../../utils/app_strings.dart';
+import 'package:apna_hisaab/providers/transaction_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/utils/app_strings.dart';
 import 'package:intl/intl.dart';
 
 class StatCard extends StatelessWidget {

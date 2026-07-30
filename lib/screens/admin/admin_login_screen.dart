@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../services/license_service.dart';
-import '../../providers/profile_provider.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/services/license_service.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
 import 'package:provider/provider.dart';
-import 'admin_panel_screen.dart';
+import 'package:apna_hisaab/screens/admin/admin_panel_screen.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});

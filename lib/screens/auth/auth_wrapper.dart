@@ -2,17 +2,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
-import '../../services/auth_service.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
-import '../../providers/profile_provider.dart';
-import '../../providers/sync_provider.dart';
-import '../../providers/transaction_provider.dart';
-import '../../providers/staff_auth_provider.dart';
+import 'package:apna_hisaab/services/auth_service.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/sync_provider.dart';
+import 'package:apna_hisaab/providers/transaction_provider.dart';
+import 'package:apna_hisaab/providers/staff_auth_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../services/license_service.dart';
-import '../main_navigation.dart';
-import 'login_screen.dart';
-import 'activation_screen.dart';
+import 'package:apna_hisaab/services/license_service.dart';
+import 'package:apna_hisaab/screens/main_navigation.dart';
+import 'package:apna_hisaab/screens/auth/login_screen.dart';
+import 'package:apna_hisaab/screens/auth/activation_screen.dart';
 
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
@@ -213,6 +213,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         if (staffAuth.isStaffLoggedIn) {
+          // Trigger restore check for Staff too (to get items/categories)
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             _checkAndRestoreData(context);
+          });
+          
+          if (_isCurrentlyRestoring) {
+            return Consumer<SyncProvider>(
+              builder: (context, sync, child) => _LoadingScreen(
+                message: 'Setting up store...',
+                subMessage: sync.syncStatus,
+                progress: sync.syncProgress,
+              ),
+            );
+          }
           return const MainNavigation();
         }
 

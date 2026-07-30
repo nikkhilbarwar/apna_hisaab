@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../models/transaction_model.dart';
-import '../../../providers/item_provider.dart';
-import '../../../providers/profile_provider.dart';
-import '../../../providers/transaction_provider.dart';
-import '../../../providers/staff_auth_provider.dart';
-import '../../../services/export_service.dart';
-import '../../daily_entry/entry_screen.dart';
-import '../../../core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/models/transaction_model.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/transaction_provider.dart';
+import 'package:apna_hisaab/providers/staff_auth_provider.dart';
+import 'package:apna_hisaab/services/export_service.dart';
+import 'package:apna_hisaab/screens/daily_entry/entry_screen.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
 
 class TransactionDetailSheet extends StatelessWidget {
   final TransactionModel tx;

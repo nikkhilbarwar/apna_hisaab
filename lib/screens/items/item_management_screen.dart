@@ -2,16 +2,17 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/widgets/app_bottom_sheet.dart';
-import '../../models/category_model.dart';
-import '../../utils/image_helper.dart';
-import '../../providers/item_provider.dart';
-import '../../models/item_model.dart';
-import '../../models/recipe_model.dart';
-import '../../providers/profile_provider.dart';
-import '../../providers/category_provider.dart';
-import '../../providers/unit_provider.dart';
-import '../../utils/app_formatter.dart';
+import 'package:apna_hisaab/core/widgets/app_bottom_sheet.dart';
+import 'package:apna_hisaab/models/category_model.dart';
+import 'package:apna_hisaab/utils/image_helper.dart';
+import 'package:apna_hisaab/providers/item_provider.dart';
+import 'package:apna_hisaab/models/item_model.dart';
+import 'package:apna_hisaab/models/recipe_model.dart';
+import 'package:apna_hisaab/providers/profile_provider.dart';
+import 'package:apna_hisaab/providers/category_provider.dart';
+import 'package:apna_hisaab/providers/unit_provider.dart';
+import 'package:apna_hisaab/utils/app_formatter.dart';
+import 'package:apna_hisaab/services/gemini_service.dart';
 
 class ItemManagementScreen extends StatefulWidget {
   final String category;

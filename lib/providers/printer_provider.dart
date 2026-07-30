@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/printer_config.dart';
+import 'package:apna_hisaab/models/printer_config.dart';
 
 class PrinterProvider with ChangeNotifier {
   PrinterConfig _billPrinter = PrinterConfig(isKot: false);
