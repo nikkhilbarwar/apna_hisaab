@@ -1,26 +1,22 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter/foundation.dart';
 
 class GeminiService {
-  static const String _apiKey = 'AIzaSy...'; // Put your hardcoded Gemini API key here
+  // Hardcoded key removed for security and because it was unused
+  static GenerativeModel? _model;
 
-  /// Helper to extract JSON block from potentially messy AI response
-  static String? _cleanJsonResponse(String text, {required bool isArray}) {
+  static Future<void> init(String apiKey) async {
+    _model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: apiKey);
+  }
+
+  static Future<String?> generateResponse(String prompt) async {
+    if (_model == null) return null;
     try {
-      final startChar = isArray ? '[' : '{';
-      final endChar = isArray ? ']' : '}';
-      
-      int startIndex = text.indexOf(startChar);
-      int endIndex = text.lastIndexOf(endChar);
-      
-      if (startIndex == -1 || endIndex == -1 || endIndex <= startIndex) {
-        return null;
-      }
-      
-      return text.substring(startIndex, endIndex + 1);
+      final content = [Content.text(prompt)];
+      final response = await _model!.generateContent(content);
+      return response.text;
     } catch (e) {
+      debugPrint("Gemini Error: $e");
       return null;
     }
   }

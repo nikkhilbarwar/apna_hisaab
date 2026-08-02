@@ -601,7 +601,7 @@ class _MainNavigationState extends State<MainNavigation>
       "nikkhilbarwar@gmail.com",
       "anitamishra1714@gmail.com",
       "missadvocate06@gmail.com",
-    ];
+          ];
 
     bool isUserAdmin =
         (user?.email != null && adminEmails.contains(user!.email!.toLowerCase()));

@@ -14,7 +14,6 @@ import 'package:apna_hisaab/models/staff_model.dart';
 import 'package:apna_hisaab/models/supplier_model.dart';
 import 'package:apna_hisaab/models/purchase_reminder_model.dart';
 import 'package:apna_hisaab/models/recipe_model.dart';
-import 'package:apna_hisaab/main.dart'; // To access navigatorKey
 import 'package:apna_hisaab/providers/category_provider.dart';
 import 'package:apna_hisaab/providers/staff_provider.dart';
 import 'package:apna_hisaab/providers/supplier_provider.dart';

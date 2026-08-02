@@ -42,14 +42,16 @@ class LicenseService {
   static Future<Map<String, dynamic>> verifyLicense(String key) async {
     try {
       final doc = await firestore.collection('licenses').doc(key).get();
-      if (!doc.exists)
+      if (!doc.exists) {
         return {'success': false, 'message': 'Invalid License Key'};
+      }
 
       final data = doc.data()!;
       final deviceId = await getDeviceId();
 
-      if (data['status'] != 'active')
+      if (data['status'] != 'active') {
         return {'success': false, 'message': 'License disabled'};
+      }
 
       if (data['activated'] == true &&
           data['activeDeviceId'] != null &&

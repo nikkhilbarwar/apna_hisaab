@@ -224,8 +224,9 @@ class TransactionModel {
       paymentMode == 'Credit' ? amount - paidAmount : 0.0;
 
   List<TransactionItemSnapshot> get itemSnapshots {
-    if (_manualSnapshots != null && _manualSnapshots.isNotEmpty)
+    if (_manualSnapshots != null && _manualSnapshots.isNotEmpty) {
       return _manualSnapshots;
+    }
     List<TransactionItemSnapshot> snapshots = [];
     try {
       if (description.isEmpty) return [];
@@ -237,8 +238,9 @@ class TransactionModel {
         final dynamic decoded = jsonDecode(cleanJson);
         if (decoded is List) {
           for (var item in decoded) {
-            if (item is Map)
+            if (item is Map) {
               snapshots.add(TransactionItemSnapshot.fromMap(item));
+            }
           }
         }
       }

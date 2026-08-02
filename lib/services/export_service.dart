@@ -1043,7 +1043,6 @@ class ExportService {
 
     final address = prefs.getString('address_$uid') ?? "";
     final contact = prefs.getString('contact_$uid') ?? "";
-    final footerNote = prefs.getString('footer_note_$uid') ?? "";
 
     pdf.addPage(
       pw.MultiPage(

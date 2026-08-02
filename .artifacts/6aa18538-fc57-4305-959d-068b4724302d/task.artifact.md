@@ -1,5 +1,6 @@
-- `[ ]` Enhance `FirebaseService` with better error handling and logging
-- `[ ]` Improve `DatabaseHelper` logging and resilience
-- `[ ]` Refactor `SyncProvider.fullRestoreFromServer` for robustness
-- `[ ]` Synchronize `TransactionProvider.masterRestoreFromCloud` logic
-- `[ ]` Verify restore functionality with the user
+- `[x]` Correct toggle logic in `StaffScreen._showStaffDialog`
+- `[x]` Fix parameter shadowing in `_buildLoginControlSection`
+- `[x]` Add per-collection logging and safety to `SyncProvider.fullRestoreFromServer`
+- `[x]` Ensure `SyncProvider` handles empty cloud data gracefully
+- `[ ]` Verify staff permission persistence with the user
+- `[ ]` Verify restore progress with the user

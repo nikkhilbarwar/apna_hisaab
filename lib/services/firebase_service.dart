@@ -197,154 +197,109 @@ class FirebaseService {
     }
   }
 
+  // --- Deep Scan Helpers for Data Recovery ---
+  
+  /// Performs a deep scan across all possible data paths for a collection.
+  /// This ensures that data from User paths, License paths, and Root paths are merged.
+  Future<List<Map<String, dynamic>>> _deepScanDocs(String collectionName, {DateTime? since}) async {
+    final String currentLicense = activeLicenseKey;
+    final String? currentUid = _uid;
+    
+    debugPrint("🔍 FIREBASE: Starting Deep Scan for '$collectionName'...");
+    
+    // 1. Define paths to scan
+    List<CollectionReference> pathsToScan = [];
+    
+    // Path A: License Path (Primary)
+    if (_isLicenseValid) {
+      pathsToScan.add(_firestore.collection('licenses').doc(currentLicense).collection(collectionName));
+    }
+    
+    // Path B: User Path (Most common fallback)
+    if (currentUid != null) {
+      pathsToScan.add(_firestore.collection('users').doc(currentUid).collection(collectionName));
+    }
+    
+    // Path C: Root Path (Legacy fallback)
+    pathsToScan.add(_firestore.collection(collectionName));
+
+    // 2. Execute fetches in parallel
+    final snapshots = await Future.wait(pathsToScan.map((col) async {
+      try {
+        Query query = col;
+        if (since != null) {
+          query = query.where('updated_at', isGreaterThan: since.toIso8601String());
+        }
+        return await query.get();
+      } catch (e) {
+        debugPrint("⚠️ FIREBASE Scan Skip [${col.path}]: $e");
+        return null;
+      }
+    }));
+
+    // 3. Merge results by ID (De-duplicate)
+    Map<String, Map<String, dynamic>> mergedData = {};
+    
+    for (var snap in snapshots) {
+      if (snap != null && snap.docs.isNotEmpty) {
+        debugPrint("✅ FIREBASE: Found ${snap.docs.length} docs in ${snap.docs.first.reference.parent.path}");
+        for (var doc in snap.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          // Ensure 'id' field is present and correct
+          final id = data['id']?.toString() ?? doc.id;
+          
+          // Use document ID as key to prevent duplicates
+          // If we have duplicates, the first one encountered (usually License path) wins
+          if (!mergedData.containsKey(id)) {
+             if (data['id'] == null) data['id'] = int.tryParse(doc.id) ?? doc.id.hashCode;
+             mergedData[id] = data;
+          }
+        }
+      }
+    }
+    
+    debugPrint("📦 FIREBASE: Deep Scan for '$collectionName' finished. Total Unique Docs: ${mergedData.length}");
+    return mergedData.values.toList();
+  }
+
   // --- Fetch Methods for masterRestoreFromCloud ---
   Future<List<CategoryModel>> fetchAllCategories({DateTime? since}) async {
-    final col = _collection('categories');
-    debugPrint("☁️ FIREBASE: Fetching categories from ${col.path}...");
-    Query query = col;
-    if (since != null) {
-      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
-    }
-    final snap = await query.get();
-    debugPrint("☁️ FIREBASE: Found ${snap.docs.length} documents in 'categories' collection.");
-    return snap.docs.map((d) {
-      final data = d.data() as Map<String, dynamic>;
-      if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-      return CategoryModel.fromMap(data);
-    }).toList();
+    final rawDocs = await _deepScanDocs('categories', since: since);
+    return rawDocs.map((data) => CategoryModel.fromMap(data)).toList();
   }
 
   Future<List<ItemModel>> fetchAllItems({DateTime? since}) async {
-    try {
-      debugPrint("☁️ FIREBASE: Running Deep Scan for items...");
-      List<QuerySnapshot> snapshots = [];
-
-      // Attempt A: License Path
-      if (_isLicenseValid) {
-        snapshots.add(await _firestore.collection('licenses').doc(activeLicenseKey).collection('items').get());
-      }
-
-      // Attempt B: User Path (Most likely location for your data)
-      if (_uid != null) {
-        snapshots.add(await _firestore.collection('users').doc(_uid).collection('items').get());
-      }
-
-      // Attempt C: Legacy Root Path
-      snapshots.add(await _firestore.collection('items').get());
-
-      List<ItemModel> items = [];
-      for (var snap in snapshots) {
-        if (snap.docs.isNotEmpty) {
-          debugPrint("✅ FIREBASE: Found ${snap.docs.length} items in path: ${snap.docs.first.reference.path}");
-          for (var doc in snap.docs) {
-            try {
-              final data = doc.data() as Map<String, dynamic>;
-              if (data['id'] == null) {
-                data['id'] = int.tryParse(doc.id) ?? doc.id.hashCode;
-              }
-              items.add(ItemModel.fromMap(data));
-            } catch (e) {
-              debugPrint("🔥 Item Parse Error [ID: ${doc.id}]: $e");
-            }
-          }
-          if (items.isNotEmpty) {
-             debugPrint("📦 FIREBASE: Sample items: ${items.take(3).map((e) => e.name).join(', ')}...");
-          }
-          // We found items, we return them here
-          return items;
-        }
-      }
-
-      debugPrint("❌ FIREBASE: Total Items Found: 0 in all paths.");
-      return [];
-    } catch (e) {
-      debugPrint("🔥 FIREBASE FATAL FETCH ERROR [Items]: $e");
-      return [];
-    }
+    final rawDocs = await _deepScanDocs('items', since: since);
+    return rawDocs.map((data) => ItemModel.fromMap(data)).toList();
   }
 
   Future<List<TransactionModel>> fetchAllTransactions({DateTime? since}) async {
-    final col = _collection('transactions');
-    debugPrint("☁️ FIREBASE: Fetching transactions from ${col.path}...");
-    Query query = col;
-    if (since != null) {
-      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
-    }
-    final snap = await query.get();
-    return snap.docs.map((d) {
-      final data = d.data() as Map<String, dynamic>;
-      if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-      return TransactionModel.fromMap(data);
-    }).toList();
+    final rawDocs = await _deepScanDocs('transactions', since: since);
+    return rawDocs.map((data) => TransactionModel.fromMap(data)).toList();
   }
 
   Future<List<StaffModel>> fetchAllStaff({DateTime? since}) async {
-    final col = _collection('staff');
-    Query query = col;
-    if (since != null) {
-      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
-    }
-    final snap = await query.get();
-    return snap.docs.map((d) {
-      final data = d.data() as Map<String, dynamic>;
-      if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-      return StaffModel.fromMap(data);
-    }).toList();
+    final rawDocs = await _deepScanDocs('staff', since: since);
+    return rawDocs.map((data) => StaffModel.fromMap(data)).toList();
   }
 
   Future<List<SupplierModel>> fetchAllSuppliers({DateTime? since}) async {
-    final col = _collection('suppliers');
-    Query query = col;
-    if (since != null) {
-      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
-    }
-    final snap = await query.get();
-    return snap.docs.map((d) {
-      final data = d.data() as Map<String, dynamic>;
-      if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-      return SupplierModel.fromMap(data);
-    }).toList();
+    final rawDocs = await _deepScanDocs('suppliers', since: since);
+    return rawDocs.map((data) => SupplierModel.fromMap(data)).toList();
   }
 
   Future<List<PurchaseReminderModel>> fetchAllPurchaseReminders({DateTime? since}) async {
-    final col = _collection('purchase_reminders');
-    Query query = col;
-    if (since != null) {
-      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
-    }
-    final snap = await query.get();
-    return snap.docs.map((d) {
-      final data = d.data() as Map<String, dynamic>;
-      if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-      return PurchaseReminderModel.fromMap(data);
-    }).toList();
+    final rawDocs = await _deepScanDocs('purchase_reminders', since: since);
+    return rawDocs.map((data) => PurchaseReminderModel.fromMap(data)).toList();
   }
 
   Future<List<RecipeModel>> fetchAllRecipes({DateTime? since}) async {
-    final col = _collection('recipes');
-    Query query = col;
-    if (since != null) {
-      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
-    }
-    final snap = await query.get();
-    return snap.docs.map((d) {
-      final data = d.data() as Map<String, dynamic>;
-      if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-      return RecipeModel.fromMap(data);
-    }).toList();
+    final rawDocs = await _deepScanDocs('recipes', since: since);
+    return rawDocs.map((data) => RecipeModel.fromMap(data)).toList();
   }
 
   Future<List<Map<String, dynamic>>> fetchAllUnits({DateTime? since}) async {
-    Query query = _collection('units');
-    if (since != null) {
-      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
-    }
-    final snap = await query.get();
-    return snap.docs.map((d) {
-      final data = d.data() as Map<String, dynamic>;
-      if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-      return data;
-    }).toList();
+    return await _deepScanDocs('units', since: since);
   }
 
   // --- Sync Single Methods ---
@@ -354,29 +309,13 @@ class FirebaseService {
   Future<void> syncStaffLeave(StaffLeaveModel leave) async => await _collection('staff_leave').doc(leave.id?.toString()).set(leave.toMap(), SetOptions(merge: true));
 
   Future<List<StaffAdvanceModel>> fetchAllStaffAdvances({DateTime? since}) async {
-    Query query = _collection('staff_advance');
-    if (since != null) {
-      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
-    }
-    final snap = await query.get();
-    return snap.docs.map((d) {
-      final data = d.data() as Map<String, dynamic>;
-      if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-      return StaffAdvanceModel.fromMap(data);
-    }).toList();
+    final rawDocs = await _deepScanDocs('staff_advance', since: since);
+    return rawDocs.map((data) => StaffAdvanceModel.fromMap(data)).toList();
   }
 
   Future<List<StaffLeaveModel>> fetchAllStaffLeaves({DateTime? since}) async {
-    Query query = _collection('staff_leave');
-    if (since != null) {
-      query = query.where('updated_at', isGreaterThan: since.toIso8601String());
-    }
-    final snap = await query.get();
-    return snap.docs.map((d) {
-      final data = d.data() as Map<String, dynamic>;
-      if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-      return StaffLeaveModel.fromMap(data);
-    }).toList();
+    final rawDocs = await _deepScanDocs('staff_leave', since: since);
+    return rawDocs.map((data) => StaffLeaveModel.fromMap(data)).toList();
   }
   Future<void> syncSupplier(SupplierModel supplier) async => await _collection('suppliers').doc(supplier.id?.toString()).set(supplier.toMap(), SetOptions(merge: true));
   Future<void> syncPurchaseReminder(PurchaseReminderModel reminder) async => await _collection('purchase_reminders').doc(reminder.id?.toString()).set(reminder.toMap(), SetOptions(merge: true));
@@ -406,14 +345,18 @@ class FirebaseService {
   Future<void> deleteStaffAdvancesByStaffId(int staffId) async {
     final snap = await _collection('staff_advance').where('staff_id', isEqualTo: staffId).get();
     final batch = _firestore.batch();
-    for (var doc in snap.docs) batch.delete(doc.reference);
+    for (var doc in snap.docs) {
+      batch.delete(doc.reference);
+    }
     await batch.commit();
   }
 
   Future<void> deleteStaffLeavesByStaffId(int staffId) async {
     final snap = await _collection('staff_leave').where('staff_id', isEqualTo: staffId).get();
     final batch = _firestore.batch();
-    for (var doc in snap.docs) batch.delete(doc.reference);
+    for (var doc in snap.docs) {
+      batch.delete(doc.reference);
+    }
     await batch.commit();
   }
 
@@ -433,25 +376,10 @@ class FirebaseService {
       }
     }
 
-    // Try fetching items from current path
+    // 1. Try deep scanning across current locations
     List<ItemModel> items = await safeFetch(fetchAllItems(), "items", <ItemModel>[]);
     
-    // FALLBACK: If items are empty and we have a license, try fetching from the User's private path
-    if (items.isEmpty && currentLicense != 'NONE' && _uid != null) {
-      debugPrint("⚠️ FIREBASE: No items in License path. Trying fallback User path...");
-      try {
-        final fallbackSnap = await _firestore.collection('users').doc(_uid).collection('items').get();
-        items = fallbackSnap.docs.map((d) {
-          final data = d.data();
-          if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-          return ItemModel.fromMap(data);
-        }).toList();
-        debugPrint("✅ FIREBASE: Found ${items.length} items in fallback path.");
-      } catch (e) {
-        debugPrint("🔥 FIREBASE: Fallback fetch failed: $e");
-      }
-    }
-
+    // 2. Fetch all other data using merged deep scans
     final results = await Future.wait([
       safeFetch(fetchAllTransactions(), "transactions", <TransactionModel>[]),
       safeFetch(fetchAllCategories(), "categories", <CategoryModel>[]),
@@ -460,11 +388,9 @@ class FirebaseService {
       safeFetch(fetchAllUnits(), "units", <Map<String, dynamic>>[]),
       safeFetch(fetchAllPurchaseReminders(), "purchase_reminders", <PurchaseReminderModel>[]),
       safeFetch(fetchAllRecipes(), "recipes", <RecipeModel>[]),
-      safeFetch(_collection('staff_advance').get(), "staff_advances", null),
-      safeFetch(_collection('staff_leave').get(), "staff_leaves", null),
-      safeFetch(_profileDoc().get(), "profile", null),
-      safeFetch(fetchAllStaffAdvances(), "staff_advances_v2", <StaffAdvanceModel>[]),
-      safeFetch(fetchAllStaffLeaves(), "staff_leaves_v2", <StaffLeaveModel>[]),
+      safeFetch(fetchAllStaffAdvances(), "staff_advances", <StaffAdvanceModel>[]),
+      safeFetch(fetchAllStaffLeaves(), "staff_leaves", <StaffLeaveModel>[]),
+      safeFetch(_profileDoc().get(), "profile_snapshot", null),
     ]);
 
     return {
@@ -476,24 +402,8 @@ class FirebaseService {
       'units': results[4],
       'purchase_reminders': results[5],
       'recipes': results[6],
-      'staff_advances': (results[10] as List<StaffAdvanceModel>).isNotEmpty 
-          ? results[10] 
-          : (results[7] != null
-              ? (results[7] as QuerySnapshot).docs.map((d) {
-                  final data = d.data() as Map<String, dynamic>;
-                  if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-                  return StaffAdvanceModel.fromMap(data);
-                }).toList()
-              : <StaffAdvanceModel>[]),
-      'staff_leaves': (results[11] as List<StaffLeaveModel>).isNotEmpty
-          ? results[11]
-          : (results[8] != null
-              ? (results[8] as QuerySnapshot).docs.map((d) {
-                  final data = d.data() as Map<String, dynamic>;
-                  if (data['id'] == null) data['id'] = int.tryParse(d.id) ?? d.id.hashCode;
-                  return StaffLeaveModel.fromMap(data);
-                }).toList()
-              : <StaffLeaveModel>[]),
+      'staff_advances': results[7],
+      'staff_leaves': results[8],
       'profile': results[9] != null ? (results[9] as DocumentSnapshot).data() : null,
     };
   }

@@ -858,6 +858,14 @@ class ProfileProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    _licenseSub?.cancel();
+    _supportSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> _verifyLicenseStatusNetwork(String licenseKey) async {
     try {
       final doc = await LicenseService.firestore.collection('licenses').doc(licenseKey).get();

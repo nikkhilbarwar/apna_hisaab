@@ -209,7 +209,7 @@ class ItemProvider with ChangeNotifier {
 
   Future<void> fetchItems() async {
     try {
-      final licenseId = FirebaseService.activeLicenseKey ?? 'NONE';
+      final licenseId = FirebaseService.activeLicenseKey;
       _items = await DatabaseHelper.instance.getAllItems();
       debugPrint("📦 ITEM_PROVIDER: Loaded ${_items.length} items from local DB (Active License: $licenseId)");
       await _fetchRecipes();
@@ -399,9 +399,7 @@ class ItemProvider with ChangeNotifier {
         if (cat != null && cat.useCategoryStock == 1) {
           item.currentStock = cat.stockQty;
           // Sync alert settings too if it's a shared stock category
-          if (cat.lowStockLimit != null) {
-            item.minStock = cat.lowStockLimit;
-          }
+          item.minStock = cat.lowStockLimit;
         }
       }
 

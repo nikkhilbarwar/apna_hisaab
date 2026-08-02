@@ -211,7 +211,7 @@ void main() async {
     );
 
     if (Platform.isAndroid || Platform.isIOS) {
-      Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+      Workmanager().initialize(callbackDispatcher);
 
       Workmanager().registerPeriodicTask(
         "1",
